@@ -50,7 +50,7 @@ npx @better-sol/cli deploy --cluster devnet
 #    https://explorer.solana.com/address/CouNTeR.../programs?cluster=devnet
 ```
 
-No local files created. No Rust installed. The `.so` lives on-chain.
+No build artifacts. No Rust installed. The `.so` lives on-chain.
 
 ### 3. Use as client (same file — zero extra code)
 

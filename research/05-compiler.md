@@ -16,7 +16,7 @@ npx @better-sol/cli deploy:     1. Parse TypeScript AST
 Result:                  Program is live on-chain. Same .ts file = typed sol.
 ```
 
-No local files are created. The `.so` lives on-chain. No local IDL stored.
+No build artifacts. The `.so` lives on-chain. IDL auto-published.
 The developer gets a clear summary:
 
 ```
@@ -502,8 +502,8 @@ imports, a basic account, and two instructions. Like `npm init` — helpful, not
 
 ### Why `create` also generates the keypair
 
-When you run `create counter`, it also generates the keypair and the address file.
-This means the address is immediately available to the client:
+When you run `create counter`, it generates the keypair and writes the address
+into the program file. The address is immediately available:
 
 ```bash
 npx @better-sol/cli create counter
@@ -512,8 +512,9 @@ npx @better-sol/cli create counter
 # → Saved .better-sol/counter.json (private, gitignored)
 ```
 
-use the client immediately — they don't need the keypair to call the program,
+The address is in `programs/counter.ts` — committed to git. Anyone who clones the repo can
+use the client immediately. They don't need the keypair to call the program,
 only to deploy upgrades.
 
-If you skip `create` and write the file manually, `deploy` will generate both files
-on first deploy — same result, just one step later.
+If you skip `create` and write the file manually, `deploy` will offer to generate
+a keypair and update the source file on first deploy — same result, just one step later.

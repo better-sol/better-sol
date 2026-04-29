@@ -443,9 +443,6 @@ console.log(`Offering ${escrowAccount.makerAmount} for ${escrowAccount.takerAmou
 
 ---
 
-
----
-
 ## The Architecture: Library + CLI
 
 ### `better-sol` — The Runtime Library
@@ -621,9 +618,9 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
 ```typescript
 // ── Client side: just import and use ──
 
-// OPTION A: From generated client (after `npx @better-sol/cli deploy`)
+// OPTION A: Your own program (defined with better-sol)
 import { betterSol } from 'better-sol'
-import { counter } from './generated/counter' // auto-generated from program def
+import { counter } from './programs/counter'
 
 const sol = betterSol({
   cluster: 'devnet',
@@ -721,7 +718,7 @@ const counter = program('counter', 'CouNTeR11111111111111111111111111111111111',
 // For the client:
 counter.name                                    // 'counter' → becomes sol.counter
 counter.accounts.Counter.derive({ authority })  // PDA derivation
-counter.accounts.counter.decode(data)           // Account deserialization
+counter.accounts.Counter.decode(data)           // Account deserialization
 counter.accounts.Counter.size                   // Space calculation
 counter.instructions.increment.build(args)      // Instruction serialization
 
@@ -735,31 +732,22 @@ When you pass a program to `betterSol({ programs: { counter } })`, the client:
 1. Reads the program's accounts → creates `sol.counter.fetch()`, `sol.counter.accounts.*`
 2. Reads the program's instructions → creates `sol.counter.increment()`, etc.
 3. Reads the instruction schemas → knows how to serialize args, deserialize accounts
-4. Injects the address → PDAs derive correctly, transactions route to the right program
+4. Uses the address from the program definition → PDAs derive correctly, transactions route to the right program
 
-The address is resolved from the program object. Three ways it can be set:
+The address comes from `program('counter', 'CouNTeR...', { ... })` — it's right there in the
+source code. No resolution, no environment variables, no hidden files.
+
+Same address on every cluster:
 ```typescript
-programs: { counter }
-
-// Environment variable — COUNTER_PROGRAM_ID=...
-programs: { counter }  // falls back to env var if no keypair file
-
-// Same program, different cluster — same address!
-const sol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
+const devnetSol = betterSol({ cluster: 'devnet', programs: { counter } })
+const mainnetSol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
+// Same program address! PDA derivations are identical.
 ```
 
 No code generation at runtime. The program object IS the runtime type information.
 Like a Zod schema — it validates and provides types simultaneously.
 
-No code generation at runtime. The program object IS the runtime type information.
-Like a Zod schema — it validates and provides types simultaneously.
-
 ---
-
-
----
-
-# Developer Workflow
 
 ## Developer Workflow
 
