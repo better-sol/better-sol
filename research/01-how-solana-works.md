@@ -133,43 +133,29 @@ It's referenced in ` Anchor.toml` or passed to `solana program deploy`.
 In better-sol, the developer **never thinks about keypairs**.
 
 ```bash
-npx @better-sol/cli push
+npx @better-sol/cli deploy
 # → Generating keypair: CoUnTeR...
-# → Saved to .better-sol/counter.json
+# → Saved .better-sol/counter.json (private, gitignored)
 # → (the address is the public key, the file also contains the private key for deploys)
 ```
 
 The keypair file is stored in `.better-sol/{program-name}.json`:
 - `create` generates it when scaffolding a new program
-- `push` generates it on first deploy if it doesn't exist
-- `push` reads it on subsequent deploys (for upgrading)
-- The client reads the **address** from `.better-sol/{program-name}.addr.json` (public, committed to git)
+- `deploy` generates it on first deploy if it doesn't exist
+- `deploy` reads it on subsequent deploys (for upgrading)
 - The **full keypair** stays in `.better-sol/{program-name}.json` (private, gitignored)
 
-At runtime, the client only needs the **public key** (the address). The private key
-never leaves the developer's machine — it's only used during `push` to sign
-deploy transactions.
+At runtime, the client reads the address from the program definition —
+it's the second argument of `program()`. The private key stays in
+`.better-sol/` and is only used during `deploy` to sign deploy transactions.
 
-Two files per program:
 ```
 .better-sol/
-  counter.json          ← full keypair (PRIVATE — gitignored)
-  counter.addr.json     ← address + IDL (PUBLIC — committed to git)
-```
-
-Same keypair for all clusters — same address on devnet, testnet, and mainnet:
-```
-.better-sol/
-  counter.json      ← program keypair (shared across all clusters)
-  amm.json          ← one keypair per program
+  counter.json      ← program keypair (gitignored, shared across all clusters)
 ```
 
 This means PDA addresses are identical on every cluster. Your client
 code doesn't change between devnet and mainnet.
-
-This is why the program address isn't in the `program()` definition — it depends
-on which cluster you're deploying to. The same program has different addresses
-on devnet and mainnet.
 
 ### The Wallet Keypair (Payer)
 
@@ -466,7 +452,7 @@ interact with programs built with our library. Full ecosystem compatibility.
 
 ### How Program Upgrades Work
 
-When you `push` again after changing your program:
+When you `deploy` again after changing your program:
 
 - **Same program ID, same address** — the program is upgraded in place
 - **Account data is preserved** — all existing accounts (balances, state) remain untouched
@@ -634,10 +620,10 @@ Our SDK defaults to devnet.
 |---|---|---|
 | Write programs in | Rust | **TypeScript** |
 | Compile with | `cargo build-sbf` locally | **Cloud compilation** (developer never installs Rust) |
-| Deploy with | `solana program deploy` | **`npx @better-sol/cli push`** |
+| Deploy with | `solana program deploy` | **`npx @better-sol/cli deploy`** |
 | Client SDK | Generate from IDL with Codama | **Same TS file is the client** (IDL auto-published for others) |
 | Type safety | None (raw bytes) | **Full compile-time checking** |
-| Testing | bankrun/LocalValidator | **`createTestClient()` with LiteSVM** |
+| Testing | bankrun/LocalValidator | **`createTestSol()` with LiteSVM** |
 | Error messages | Numeric codes | **Named, autocomplete-checked errors** |
 | Events | Raw logs, parsed manually | **Typed event registry** |
 

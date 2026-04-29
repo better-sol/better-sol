@@ -5,7 +5,7 @@
 ```
 Developer writes:        programs/counter.ts
                          ↓
-npx @better-sol/cli push:     1. Parse TypeScript AST
+npx @better-sol/cli deploy:     1. Parse TypeScript AST
                          2. Extract program(), account(), ix() definitions
                          3. Generate Anchor Rust source code
                          4. POST Rust to cloud compiler
@@ -54,10 +54,10 @@ What the IDL contains (that our TS computes at runtime instead):
 | Account constraints | Which accounts sign, writable, relations | `p.init()`, `p.mut()`, `p.signer()` |
 
 All deterministic. Same inputs → same IDL. We generate it from the TS definition
-at push time, not as a separate step.
+at deploy time, not as a separate step.
 
-If the developer wants to inspect the generated Rust, they use `push --dry-run`.
-If they need the `.so` file for auditing or offline deployment, they use `push --output ./build`.
+If the developer wants to inspect the generated Rust, they use `deploy --dry-run`.
+If they need the `.so` file for auditing or offline deployment, they use `deploy --output ./build`.
 
 ---
 
@@ -93,14 +93,14 @@ The CLI finds program definitions automatically. No `better-sol.config.ts` neede
 
 ```bash
 # Default: finds all program() exports in programs/**/*.ts
-npx @better-sol/cli push
+npx @better-sol/cli deploy
 
 # Explicit: target specific files
-npx @better-sol/cli push --src programs/counter.ts
-npx @better-sol/cli push --src 'programs/**/*.ts'    # glob
+npx @better-sol/cli deploy --src programs/counter.ts
+npx @better-sol/cli deploy --src 'programs/**/*.ts'    # glob
 
 # With cluster and keypair
-npx @better-sol/cli push --cluster devnet --keypair ~/.config/solana/id.json
+npx @better-sol/cli deploy --cluster devnet --keypair ~/.config/solana/id.json
 ```
 
 ### Optional config file for defaults
@@ -120,7 +120,7 @@ export default defineConfig({
 ```
 
 Like Drizzle's `drizzle.config.ts`, but optional. Without it, the CLI uses sensible
-defaults (auto-discovery + CLI flags). With it, you can just run `npx @better-sol/cli push`
+defaults (auto-discovery + CLI flags). With it, you can just run `npx @better-sol/cli deploy`
 with no arguments.
 
 ### Why not require a config file?
@@ -175,7 +175,7 @@ interest. The source must live in a repo the developer controls.
 **Step 1: Push with `--verify`** (writes generated Rust to `generated/`)
 
 ```bash
-npx @better-sol/cli push --cluster mainnet-beta --verify
+npx @better-sol/cli deploy --cluster mainnet-beta --verify
 # → Parsing programs/counter.ts...
 # → Generating Anchor Rust (437 lines)...
 # → Writing to generated/counter/...
@@ -228,7 +228,7 @@ We deliberately don't commit on the user's behalf. Reasons:
 No other TypeScript Solana tool supports verified builds:
 - Anchor requires manual Docker setup
 - Poseidon, Kite, Gill — none handle verification
-- We make it two commands: `push --verify` then `verify`
+- We make it two commands: `deploy --verify` then `verify`
 
 For production programs (mainnet), verification is expected. Making it this easy is a real differentiator.
 
@@ -236,15 +236,15 @@ For production programs (mainnet), verification is expected. Making it this easy
 
 **Mode 1: Cloud compilation (default — no Rust needed)**
 ```bash
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 ```
 
 **Mode 2: Local compilation (for developers who have Rust)**
 ```bash
-npx @better-sol/cli push --cluster devnet --local
+npx @better-sol/cli deploy --cluster devnet --local
 ```
 
-The `push` command detects whether the local toolchain is available and falls back to the cloud.
+The `deploy` command detects whether the local toolchain is available and falls back to the cloud.
 
 ---
 
@@ -258,7 +258,7 @@ const errors = defineErrors({ Unauthorized: 'Not authorized' })
 
 const events = defineEvents({ Incremented: { newCount: u64 } })
 
-export const counter = program('counter', { errors, events }, {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors, events }, {
   increment: ix({
     accounts: { counter: p.mut(Counter), authority: p.signer() },
     args: { amount: u64 },
@@ -324,7 +324,7 @@ See `04-transpiler.md` for the full coverage matrix.
 
 ```bash
 
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 ```
 
 That's it. Under the hood:
@@ -361,23 +361,37 @@ programs/counter.ts
   └──────────────┘
 ```
 
-### What `push` Does (Like `drizzle-kit push`)
+### What `deploy` Does (Like `drizzle-kit push`)
 
 1. Reads all `programs/*.ts` files
 2. Extracts `program()`, `account()`, `ix()` definitions using TypeScript AST parsing
-3. Resolves program addresses from `.better-sol/{name}.json` (or generates a new keypair if none exists)
-4. Builds a typed IR (accounts, fields, instructions, logic functions)
-5. Generates Anchor Rust source code (with `declare_id!()` from the keypair)
-5. Sends Rust to cloud compiler → gets `.so` bytecode back
-6. Deploys the `.so` to the target cluster
-7. Generates client-side TypeScript types in `generated/` (or in-memory)
+3. For each program, verifies the address matches the keypair in `.better-sol/`
+4. If no address exists, offers to generate a keypair and update the source file
+5. Builds a typed IR (accounts, fields, instructions, logic functions)
+6. Generates Anchor Rust source code (with `declare_id!()` from the address)
+7. Sends Rust to cloud compiler → gets `.so` bytecode back
+8. Deploys the `.so` to the target cluster
+9. Auto-publishes IDL to chain and cloud
+
+**Address verification:** If the address in `program()` doesn't match the keypair
+in `.better-sol/`, `deploy` errors immediately:
+```
+❌ Address mismatch for 'counter':
+   Source file: CouNTeR...
+   Keypair:     DiFfErNt...
+   Either update the address in programs/counter.ts or delete .better-sol/counter.json
+```
+
+**Missing address:** If `program()` has no address and no keypair exists, `deploy`
+asks to generate one and update the source file (like `drizzle-kit push` asks
+before applying changes).
 
 ### Schema Diffing (Like Drizzle)
 
 When you change your program:
 
 ```bash
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 ```
 
 The tool tracks what's deployed (like Drizzle's migration journal) and only
@@ -393,12 +407,12 @@ npx @better-sol/cli create counter              # Creates programs/counter.ts wi
 npx @better-sol/cli create escrow --seeds owner  # With custom PDA seeds
 
 # Push — compile and deploy (keypair auto-generated if missing)
-npx @better-sol/cli push                     # Parse → Rust → cloud compile → deploy
-npx @better-sol/cli push --local             # Compile locally (if you have Rust installed)
-npx @better-sol/cli push --dry-run           # Show generated Rust without compiling
-npx @better-sol/cli push --cluster devnet    # Target cluster (default: devnet)
-npx @better-sol/cli push --program counter   # Push a specific program
-npx @better-sol/cli push --verify            # Also write generated Rust to generated/ for verification
+npx @better-sol/cli deploy                     # Parse → Rust → cloud compile → deploy
+npx @better-sol/cli deploy --local             # Compile locally (if you have Rust installed)
+npx @better-sol/cli deploy --dry-run           # Show generated Rust without compiling
+npx @better-sol/cli deploy --cluster devnet    # Target cluster (default: devnet)
+npx @better-sol/cli deploy --program counter   # Push a specific program
+npx @better-sol/cli deploy --verify            # Also write generated Rust to generated/ for verification
 
 # Verify (submits to OtterSec after you commit + push)
 npx @better-sol/cli verify --program-id CouNTeR...
@@ -409,7 +423,7 @@ Everything else is unnecessary:
 - `generate` → `--dry-run` flag handles this
 - `compile` → `--local` flag handles this
 - `client` → contradicts our value prop (the TS definition IS the client, nothing to generate)
-- `diff` → programs are upgradeable, just re-push
+- `diff` → programs are upgradeable, just re-deploy
 - `inspect` → `solana program show` already exists
 
 
@@ -422,7 +436,7 @@ with working boilerplate. It's optional — you can always create the file manua
 npx @better-sol/cli create counter
 # → Created programs/counter.ts
 # → Generated keypair: CoUnTeR11111111111111111111111111111111111
-# → Saved to .better-sol/counter.json
+# → Saved .better-sol/counter.json (private, gitignored)
 ```
 
 This creates:
@@ -440,7 +454,7 @@ const errors = defineErrors({
   Unauthorized: 'Not the authority',
 })
 
-export const counter = program('counter', { errors }, {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
   initialize: ix({
     accounts: {
       counter: p.init(Counter),
@@ -468,7 +482,7 @@ export const counter = program('counter', { errors }, {
 ```
 
 The developer edits this file — adding accounts, instructions, errors, events — 
-then runs `npx @better-sol/cli push` to compile and deploy.
+then runs `npx @better-sol/cli deploy` to compile and deploy.
 
 ### Why `create` is optional
 
@@ -480,7 +494,7 @@ import { program, account, ix, u64, pubkey, p } from 'better-sol/program'
 
 // ... your code ...
 
-export const counter = program('counter', { ... }, { ... })
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { ... }, { ... })
 ```
 
 `create` is a convenience. It gives you a working starting point with the right
@@ -488,13 +502,18 @@ imports, a basic account, and two instructions. Like `npm init` — helpful, not
 
 ### Why `create` also generates the keypair
 
-When you run `create counter`, it also generates the keypair for devnet.
-This means you can immediately start using the client:
+When you run `create counter`, it also generates the keypair and the address file.
+This means the address is immediately available to the client:
 
 ```bash
 npx @better-sol/cli create counter
-# Now you can use the client right away (on devnet, after push)
+# → Created programs/counter.ts
+# → Generated keypair: CoUnTeR...
+# → Saved .better-sol/counter.json (private, gitignored)
 ```
 
-If you skip `create` and write the file manually, `push` will generate the keypair
+use the client immediately — they don't need the keypair to call the program,
+only to deploy upgrades.
+
+If you skip `create` and write the file manually, `deploy` will generate both files
 on first deploy — same result, just one step later.

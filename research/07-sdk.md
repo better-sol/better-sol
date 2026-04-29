@@ -103,13 +103,10 @@ import { counter } from './programs/counter'  // Same file as the program defini
 const sol = betterSol({
   cluster: 'devnet',
   payer: './keypair.json',
-  programs: {
-    counter,  // auto-resolve address from .better-sol/counter.addr.json
-  },
+  programs: { counter },
 })
 
-// Address resolved automatically from .better-sol/
-// programs: { counter }  ← reads .better-sol/counter.addr.json
+// address is in the program definition
 
 const counterAddr = counter.accounts.Counter.derive({ authority: sol.payer })
 
@@ -140,7 +137,7 @@ await sol.send([
 const result = await sol.steps([
   sol.token.createMint({ decimals: 9, authority: payer }),
 
-  (s1) => sol.token.createAssociatedTokenAccount({ owner: payer, mint: s1.mint }),
+  (s1) => sol.token.getATA({ owner: payer, mint: s1.mint }),
 
   (s1, s2) => sol.token.mintTo({ mint: s1.mint, destination: s2.address, amount: 1000n }),
 ])
@@ -155,8 +152,9 @@ result[2].signature  // Final tx signature
 
 ```typescript
 import { betterSol } from 'better-sol'
+import { counter } from './programs/counter'
 
-const sol = betterSol({ cluster: 'mainnet-beta' })
+const sol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
 
 const wallet = await sol.connectWallet()  // auto-detects Phantom, Solflare, etc.
 
@@ -177,10 +175,10 @@ Use any test runner. No special setup.
 
 ```typescript
 import { test, equal } from 'node:test'
-import { createTestClient } from 'better-sol/testing'
+import { createTestSol } from 'better-sol/testing'
 
 test('transfer SOL', async () => {
-  // createTestClient spins up LiteSVM — milliseconds, no validator
+  // createTestSol spins up LiteSVM — milliseconds, no validator
   const sol = createTestSol()
   const sender = sol.payer
   const receiver = await sol.createAccount()
@@ -203,10 +201,9 @@ Your test runner. Your files. Your structure.
 ## What `better-sol` Ships
 
 ```
-better-sol                    # betterSol(), createTestClient(), transfer(), token operations
-better-sol/token     # sol.token — built-in token operations
-better-sol/system    # sol.system — built-in system operations
-better-sol/testing            # createTestClient() with LiteSVM
+better-sol                    # betterSol(), createTestSol(), sol.transfer(), sol.token.*
+better-sol/program            # program(), account(), ix(), p, token (CPI), sol (sysvars)
+better-sol/testing            # createTestSol() with LiteSVM
 ```
 
 ---
@@ -248,7 +245,7 @@ const errors = defineErrors({
 })
 
 // Define the program — flat instruction map
-export const counter = program('counter', { errors }, {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
 
   initialize: ix({
     accounts: {
@@ -321,10 +318,10 @@ Today, that `[something]` is LLVM compiling Rust (or C) to sBPF.
 TypeScript program → parse AST → generate Anchor Rust → cloud cargo build-sbf → .so file
 ```
 
-The developer never installs Rust. `npx @better-sol/cli push` handles everything:
+The developer never installs Rust. `npx @better-sol/cli deploy` handles everything:
 
 ```bash
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 # → Parsing TypeScript AST...
 # → Generating Anchor Rust...  (633 lines)
 # → Compiling via cloud service...
@@ -402,7 +399,7 @@ const errors = defineErrors({
   InvalidMint: 'Mint mismatch',
 })
 
-const escrow = program('escrow', { errors }, {
+const escrow = program('escrow', 'EsCr0w11111111111111111111111111111111111', { errors }, {
   make: ix({
     accounts: {
       escrow: p.init(Escrow),
@@ -508,7 +505,7 @@ const errors = defineErrors({
   Unauthorized: 'Not the authority',
 })
 
-const myProgram = program('my-program', { errors }, {
+const myProgram = program('my-program', 'MyPr0g11111111111111111111111111111111111', { errors }, {
   myInstruction: ix({
     accounts: { counter: p.mut(Counter), authority: p.signer() },
     args: { amount: u64 },
@@ -525,9 +522,9 @@ myProgram.accounts.Counter.derive({ authority })      // PDA derivation
 myProgram.accounts.Counter.fetch(addr)                // Typed account fetch
 myProgram.require(cond, 'Error')                      // Type-safe require
 
-// Optional: generate Rust + push to chain (separate CLI package)
+// Optional: generate Rust + deploy to chain (separate CLI package)
 // npm install -D @better-sol/cli
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 // → Parses TS → generates Anchor Rust → cloud compile → deploy
 ```
 
@@ -537,9 +534,9 @@ Separate package. Only needed when deploying programs. Not a runtime dependency.
 
 ```bash
 # No install needed, just npx
-npx @better-sol/cli push --cluster devnet
-npx @better-sol/cli push --dry-run        # See generated Rust
-npx @better-sol/cli push --verify       # Also write Rust to generated/ for verification
+npx @better-sol/cli deploy --cluster devnet
+npx @better-sol/cli deploy --dry-run        # See generated Rust
+npx @better-sol/cli deploy --verify       # Also write Rust to generated/ for verification
 npx @better-sol/cli verify --program-id CouNTeR...  # Submit to OtterSec for verified build
 ```
 
@@ -563,7 +560,7 @@ The CLI is intentionally separate so:
 | Can I use just the client without the program builder? | **Yes.** Subpath exports |
 | Can I use just the program builder without the SDK? | **Yes.** It produces typed objects usable anywhere |
 | Can I drop down to @solana/kit? | **Yes.** `sol.rpc` |
-| Does it support verified builds? | **Yes.** `push --verify` + `verify` submits to OtterSec. Verified ✅ in Explorer. |
+| Does it support verified builds? | **Yes.** `deploy --verify` + `verify` submits to OtterSec. Verified ✅ in Explorer. |
 | Does it work in browser and Node? | **Yes.** Same API |
 | Does it take over my test runner? | **No.** Use any test runner |
 
@@ -616,7 +613,7 @@ import { program, account, ix, defineErrors, u64, bool, pubkey, p } from 'better
 const Counter = account({ count: u64, authority: pubkey, isActive: bool }).seeds('counter', '{authority}')
 const errors = defineErrors({ Unauthorized: 'Not the authority', NotActive: 'Counter not active' })
 
-export const counter = program('counter', { errors }, {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
   // ix() instructions...
 })
 ```
@@ -624,7 +621,7 @@ export const counter = program('counter', { errors }, {
 ```typescript
 // ── Client side: just import and use ──
 
-// OPTION A: From generated client (after `npx @better-sol/cli push`)
+// OPTION A: From generated client (after `npx @better-sol/cli deploy`)
 import { betterSol } from 'better-sol'
 import { counter } from './generated/counter' // auto-generated from program def
 
@@ -636,15 +633,14 @@ const sol = betterSol({
 // Methods appear automatically:
 await sol.counter.increment({ counter: addr, authority: payer, amount: 10n })
 await sol.counter.fetch(addr)  // → typed account data
-await sol.counter.accounts.counter.derive({ authority: payer })
+await sol.counter.accounts.Counter.derive({ authority: payer })
 
 // OPTION B: From on-chain program (no local program definition)
 import { betterSol } from 'better-sol'
-import { token } from 'better-sol/token'
 
 const sol = betterSol({
   cluster: 'devnet',
-  programs: { token },  // built-in program clients
+  payer: './keypair.json',
 })
 
 await sol.token.createMint({ decimals: 9, authority: payer })
@@ -663,8 +659,7 @@ No `registerProgram()`. The program IS the plugin.
 
 ```typescript
 import { betterSol } from 'better-sol'
-import { counter } from './generated/counter'
-import { token } from 'better-sol/token'
+import { counter } from './programs/counter'
 
 const sol = betterSol({
   cluster: 'devnet',
@@ -672,7 +667,6 @@ const sol = betterSol({
   payer: './keypair.json',                  // optional, can be set later
   programs: {
     counter,                                 // your custom program
-    token,                                   // built-in token support
   },
 })
 
@@ -688,7 +682,7 @@ await sol.counter.initialize({ counter: addr, authority: payer, initialValue: 42
 await sol.counter.increment({ counter: addr, authority: payer, amount: 10n })
 await sol.counter.close({ counter: addr, authority: payer })
 await sol.counter.fetch(addr)             // → CounterAccount | null
-await sol.counter.accounts.counter.derive({ authority: payer })  // → PDA address
+await sol.counter.accounts.Counter.derive({ authority: payer })  // → PDA address
 
 // token program — built-in, same API shape
 await sol.token.createMint({ decimals: 9, authority: payer })
@@ -699,7 +693,7 @@ await sol.token.getBalance({ owner, mint })
 // ── Multi-step (composing programs together) ──
 await sol.steps([
   sol.token.createMint({ decimals: 9, authority: payer }),
-  (s1) => sol.token.createATA({ owner: payer, mint: s1.mint }),
+  (s1) => sol.token.getATA({ owner: payer, mint: s1.mint }),
   (s1, s2) => sol.token.mintTo({ mint: s1.mint, destination: s2.address, amount: 1000n }),
 ])
 
@@ -708,10 +702,10 @@ const wallet = await sol.connectWallet()
 // All methods now route through wallet for signing
 
 // ── Testing ──
-import { createTestClient } from 'better-sol/testing'
+import { createTestSol } from 'better-sol/testing'
 
-const test = createTestClient({
-  programs: { counter, token },
+const sol = createTestSol({
+  programs: { counter },
 })
 // Uses LiteSVM — milliseconds per test, no validator
 ```
@@ -722,13 +716,13 @@ The `program()` function returns an object that serves dual purpose:
 
 ```typescript
 // The program object has everything the client needs:
-const counter = program('counter', { errors }, { /* ix() instructions */ })
+const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, { /* ix() instructions */ })
 
 // For the client:
 counter.name                                    // 'counter' → becomes sol.counter
-counter.accounts.counter.derive({ authority })  // PDA derivation
+counter.accounts.Counter.derive({ authority })  // PDA derivation
 counter.accounts.counter.decode(data)           // Account deserialization
-counter.accounts.counter.size                   // Space calculation
+counter.accounts.Counter.size                   // Space calculation
 counter.instructions.increment.build(args)      // Instruction serialization
 
 // For the compiler:
@@ -745,7 +739,6 @@ When you pass a program to `betterSol({ programs: { counter } })`, the client:
 
 The address is resolved from the program object. Three ways it can be set:
 ```typescript
-// Auto-resolved — reads from .better-sol/counter.addr.json
 programs: { counter }
 
 // Environment variable — COUNTER_PROGRAM_ID=...
@@ -753,7 +746,6 @@ programs: { counter }  // falls back to env var if no keypair file
 
 // Same program, different cluster — same address!
 const sol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
-// reads .better-sol/counter.addr.json (same keypair, same address)
 ```
 
 No code generation at runtime. The program object IS the runtime type information.
@@ -779,9 +771,6 @@ npx @better-sol/cli create counter
 # → Created programs/counter.ts
 # → Generated keypair: CoUnTeR11111111111111111111111111111111111
 # → Saved .better-sol/counter.json (private, gitignored)
-# → Saved .better-sol/counter.addr.json (public, committed to git)
-# → Saved keypair to .better-sol/counter.json (gitignored)
-# → Saved address to .better-sol/counter.addr.json (committed to git)
 
 # 2. Edit the generated file to add your logic
 # (or skip `create` and write from scratch)
@@ -791,7 +780,7 @@ import { program, account, ix, defineErrors, u64, bool, pubkey, p } from 'better
 const Counter = account({ count: u64, authority: pubkey, isActive: bool }).seeds('counter', '{authority}')
 const errors = defineErrors({ Unauthorized: 'Not the authority', NotActive: 'Counter not active' })
 
-export const counter = program('counter', { errors }, {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
   initialize: ix({
     accounts: {
       counter: p.init(Counter),
@@ -820,7 +809,7 @@ export const counter = program('counter', { errors }, {
 EOF
 
 # 2. Push to devnet (compile + deploy)
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 # → Parsing programs/counter.ts...
 # → Generating Anchor Rust...
 # → Compiling via cloud service... (3.2s)
@@ -828,7 +817,7 @@ npx @better-sol/cli push --cluster devnet
 # → Done! Program: CoUnTeR... on devnet
 
 # 2b. (Optional) For mainnet: verify your build
-npx @better-sol/cli push --cluster mainnet-beta --verify
+npx @better-sol/cli deploy --cluster mainnet-beta --verify
 # → Writing generated Rust to generated/counter/...
 # 📋 Commit and push, then: npx @better-sol/cli verify --program-id CoUnTeR...
 git add generated/ && git commit -m "deploy counter v1" && git push
@@ -846,7 +835,7 @@ const sol = betterSol({
   programs: { counter },
 })
 
-const addr = sol.counter.accounts.counter.derive({ authority: sol.payer })
+const addr = sol.counter.accounts.Counter.derive({ authority: sol.payer })
 await sol.counter.initialize({ counter: addr, authority: sol.payer, initialValue: 42n })
 const data = await sol.counter.fetch(addr)
 console.log(data.count) // → 42n
@@ -861,7 +850,7 @@ node app.ts
 # Edit your program...
 # Maybe add a new instruction, or change a field
 
-npx @better-sol/cli push --cluster devnet
+npx @better-sol/cli deploy --cluster devnet
 # → Parsing programs/counter.ts...
 # → Changes detected:
 #     counter account: added field "lastUpdated" (u64)
@@ -878,80 +867,63 @@ npx @better-sol/cli push --cluster devnet
 // No local program definition needed
 // Use the built-in token, system, and ATA program clients
 import { betterSol } from 'better-sol'
-import { token } from 'better-sol/token'
 
 const sol = betterSol({
   cluster: 'mainnet-beta',
-  programs: { token },
+  payer: './keypair.json',
 })
 
-// Works immediately — no push, no compile
+// sol.token is always available — no registration needed
 await sol.token.transfer({ mint, from, to, amount })
 ```
 
 ### Where Does the Program Address Come From?
 
-The `program()` definition doesn't include an address. The address is a **deploy-time concern**, not a code-time concern — just like a database URL isn't hardcoded in your schema.
+The `program()` definition includes the address as the second argument.
+It was put there by `create`. You never type it manually.
 
 ```typescript
-// Definition — no address, just behavior
-export const counter = program('counter', { errors }, {
+// Definition — address included (generated by `create`)
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
   increment: ix({ ... }),
 })
 
-// Address resolved automatically
-import { counter } from './programs/counter'
-
 const sol = betterSol({
   cluster: 'devnet',
-  programs: { counter },  // auto-resolved from .better-sol/
+  programs: { counter },  // address from program definition
 })
 ```
 
-The address is never in your code. It's resolved at runtime by looking in `.better-sol/{program-name}.json` — the address file that .create. or .push. generated automatically.
+The address is in the program definition — it's the second argument of `program()`.
+It was put there by `create`. You never type it manually.
 
 Same address across all clusters:
 ```typescript
-// Devnet — reads .better-sol/counter.addr.json
 const devnetSol = betterSol({ cluster: 'devnet', programs: { counter } })
 
-// Mainnet — reads same .better-sol/counter.addr.json
 const mainnetSol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
 
 // Same program address on both! PDA derivations are identical.
 ```
 
-For CI/CD or environments without `.better-sol/`, use environment variables:
-```
-COUNTER_PROGRAM_ID=CoUnTeR...  # automatically picked up
-```
-
-For CI/CD deployments, provide the full keypair:
+For CI/CD deployments, provide the keypair from a secret manager:
 ```bash
-COUNTER_KEYPAIR=<base64> npx @better-sol/cli push --cluster mainnet-beta
+COUNTER_KEYPAIR=<base64> npx @better-sol/cli deploy --cluster mainnet-beta
 ```
 
-This is better than hardcoding for three reasons:
-1. **Write code first** — you don't need a keypair before defining your program
-2. **Same address on every cluster** — PDA derivations are identical, client code doesn't change
-3. **No manual address management** — `.better-sol/` handles it, you never copy-paste addresses
-
-**Where `push` gets the keypair:**
-- First deploy: `npx @better-sol/cli push` generates a keypair and saves it to
-  `.better-sol/counter.json` (gitignored) and `.better-sol/counter.addr.json` (committed).
-  The address is printed in the output.
+**Where `deploy` gets the keypair:**
+- First deploy: if no keypair exists in `.better-sol/`, `deploy` generates one and saves it to `.better-sol/counter.json`
 - Subsequent deploys: reads the existing keypair from `.better-sol/counter.json`
 - CI/CD: provide the keypair via `COUNTER_KEYPAIR` environment variable from your secret manager
 - Security: for mainnet programs, set upgrade authority to multisig after deployment
 
 **Where the client gets the address:**
-- Auto-resolved: `programs: { counter }` — reads from `.better-sol/`
-- Environment variable: `COUNTER_PROGRAM_ID=...` — fallback for CI/CD
-- Different cluster: automatic — `.better-sol/` vs `.better-sol/`
+- From the program definition — it's `program('counter', 'CouNTeR...', { ... })` in the source code
+- No hidden files, no resolution logic, no environment variables
+- It's just there
 
-**For PDA derivation:** the address is resolved at runtime from the configuration.
-`counter.accounts.Counter.derive({ authority })` works because `betterSol()` injects
-the address when you pass the program to `programs: { }`.
+**For PDA derivation:** the program object carries the address.
+`counter.accounts.Counter.derive({ authority })` uses the address from the definition.
 
 ---
 
@@ -983,7 +955,6 @@ await sol.mango.createAccount({ ... })
 import { betterSol, fromIdl } from 'better-sol'
 import { counter } from './programs/counter'  // our program builder
 import { mangoIdl } from '@mango/idl'            // someone else's IDL
-import { token } from 'better-sol/token'           // built-in
 
 const mango = fromIdl(mangoIdl)
 
@@ -993,14 +964,13 @@ const sol = betterSol({
   programs: {
     counter,    // ← defined with our program builder
     mango,      // ← imported from IDL
-    token,      // ← built-in token support
   },
 })
 
-// All three work the same way — methods appear on sol.programName
+// All three work — methods appear on sol.programName
 await sol.counter.increment({ ... })
 await sol.mango.createAccount({ ... })
-await sol.token.transfer({ ... })
+await sol.token.transfer({ ... })    // ← built-in, no registration needed
 ```
 
 This is the Better Auth plugin pattern: *anything that implements the program interface*

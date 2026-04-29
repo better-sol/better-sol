@@ -245,7 +245,7 @@ const events = defineEvents({
 
 // ── Program ──
 
-export const amm = program('amm', {
+export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', {
   errors,
   events,
 }, {
@@ -366,7 +366,7 @@ const counterErrors = defineErrors({
   BelowZero: 'Below zero',
 })
 
-export const counter = program('counter', {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', {
   errors: counterErrors,
 }, {
   increment: ix({

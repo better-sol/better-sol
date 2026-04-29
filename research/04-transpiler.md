@@ -472,7 +472,7 @@ When a CPI call has `authority: escrow` (a PDA account), the transpiler:
 ### The Demo Flow
 
 1. Show a TypeScript file defining a token swap AMM
-2. Run `npx @better-sol/cli push --cluster devnet`
+2. Run `npx @better-sol/cli deploy --cluster devnet`
 3. Watch it: parse → transpile → compile → deploy
 4. Switch to a client file, use the same definition as a typed SDK
 5. Execute a swap with full type safety

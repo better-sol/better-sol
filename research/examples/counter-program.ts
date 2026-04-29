@@ -47,7 +47,7 @@ const errors = defineErrors({
 // PROGRAM — ctx carries error types through
 // ══════════════════════════════════════════
 
-export const counter = program('counter', {
+export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', {
   errors,
 }, {
 

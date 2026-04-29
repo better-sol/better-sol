@@ -109,7 +109,7 @@ const events = defineEvents({
 // PROGRAM — ctx carries errors + events types
 // ══════════════════════════════════════════
 
-export const amm = program('amm', {
+export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', {
   errors,
   events,
 }, {

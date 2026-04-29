@@ -184,14 +184,14 @@ npx paykitjs push
 # → Done · synced 2 products
 ```
 
-The `push` command:
+The `deploy` command:
 1. Runs database migrations (Drizzle under the hood)
 2. Dry-runs a product sync against the payment provider
 3. Shows diffs (created, updated, unchanged)
 4. Asks for confirmation
 5. Syncs products to the provider
 
-**This is exactly what our `npx @better-sol/cli push` does:** schema diff → generate code → compile → deploy.
+**This is exactly what our `npx @better-sol/cli deploy` does:** schema diff → generate code → compile → deploy.
 
 #### 3. Provider Abstraction (Strategy Pattern)
 
@@ -271,7 +271,7 @@ e2e/               → End-to-end tests
 |---|---|---|
 | Define schema in TS | `feature()`, `plan()` | `account()`, `defineErrors()`, `defineEvents()` |
 | Single definition, many outputs | DB + Stripe sync + runtime API | Rust gen + cloud compile + client SDK |
-| `push` workflow | `paykitjs push` (migrate + sync) | `better-sol push` (parse + compile + deploy) |
+| `deploy` workflow | `paykitjs push` (migrate + sync) | `better-sol deploy` (parse + compile + deploy) |
 | Provider abstraction | `PaymentProvider` interface | Standard CPI interfaces (token.*, system.*) |
 | Plugin system | `PayKitPlugin` with endpoints | Programs as plugins via `betterSol({ programs })` |
 | Embedded dashboard | `@paykitjs/dash` SPA injected via handler | Not needed (CLI-first for v1) |
@@ -279,7 +279,7 @@ e2e/               → End-to-end tests
 
 ### What Solana Can Learn
 1. **Declarative schema → multiple outputs** — Define it once, use for compilation, sol, and testing
-2. **The `push` workflow** — We're already copying this. `paykitjs push` validates our design.
+2. **The `deploy` workflow** — We're already copying this. `paykitjs push` validates our design.
 3. **Provider abstraction** — Payment providers map to Solana programs; same pattern applies
 4. **Feature gating with metering** — Entitlement checking is similar to account validation
 5. **Database-driven state** — Paykit uses Drizzle + PostgreSQL; we use on-chain accounts

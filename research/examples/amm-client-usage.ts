@@ -187,7 +187,7 @@ amm.on('LiquidityAdded', (event) => {
 })
 
 amm.on('FeeUpdated', (event) => {
-  console.log(`Fee changed to ${event.newFeeBps}bps on ${event.pool}`)
+  console.log(`Fee changed to ${event.newFeeBps}bps`)
 })
 
 
@@ -195,34 +195,35 @@ amm.on('FeeUpdated', (event) => {
 // Testing (instant in-process VM)
 // ══════════════════════════════════════════
 
-import { createTestClient } from 'better-sol/testing'
+import { createTestSol } from 'better-sol/testing'
 
-const test = createTestClient({ programs: { amm } })
+const sol = createTestSol({ programs: { amm } })
 
 test('create pool and swap', async () => {
-  const admin = test.payer
-  const trader = await test.createAccount()
+  const admin = sol.payer
+  const trader = await sol.createAccount()
 
   // Create test tokens
-  const tokenA = await test.token.createMint({ decimals: 9, authority: admin })
-  const tokenB = await test.token.createMint({ decimals: 6, authority: admin })
+  const tokenA = await sol.token.createMint({ decimals: 9, authority: admin })
+  const tokenB = await sol.token.createMint({ decimals: 6, authority: admin })
 
-  await test.token.mintTo({ mint: tokenA, destination: admin, amount: 1_000_000_000_000n })
-  await test.token.mintTo({ mint: tokenB, destination: admin, amount: 1_000_000_000_000n })
-  await test.token.mintTo({ mint: tokenA, destination: trader, amount: 100_000_000n })
-  await test.token.mintTo({ mint: tokenB, destination: trader, amount: 100_000_000n })
+  await sol.token.mintTo({ mint: tokenA, destination: admin, amount: 1_000_000_000_000n })
+  await sol.token.mintTo({ mint: tokenB, destination: admin, amount: 1_000_000_000_000n })
+  await sol.token.mintTo({ mint: tokenA, destination: trader, amount: 100_000_000n })
+  await sol.token.mintTo({ mint: tokenB, destination: trader, amount: 100_000_000n })
 
   // Init config → create pool → add liquidity → swap
   const cfg = amm.accounts.Config.derive()
   const poolPda = amm.accounts.Pool.derive({ tokenAMint: tokenA, tokenBMint: tokenB })
 
-  await test.amm.initializeConfig({ config: cfg, admin })
-  await test.amm.createPool({ config: cfg, pool: poolPda, tokenAMint: tokenA, tokenBMint: tokenB, feeBps: 30n })
-  await test.amm.addLiquidity({ pool: poolPda, amountA: 1_000_000_000n, amountB: 1_000_000_000n, minLpTokens: 0n })
-  await test.amm.swapAForB({ pool: poolPda, amountIn: 100_000n, minOut: 50_000n, trader })
+  await sol.amm.initializeConfig({ config: cfg, admin })
+  await sol.amm.createPool({ config: cfg, pool: poolPda, tokenAMint: tokenA, tokenBMint: tokenB, feeBps: 30n })
+  await sol.amm.addLiquidity({ pool: poolPda, amountA: 1_000_000_000n, amountB: 1_000_000_000n, minLpTokens: 0n })
+  // Note: in test mode, token accounts are auto-derived from pool PDA
+  await sol.amm.swapAForB({ pool: poolPda, amountIn: 100_000n, minOut: 50_000n, trader })
 
   // Verify
   const poolData = await amm.accounts.Pool.fetch(poolPda)
-  test.assert(poolData.totalVolumeA > 0n)
-  test.assert(poolData.totalVolumeB > 0n)
+  sol.assert(poolData.totalVolumeA > 0n)
+  sol.assert(poolData.totalVolumeB > 0n)
 })
