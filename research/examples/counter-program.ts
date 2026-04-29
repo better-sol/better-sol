@@ -6,22 +6,50 @@
 //
 // Compare to Anchor (Rust):
 //   - Anchor: ~80 lines across 3 files (lib.rs, mod.rs, Cargo.toml)
-//   - Ours:   ~30 lines in ONE file
+//   - Ours:   ~40 lines in ONE file
 //
 // And the same file is the typed client SDK. Zero extra code.
+//
+// Type safety (all compile-time, zero annotations):
+// - ctx.require(cond, 'ErrorName') — autocomplete, checked
+// - p.tokenAccount(Account, 'field') — only pubkey fields
 // ============================================================
 
-import { program, account, ix, u64, bool, pubkey, p } from '@solana-kit/program'
+import {
+  program, account, ix, defineErrors,
+  u64, bool, pubkey,
+  p,
+} from 'better-sol/program'
 
-// Define the counter account — like a Zod schema
+// ══════════════════════════════════════════
+// ACCOUNT — Like a Zod schema
+// ══════════════════════════════════════════
+
 const Counter = account({
   count: u64,
   authority: pubkey,
   isActive: bool,
 }).seeds('counter', '{authority}')
 
-// Define the program — flat instruction map
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', {
+
+// ══════════════════════════════════════════
+// ERRORS — Typed registry for ctx.require()
+// ══════════════════════════════════════════
+
+const errors = defineErrors({
+  Unauthorized: 'Only the creator can perform this action',
+  NotActive: 'Counter is not active',
+  BelowZero: 'Counter would go below zero',
+})
+
+
+// ══════════════════════════════════════════
+// PROGRAM — ctx carries error types through
+// ══════════════════════════════════════════
+
+export const counter = program('counter', {
+  errors,
+}, {
 
   // Create a new counter
   initialize: ix({
@@ -30,7 +58,7 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       authority: p.signer(),
     },
     args: { initialValue: u64 },
-    run: ({ counter, authority }, { initialValue }) => {
+    run: ({ counter, authority }, { initialValue }, ctx) => {
       counter.count = initialValue
       counter.authority = authority
       counter.isActive = true
@@ -44,9 +72,11 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       authority: p.signer(),
     },
     args: { amount: u64 },
-    run: ({ counter, authority }, { amount }) => {
-      require(authority === counter.authority, 'Only the creator can increment')
-      require(counter.isActive, 'Counter is not active')
+    run: ({ counter, authority }, { amount }, ctx) => {
+      // The account 'counter' and the program 'counter' have the same name.
+      // No collision — ctx.require is the 3rd parameter.
+      ctx.require(authority === counter.authority, 'Unauthorized')
+      ctx.require(counter.isActive, 'NotActive')
       counter.count += amount
     },
   }),
@@ -58,10 +88,10 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       authority: p.signer(),
     },
     args: { amount: u64 },
-    run: ({ counter, authority }, { amount }) => {
-      require(authority === counter.authority, 'Only the creator can decrement')
-      require(counter.isActive, 'Counter is not active')
-      require(counter.count >= amount, 'Counter would go below zero')
+    run: ({ counter, authority }, { amount }, ctx) => {
+      ctx.require(authority === counter.authority, 'Unauthorized')
+      ctx.require(counter.isActive, 'NotActive')
+      ctx.require(counter.count >= amount, 'BelowZero')
       counter.count -= amount
     },
   }),
@@ -72,8 +102,8 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       counter: p.mut(Counter),
       authority: p.signer(),
     },
-    run: ({ counter, authority }) => {
-      require(authority === counter.authority, 'Only the creator can toggle')
+    run: ({ counter, authority }, {}, ctx) => {
+      ctx.require(authority === counter.authority, 'Unauthorized')
       counter.isActive = !counter.isActive
     },
   }),
@@ -84,9 +114,8 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       counter: p.close(Counter, 'authority'),
       authority: p.signer(),
     },
-    run: ({ authority }) => {
+    run: ({}, {}, ctx) => {
       // Account is closed automatically by p.close()
-      // This runs any cleanup logic before closure
     },
   }),
 })
@@ -96,28 +125,28 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
 // Client usage (same file, zero extra code)
 // ══════════════════════════════════════════
 
-import { createClient } from '@solana-kit/sdk'
+import { betterSol } from 'better-sol'
 
-const client = createClient({
+const sol = betterSol({
   cluster: 'devnet',
   payer: './keypair.json',
   programs: { counter },
 })
 
-const payer = client.payer
+const payer = sol.payer
 
 // Derive the counter PDA from seed definition
 const counterAddr = counter.accounts.Counter.derive({ authority: payer })
 
 // Create a counter starting at 42
-await client.counter.initialize({
+await sol.counter.initialize({
   counter: counterAddr,
   authority: payer,
   initialValue: 42n,
 })
 
 // Increment by 10
-await client.counter.increment({
+await sol.counter.increment({
   counter: counterAddr,
   authority: payer,
   amount: 10n,
@@ -129,14 +158,14 @@ console.log(data.count)     // 52n
 console.log(data.isActive)  // true
 
 // Decrement by 2
-await client.counter.decrement({
+await sol.counter.decrement({
   counter: counterAddr,
   authority: payer,
   amount: 2n,
 })
 
 // Close it
-await client.counter.close({
+await sol.counter.close({
   counter: counterAddr,
   authority: payer,
 })

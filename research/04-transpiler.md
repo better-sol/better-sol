@@ -1,16 +1,78 @@
-# Exhaustive Feasibility Analysis: What Can We Actually Transpile?
+# Transpiler — Feasibility & Coverage
 
-## Methodology
+## Can We Transpile TypeScript to Rust?
 
-I wrote real TypeScript function bodies representing every category of Solana program
-operation, parsed them with the TypeScript compiler API, analyzed the AST nodes,
-built a working proof-of-concept transpiler, and tested it against:
-- Counter (basic CRUD)
-- Escrow (conditional transfers + CPI)
-- AMM swap (complex math + multiple CPIs)
-- Governance (Vec operations + threshold checks)
+Yes. We built a working POC that converts TypeScript function bodies to Anchor Rust.
+The key insight: Solana programs are a narrow domain — only ~19 AST node types
+cover everything except complex CPI and Vec operations.
 
-This is not theoretical. The transpiler code exists and runs.
+---
+
+## The 10 Core Operations
+
+
+---
+
+
+---
+
+## The 19 AST Node Types We Handle
+
+### The 19 AST Node Types We Handle
+
+From the real AST analysis of typical Solana program logic:
+
+1. `Identifier` — variable/account names
+2. `PropertyAccessExpression` — `counter.count`, `authority.key`
+3. `BinaryExpression` — all binary operations
+4. `FirstAssignment` — `=`
+5. `FirstCompoundAssignment` — `+=`, `-=`, `*=`, `/=`
+6. `EqualsEqualsEqualsToken` — `===` → `==`
+7. `GreaterThanToken`, `LessThanToken`, etc. — direct mapping
+8. `PlusToken`, `AsteriskToken`, etc. — direct mapping
+9. `CallExpression` — `ctx.require()` and CPI calls
+10. `IfStatement` — conditionals
+11. `Block` — statement blocks
+12. `ExpressionStatement` — expression as statement
+13. `PrefixUnaryExpression` — `!` negation
+14. `BigIntLiteral` — `42n` → `42`
+15. `TrueKeyword` / `FalseKeyword` — direct mapping
+16. `ObjectLiteralExpression` — CPI args (parsed specially)
+17. `PropertyAssignment` — CPI arg key-value pairs
+18. `ExclamationEqualsEqualsToken` — `!==` → `!=`
+19. `StringLiteral` — string values
+
+**That's 19 nodes to handle.** TypeScript has hundreds. We only need these 19
+because Solana programs are a narrow domain. This is why a transpiler is feasible.
+
+---
+
+
+---
+
+## Coverage by Program Type
+
+## What Most Solana Programs Need
+
+| Use Case | Operations Needed | Covered? |
+|---|---|---|
+| Counter/voting | Field r/w, arithmetic, require | ✅ Proven |
+| Token management | CPI transfer, mint, burn | ✅ Proven |
+| Escrow | Field r/w, CPI, PDA signer | ✅ Proven |
+| NFT mint | CPI to token + metaplex | ⚠️ Metaplex CPI needed |
+| Simple staking | Field r/w, arithmetic, CPI | ✅ Straightforward |
+| Multisig | Field r/w, require, threshold | ✅ Straightforward |
+| Governance | Field r/w, voting logic, require | ✅ Straightforward |
+| Marketplace | CPI, field r/w, royalties | ⚠️ Complex CPI |
+| AMM/swap | Complex math, CPI | ❌ Custom Rust needed |
+| Lending/borrowing | Complex math, state machine | ❌ Custom Rust needed |
+| DeFi composability | Arbitrary CPI | ❌ Custom Rust needed |
+
+~70% of common programs are covered by the transpiler.
+The remaining 30% can still use the schema as a typed client (just write Rust for logic).
+
+---
+
 
 ---
 
@@ -66,7 +128,7 @@ is compared to or assigned to a Pubkey field, we automatically insert `.key()`.
 
 | # | Operation | TypeScript | Rust | Approach |
 |---|---|---|---|---|
-| 38 | Require with error | `require(a === b, "Unauthorized")` | `require!(a == b, ErrorCode::Unauthorized)` | Map string to error enum |
+| 38 | Require with error | `ctx.require(a === b, "Unauthorized")` | `require!(a == b, ErrorCode::Unauthorized)` | Map string to error enum |
 | 39 | Token transfer (user) | `token.transfer({from, to, auth, amt})` | `token::transfer(cpi_ctx, amt)?` | CPI template #1 |
 | 40 | Token transfer (PDA) | `token.transfer({from, to, authority: pda, amt})` | `token::transfer(cpi_ctx.with_signer(&[seeds]), amt)?` | CPI template #2 |
 | 41 | Token mintTo | `token.mintTo({mint, dest, auth, amt})` | `token::mint_to(cpi_ctx, amt)?` | CPI template #3 |
@@ -117,6 +179,9 @@ is compared to or assigned to a Pubkey field, we automatically insert `.key()`.
 
 ---
 
+
+---
+
 ## Coverage Analysis by Program Type
 
 | Program Type | Operations Needed | % Covered by Transpiler | Remaining? |
@@ -157,7 +222,7 @@ Every program type has at least 60% coverage, and the escape hatch handles the r
 ```typescript
 logic: ({ counter, authority }, { amount }) => {
   // Normal TypeScript — transpiled to Rust
-  require(authority === counter.authority)
+  ctx.require(authority === counter.authority)
   counter.count += amount
 
   // Embedded Rust — emitted as-is into the generated Rust function
@@ -218,7 +283,7 @@ logic: ({ pool, trader, poolA, poolB, traderA, traderB, tokenProgram }, { amount
   const fee = (amountIn * pool.feeBps) / 10000n
   const netIn = amountIn - fee
   const amountOut = (netIn * reserveOut) / (reserveIn + netIn)
-  require(amountOut >= minOut)
+  ctx.require(amountOut >= minOut)
 
   pool.totalTrades += 1n
   pool.totalVolume += amountIn
@@ -393,6 +458,9 @@ When a CPI call has `authority: escrow` (a PDA account), the transpiler:
 
 ---
 
+
+---
+
 ## What This Means for the Hackathon
 
 ### The Pitch
@@ -404,7 +472,7 @@ When a CPI call has `authority: escrow` (a PDA account), the transpiler:
 ### The Demo Flow
 
 1. Show a TypeScript file defining a token swap AMM
-2. Run `npx solana-kit push --cluster devnet`
+2. Run `npx @better-sol/cli push --cluster devnet`
 3. Watch it: parse → transpile → compile → deploy
 4. Switch to a client file, use the same definition as a typed SDK
 5. Execute a swap with full type safety

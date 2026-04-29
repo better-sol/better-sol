@@ -1,11 +1,11 @@
 // ============================================================
 // CLIENT SDK USAGE
 //
-// The same `amm` definition used for compilation is the typed client.
+// The same `amm` definition used for compilation is the typed sol.
 // Zero additional SDK code. Just import and use.
 // ============================================================
 
-import { createClient } from '@solana-kit/sdk'
+import { betterSol } from 'better-sol'
 import { amm } from './programs/amm'
 
 
@@ -13,13 +13,13 @@ import { amm } from './programs/amm'
 // Setup
 // ══════════════════════════════════════════
 
-const client = createClient({
+const sol = betterSol({
   cluster: 'devnet',
   payer: './keypair.json',
   programs: { amm },
 })
 
-const payer = client.payer
+const payer = sol.payer
 
 // Well-known mints
 const SOL_MINT = 'So11111111111111111111111111111111111111112'
@@ -44,7 +44,7 @@ const poolAddr = amm.accounts.Pool.derive({
 // 1. Initialize config (admin only)
 // ══════════════════════════════════════════
 
-await client.amm.initializeConfig({
+await sol.amm.initializeConfig({
   config: configAddr,
   admin: payer,
 })
@@ -54,7 +54,7 @@ await client.amm.initializeConfig({
 // 2. Create a SOL/USDC pool
 // ══════════════════════════════════════════
 
-await client.amm.createPool({
+await sol.amm.createPool({
   config: configAddr,
   pool: poolAddr,
   tokenAMint: SOL_MINT,
@@ -70,14 +70,14 @@ await client.amm.createPool({
 // Fetch pool to get reserve/mint addresses
 const pool = await amm.accounts.Pool.fetch(poolAddr)
 
-await client.amm.addLiquidity({
+await sol.amm.addLiquidity({
   pool: poolAddr,
   tokenAReserve: pool.tokenAReserve,
   tokenBReserve: pool.tokenBReserve,
   lpMint: pool.lpMint,
-  depositorTokenA: client.token.getATA({ owner: payer, mint: SOL_MINT }),
-  depositorTokenB: client.token.getATA({ owner: payer, mint: USDC_MINT }),
-  depositorLp: client.token.getATA({ owner: payer, mint: pool.lpMint }),
+  depositorTokenA: sol.token.getATA({ owner: payer, mint: SOL_MINT }),
+  depositorTokenB: sol.token.getATA({ owner: payer, mint: USDC_MINT }),
+  depositorLp: sol.token.getATA({ owner: payer, mint: pool.lpMint }),
   depositor: payer,
   amountA: 10_000_000_000n,    // 10 SOL
   amountB: 1_000_000_000n,     // 1000 USDC
@@ -89,12 +89,12 @@ await client.amm.addLiquidity({
 // 4. Swap SOL → USDC
 // ══════════════════════════════════════════
 
-await client.amm.swapAForB({
+await sol.amm.swapAForB({
   pool: poolAddr,
   tokenAReserve: pool.tokenAReserve,
   tokenBReserve: pool.tokenBReserve,
-  traderTokenA: client.token.getATA({ owner: payer, mint: SOL_MINT }),
-  traderTokenB: client.token.getATA({ owner: payer, mint: USDC_MINT }),
+  traderTokenA: sol.token.getATA({ owner: payer, mint: SOL_MINT }),
+  traderTokenB: sol.token.getATA({ owner: payer, mint: USDC_MINT }),
   trader: payer,
   amountIn: 1_000_000_000n,     // 1 SOL
   minOut: 90_000_000n,          // At least 90 USDC (slippage protection)
@@ -105,12 +105,12 @@ await client.amm.swapAForB({
 // 5. Swap USDC → SOL (reverse direction)
 // ══════════════════════════════════════════
 
-await client.amm.swapBForA({
+await sol.amm.swapBForA({
   pool: poolAddr,
   tokenAReserve: pool.tokenAReserve,
   tokenBReserve: pool.tokenBReserve,
-  traderTokenA: client.token.getATA({ owner: payer, mint: SOL_MINT }),
-  traderTokenB: client.token.getATA({ owner: payer, mint: USDC_MINT }),
+  traderTokenA: sol.token.getATA({ owner: payer, mint: SOL_MINT }),
+  traderTokenB: sol.token.getATA({ owner: payer, mint: USDC_MINT }),
   trader: payer,
   amountIn: 100_000_000n,       // 100 USDC
   minOut: 900_000_000n,         // At least 0.9 SOL
@@ -121,16 +121,16 @@ await client.amm.swapBForA({
 // 6. Remove liquidity
 // ══════════════════════════════════════════
 
-const lpBalance = await client.token.getBalance({ owner: payer, mint: pool.lpMint })
+const lpBalance = await sol.token.getBalance({ owner: payer, mint: pool.lpMint })
 
-await client.amm.removeLiquidity({
+await sol.amm.removeLiquidity({
   pool: poolAddr,
   tokenAReserve: pool.tokenAReserve,
   tokenBReserve: pool.tokenBReserve,
   lpMint: pool.lpMint,
-  withdrawerTokenA: client.token.getATA({ owner: payer, mint: SOL_MINT }),
-  withdrawerTokenB: client.token.getATA({ owner: payer, mint: USDC_MINT }),
-  withdrawerLp: client.token.getATA({ owner: payer, mint: pool.lpMint }),
+  withdrawerTokenA: sol.token.getATA({ owner: payer, mint: SOL_MINT }),
+  withdrawerTokenB: sol.token.getATA({ owner: payer, mint: USDC_MINT }),
+  withdrawerLp: sol.token.getATA({ owner: payer, mint: pool.lpMint }),
   withdrawer: payer,
   lpTokens: lpBalance,           // Remove all LP tokens
   minAmountA: 0n,
@@ -142,7 +142,7 @@ await client.amm.removeLiquidity({
 // 7. Update fee (admin only)
 // ══════════════════════════════════════════
 
-await client.amm.updateFee({
+await sol.amm.updateFee({
   pool: poolAddr,
   admin: payer,
   newFeeBps: 50n,  // Increase to 0.5%
@@ -195,7 +195,7 @@ amm.on('FeeUpdated', (event) => {
 // Testing (instant in-process VM)
 // ══════════════════════════════════════════
 
-import { createTestClient } from '@solana-kit/sdk/testing'
+import { createTestClient } from 'better-sol/testing'
 
 const test = createTestClient({ programs: { amm } })
 
