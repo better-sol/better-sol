@@ -1,0 +1,10 @@
+{
+  "skills": {
+    "skill:colosseum-copilot": {
+      "name": "colosseum-copilot",
+      "url": "https://github.com/ColosseumOrg/colosseum-copilot.git",
+      "branch": "main",
+      "commit": "dbe89b2dfca5cbcec750b82391640585f257c2ba"
+    }
+  }
+}
