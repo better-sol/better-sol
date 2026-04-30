@@ -13,6 +13,7 @@
 // Type safety (all compile-time, zero annotations):
 // - ctx.require(cond, 'ErrorName') — autocomplete, checked
 // - p.tokenAccount(Account, 'field') — only pubkey fields
+// - seeds('{field}') — validated against account fields at compile time
 // ============================================================
 
 import {
@@ -30,6 +31,7 @@ const Counter = account({
   authority: pubkey,
   isActive: bool,
 }).seeds('counter', '{authority}')
+//                     ^^^^^^^^^^^^ compile-time checked: must be a pubkey field
 
 
 // ══════════════════════════════════════════
@@ -44,80 +46,83 @@ const errors = defineErrors({
 
 
 // ══════════════════════════════════════════
-// PROGRAM — ctx carries error types through
+// PROGRAM — Named params, ctx carries types
 // ══════════════════════════════════════════
 
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', {
+export const counter = program({
+  name: 'counter',
+  address: 'CouNTeR11111111111111111111111111111111111',
   errors,
-}, {
+  instructions: {
 
-  // Create a new counter
-  initialize: ix({
-    accounts: {
-      counter: p.init(Counter),
-      authority: p.signer(),
-    },
-    args: { initialValue: u64 },
-    run: ({ counter, authority }, { initialValue }, ctx) => {
-      counter.count = initialValue
-      counter.authority = authority
-      counter.isActive = true
-    },
-  }),
+    // Create a new counter
+    initialize: ix({
+      accounts: {
+        counter: p.init(Counter),
+        authority: p.signer(),
+      },
+      args: { initialValue: u64 },
+      run: ({ counter, authority }, { initialValue }) => {
+        counter.count = initialValue
+        counter.authority = authority
+        counter.isActive = true
+      },
+    }),
 
-  // Increment the counter
-  increment: ix({
-    accounts: {
-      counter: p.mut(Counter),
-      authority: p.signer(),
-    },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      // The account 'counter' and the program 'counter' have the same name.
-      // No collision — ctx.require is the 3rd parameter.
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      ctx.require(counter.isActive, 'NotActive')
-      counter.count += amount
-    },
-  }),
+    // Increment the counter
+    increment: ix({
+      accounts: {
+        counter: p.mut(Counter),
+        authority: p.signer(),
+      },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        // The account 'counter' and the program 'counter' have the same name.
+        // No collision — ctx is always the last parameter.
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        ctx.require(counter.isActive, 'NotActive')
+        counter.count += amount
+      },
+    }),
 
-  // Decrement the counter
-  decrement: ix({
-    accounts: {
-      counter: p.mut(Counter),
-      authority: p.signer(),
-    },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      ctx.require(counter.isActive, 'NotActive')
-      ctx.require(counter.count >= amount, 'BelowZero')
-      counter.count -= amount
-    },
-  }),
+    // Decrement the counter
+    decrement: ix({
+      accounts: {
+        counter: p.mut(Counter),
+        authority: p.signer(),
+      },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        ctx.require(counter.isActive, 'NotActive')
+        ctx.require(counter.count >= amount, 'BelowZero')
+        counter.count -= amount
+      },
+    }),
 
-  // Toggle the active status
-  toggle: ix({
-    accounts: {
-      counter: p.mut(Counter),
-      authority: p.signer(),
-    },
-    run: ({ counter, authority }, {}, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      counter.isActive = !counter.isActive
-    },
-  }),
+    // Toggle the active status
+    toggle: ix({
+      accounts: {
+        counter: p.mut(Counter),
+        authority: p.signer(),
+      },
+      run: ({ counter, authority }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        counter.isActive = !counter.isActive
+      },
+    }),
 
-  // Close the counter and recover rent
-  close: ix({
-    accounts: {
-      counter: p.close(Counter, 'authority'),
-      authority: p.signer(),
-    },
-    run: ({}, {}, ctx) => {
-      // Account is closed automatically by p.close()
-    },
-  }),
+    // Close the counter and recover rent
+    close: ix({
+      accounts: {
+        counter: p.close(Counter, 'authority'),
+        authority: p.signer(),
+      },
+      run: () => {
+        // Account is closed automatically by p.close()
+      },
+    }),
+  },
 })
 
 

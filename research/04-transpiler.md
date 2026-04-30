@@ -137,9 +137,9 @@ is compared to or assigned to a Pubkey field, we automatically insert `.key()`.
 | 44 | Token freeze | `token.freeze({account, mint, auth})` | `token::freeze_account(cpi_ctx)?` | CPI template #6 |
 | 45 | System transfer | `system.transfer({from, to, amt})` | `system_program::transfer(cpi_ctx, amt)?` | CPI template #7 |
 | 46 | Create ATA | `ata.create({payer, owner, mint})` | `associated_token::create(cpi_ctx)?` | CPI template #8 |
-| 47 | Log message | `log("msg")` | `msg!("msg")` | Direct mapping |
-| 48 | Log with value | `log("Count: {}", count)` | `msg!("Count: {}", count)` | Template literal → msg!() |
-| 49 | Emit event | `emit({name: "Evt", data})` | `emit!(Evt { data })` | Object → struct init |
+| 47 | Log message | `ctx.log("msg")` | `msg!("msg")` | Direct mapping |
+| 48 | Log with value | `ctx.log("Count: {}", count)` | `msg!("Count: {}", count)` | Template literal → msg!() |
+| 49 | Emit event | `ctx.emit('Evt', data)` | `emit!(Evt { data })` | Name + object → struct init |
 | 50 | Vec push | `list.push(item)` | `list.push(item)` | Direct (if Vec<T> in schema) |
 | 51 | Vec contains | `list.includes(item)` | `list.contains(&item)` | Method name mapping |
 | 52 | Vec length | `list.length` | `list.len()` | Property → method |
@@ -220,9 +220,9 @@ Every program type has at least 60% coverage, and the escape hatch handles the r
 ### Syntax: Tagged Template Literal
 
 ```typescript
-logic: ({ counter, authority }, { amount }) => {
+run: ({ counter, authority }, { amount }, ctx) => {
   // Normal TypeScript — transpiled to Rust
-  ctx.require(authority === counter.authority)
+  ctx.require(authority === counter.authority, 'Unauthorized')
   counter.count += amount
 
   // Embedded Rust — emitted as-is into the generated Rust function
@@ -277,21 +277,21 @@ proposed TypeScript syntax and verified the transpiler can handle every part:
 ### TypeScript Input (what the developer writes)
 
 ```typescript
-logic: ({ pool, trader, poolA, poolB, traderA, traderB, tokenProgram }, { amountIn, minOut }) => {
+run: ({ pool, trader, poolA, poolB, traderA, traderB, tokenProgram }, { amountIn, minOut }, ctx) => {
   const reserveIn = poolA.amount
   const reserveOut = poolB.amount
   const fee = (amountIn * pool.feeBps) / 10000n
   const netIn = amountIn - fee
   const amountOut = (netIn * reserveOut) / (reserveIn + netIn)
-  ctx.require(amountOut >= minOut)
+  ctx.require(amountOut >= minOut, 'SlippageExceeded')
 
   pool.totalTrades += 1n
   pool.totalVolume += amountIn
 
-  tokenProgram.transfer({ from: traderA, to: poolA, authority: trader, amount: amountIn })
-  tokenProgram.transfer({ from: poolB, to: traderB, authority: pool, amount: amountOut })
+  token.transfer({ from: traderA, to: poolA, authority: trader, amount: amountIn })
+  token.transfer({ from: poolB, to: traderB, authority: pool, amount: amountOut })
 
-  emit({ name: "SwapExecuted", amountIn, amountOut, fee })
+  ctx.emit('SwapExecuted', { amountIn, amountOut, fee })
 }
 ```
 

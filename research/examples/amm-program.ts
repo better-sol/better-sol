@@ -6,7 +6,7 @@
 // typed client SDK — zero additional code needed.
 //
 // What this exercises:
-// - Multiple accounts with PDA seeds
+// - Multiple accounts with PDA seeds (type-checked field refs)
 // - Complex arithmetic (constant product formula, fees)
 // - Multiple CPI calls per instruction
 // - User-signed and PDA-signed token transfers
@@ -21,7 +21,8 @@
 // Type safety (all compile-time checked):
 // - ctx.require(cond, 'ErrorName') — autocomplete from defineErrors()
 // - ctx.emit('EventName', { data }) — autocomplete names + validated shapes
-// - p.tokenAccount(Pool, 'fieldName') — only pubkey fields accepted
+// - ctx.require(tokenAReserve.mint === pool.tokenAMint) — strongly-typed account fields
+// - seeds('{field}') — validated against account pubkey fields
 // ============================================================
 
 import {
@@ -57,6 +58,7 @@ const Pool = account({
   totalVolumeB: u64,
   bump: u8,
 }).seeds('pool', '{tokenAMint}', '{tokenBMint}')
+//              ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^ compile-time checked pubkey fields
 
 
 // ══════════════════════════════════════════
@@ -106,215 +108,246 @@ const events = defineEvents({
 
 
 // ══════════════════════════════════════════
-// PROGRAM — ctx carries errors + events types
+// PROGRAM — Named params, ctx carries types
 // ══════════════════════════════════════════
 
-export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', {
+export const amm = program({
+  name: 'amm',
+  address: 'AMMxPooL11111111111111111111111111111111111',
   errors,
   events,
-}, {
+  instructions: {
 
-  // ── 1. Initialize the global config ──
-  initializeConfig: ix({
-    accounts: {
-      config: p.init(Config),
-      admin: p.signer(),
-    },
-    run: ({ config, admin }, {}, ctx) => {
-      config.admin = admin
-      config.totalPools = 0n
-      config.feeBps = 30n
-    },
-  }),
+    // ── 1. Initialize the global config ──
+    initializeConfig: ix({
+      accounts: {
+        config: p.init(Config),
+        admin: p.signer(),
+      },
+      run: ({ config, admin }) => {
+        config.admin = admin
+        config.totalPools = 0n
+        config.feeBps = 30n
+      },
+    }),
 
-  // ── 2. Create a new trading pool ──
-  createPool: ix({
-    accounts: {
-      config: Config,
-      pool: p.init(Pool),
-      tokenAMint: p.mint(),
-      tokenBMint: p.mint(),
-      creator: p.signer(),
-    },
-    args: { feeBps: u64 },
-    run: ({ config, pool, tokenAMint, tokenBMint, creator }, { feeBps }, ctx) => {
-      ctx.require(creator === config.admin, 'Unauthorized')
-      ctx.require(feeBps <= 1000n, 'InvalidFeeBps')
+    // ── 2. Create a new trading pool ──
+    createPool: ix({
+      accounts: {
+        config: Config,
+        pool: p.init(Pool),
+        tokenAMint: p.mint(),
+        tokenBMint: p.mint(),
+        creator: p.signer(),
+      },
+      args: { feeBps: u64 },
+      run: ({ config, pool, tokenAMint, tokenBMint, creator }, { feeBps }, ctx) => {
+        ctx.require(creator === config.admin, 'Unauthorized')
+        ctx.require(feeBps <= 1000n, 'InvalidFeeBps')
 
-      pool.tokenAMint = tokenAMint
-      pool.tokenBMint = tokenBMint
-      pool.lpSupply = 0n
-      pool.feeBps = feeBps
-      pool.createdAt = sol.timestamp()
-      pool.admin = creator
-      pool.isActive = true
-      pool.totalVolumeA = 0n
-      pool.totalVolumeB = 0n
+        pool.tokenAMint = tokenAMint
+        pool.tokenBMint = tokenBMint
+        pool.lpSupply = 0n
+        pool.feeBps = feeBps
+        pool.createdAt = sol.timestamp()
+        pool.admin = creator
+        pool.isActive = true
+        pool.totalVolumeA = 0n
+        pool.totalVolumeB = 0n
 
-      config.totalPools += 1n
+        config.totalPools += 1n
 
-      ctx.emit('PoolCreated', { tokenA: tokenAMint, tokenB: tokenBMint })
-    },
-  }),
+        ctx.emit('PoolCreated', { tokenA: tokenAMint, tokenB: tokenBMint })
+      },
+    }),
 
-  // ── 3. Add liquidity to a pool ──
-  addLiquidity: ix({
-    accounts: {
-      pool: p.mut(Pool),
-      tokenAReserve: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      tokenBReserve: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      lpMint: p.mint().mut(),
-      depositorTokenA: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      depositorTokenB: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      depositorLp: p.tokenAccount(Pool, 'lpMint').mut(),
-      depositor: p.signer(),
-      tokenProgram: p.tokenProgram(),
-    },
-    args: { amountA: u64, amountB: u64, minLpTokens: u64 },
-    run: ({ pool, tokenAReserve, tokenBReserve, lpMint, depositorTokenA, depositorTokenB, depositorLp, depositor }, { amountA, amountB, minLpTokens }, ctx) => {
-      ctx.require(pool.isActive, 'PoolDoesNotExist')
-      ctx.require(amountA > 0n, 'InvalidAmount')
-      ctx.require(amountB > 0n, 'InvalidAmount')
+    // ── 3. Add liquidity to a pool ──
+    addLiquidity: ix({
+      accounts: {
+        pool: p.mut(Pool),
+        tokenAReserve: p.tokenAccount().mut(),
+        tokenBReserve: p.tokenAccount().mut(),
+        lpMint: p.mint().mut(),
+        depositorTokenA: p.tokenAccount().mut(),
+        depositorTokenB: p.tokenAccount().mut(),
+        depositorLp: p.tokenAccount().mut(),
+        depositor: p.signer(),
+        tokenProgram: p.tokenProgram(),
+      },
+      args: { amountA: u64, amountB: u64, minLpTokens: u64 },
+      run: ({ pool, tokenAReserve, tokenBReserve, lpMint, depositorTokenA, depositorTokenB, depositorLp, depositor }, { amountA, amountB, minLpTokens }, ctx) => {
+        ctx.require(pool.isActive, 'PoolDoesNotExist')
+        ctx.require(amountA > 0n, 'InvalidAmount')
+        ctx.require(amountB > 0n, 'InvalidAmount')
+        
+        ctx.require(tokenAReserve.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(tokenBReserve.mint === pool.tokenBMint, 'Unauthorized')
+        ctx.require(tokenAReserve.owner === pool.key, 'Unauthorized')
+        ctx.require(tokenBReserve.owner === pool.key, 'Unauthorized')
+        
+        ctx.require(depositorTokenA.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(depositorTokenB.mint === pool.tokenBMint, 'Unauthorized')
+        ctx.require(depositorLp.mint === lpMint.key, 'Unauthorized')
 
-      let lpTokens = 0n
+        let lpTokens = 0n
 
-      if (pool.lpSupply === 0n) {
-        lpTokens = (amountA * amountB) / 1000000n
+        if (pool.lpSupply === 0n) {
+          lpTokens = (amountA * amountB) / 1000000n
+          ctx.require(lpTokens > 0n, 'InvalidAmount')
+        } else {
+          const lpFromA = (amountA * pool.lpSupply) / tokenAReserve.amount
+          const lpFromB = (amountB * pool.lpSupply) / tokenBReserve.amount
+          lpTokens = lpFromA < lpFromB ? lpFromA : lpFromB
+        }
+
+        ctx.require(lpTokens >= minLpTokens, 'SlippageExceeded')
+
+        token.transfer({ from: depositorTokenA, to: tokenAReserve, authority: depositor, amount: amountA })
+        token.transfer({ from: depositorTokenB, to: tokenBReserve, authority: depositor, amount: amountB })
+        token.mintTo({ mint: lpMint, to: depositorLp, authority: pool, amount: lpTokens })
+
+        pool.lpSupply += lpTokens
+        pool.totalVolumeA += amountA
+        pool.totalVolumeB += amountB
+
+        ctx.emit('LiquidityAdded', { amountA, amountB, lpTokens })
+      },
+    }),
+
+    // ── 4. Remove liquidity from a pool ──
+    removeLiquidity: ix({
+      accounts: {
+        pool: p.mut(Pool),
+        tokenAReserve: p.tokenAccount().mut(),
+        tokenBReserve: p.tokenAccount().mut(),
+        lpMint: p.mint().mut(),
+        withdrawerTokenA: p.tokenAccount().mut(),
+        withdrawerTokenB: p.tokenAccount().mut(),
+        withdrawerLp: p.tokenAccount().mut(),
+        withdrawer: p.signer(),
+        tokenProgram: p.tokenProgram(),
+      },
+      args: { lpTokens: u64, minAmountA: u64, minAmountB: u64 },
+      run: ({ pool, tokenAReserve, tokenBReserve, lpMint, withdrawerTokenA, withdrawerTokenB, withdrawerLp, withdrawer }, { lpTokens, minAmountA, minAmountB }, ctx) => {
+        ctx.require(pool.isActive, 'PoolDoesNotExist')
         ctx.require(lpTokens > 0n, 'InvalidAmount')
-      } else {
-        const lpFromA = (amountA * pool.lpSupply) / tokenAReserve.amount
-        const lpFromB = (amountB * pool.lpSupply) / tokenBReserve.amount
-        lpTokens = lpFromA < lpFromB ? lpFromA : lpFromB
-      }
+        ctx.require(pool.lpSupply > 0n, 'InsufficientLiquidity')
 
-      ctx.require(lpTokens >= minLpTokens, 'SlippageExceeded')
+        ctx.require(tokenAReserve.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(tokenBReserve.mint === pool.tokenBMint, 'Unauthorized')
+        ctx.require(tokenAReserve.owner === pool.key, 'Unauthorized')
+        ctx.require(tokenBReserve.owner === pool.key, 'Unauthorized')
+        
+        ctx.require(withdrawerTokenA.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(withdrawerTokenB.mint === pool.tokenBMint, 'Unauthorized')
+        ctx.require(withdrawerLp.mint === lpMint.key, 'Unauthorized')
 
-      token.transfer({ from: depositorTokenA, to: tokenAReserve, authority: depositor, amount: amountA })
-      token.transfer({ from: depositorTokenB, to: tokenBReserve, authority: depositor, amount: amountB })
-      token.mintTo({ mint: lpMint, to: depositorLp, authority: pool, amount: lpTokens })
+        const amountA = (lpTokens * tokenAReserve.amount) / pool.lpSupply
+        const amountB = (lpTokens * tokenBReserve.amount) / pool.lpSupply
 
-      pool.lpSupply += lpTokens
-      pool.totalVolumeA += amountA
-      pool.totalVolumeB += amountB
+        ctx.require(amountA >= minAmountA, 'SlippageExceeded')
+        ctx.require(amountB >= minAmountB, 'SlippageExceeded')
 
-      ctx.emit('LiquidityAdded', { amountA, amountB, lpTokens })
-    },
-  }),
+        token.burn({ from: withdrawerLp, mint: lpMint, authority: withdrawer, amount: lpTokens })
+        token.transfer({ from: tokenAReserve, to: withdrawerTokenA, authority: pool, amount: amountA })
+        token.transfer({ from: tokenBReserve, to: withdrawerTokenB, authority: pool, amount: amountB })
 
-  // ── 4. Remove liquidity from a pool ──
-  removeLiquidity: ix({
-    accounts: {
-      pool: p.mut(Pool),
-      tokenAReserve: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      tokenBReserve: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      lpMint: p.mint().mut(),
-      withdrawerTokenA: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      withdrawerTokenB: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      withdrawerLp: p.tokenAccount(Pool, 'lpMint').mut(),
-      withdrawer: p.signer(),
-      tokenProgram: p.tokenProgram(),
-    },
-    args: { lpTokens: u64, minAmountA: u64, minAmountB: u64 },
-    run: ({ pool, tokenAReserve, tokenBReserve, lpMint, withdrawerTokenA, withdrawerTokenB, withdrawerLp, withdrawer }, { lpTokens, minAmountA, minAmountB }, ctx) => {
-      ctx.require(pool.isActive, 'PoolDoesNotExist')
-      ctx.require(lpTokens > 0n, 'InvalidAmount')
-      ctx.require(pool.lpSupply > 0n, 'InsufficientLiquidity')
+        pool.lpSupply -= lpTokens
 
-      const amountA = (lpTokens * tokenAReserve.amount) / pool.lpSupply
-      const amountB = (lpTokens * tokenBReserve.amount) / pool.lpSupply
+        ctx.emit('LiquidityRemoved', { amountA, amountB, lpTokens })
+      },
+    }),
 
-      ctx.require(amountA >= minAmountA, 'SlippageExceeded')
-      ctx.require(amountB >= minAmountB, 'SlippageExceeded')
+    // ── 5. Swap token A → token B ──
+    swapAForB: ix({
+      accounts: {
+        pool: p.mut(Pool),
+        tokenAReserve: p.tokenAccount().mut(),
+        tokenBReserve: p.tokenAccount().mut(),
+        traderTokenA: p.tokenAccount().mut(),
+        traderTokenB: p.tokenAccount().mut(),
+        trader: p.signer(),
+        tokenProgram: p.tokenProgram(),
+      },
+      args: { amountIn: u64, minOut: u64 },
+      run: ({ pool, tokenAReserve, tokenBReserve, traderTokenA, traderTokenB, trader }, { amountIn, minOut }, ctx) => {
+        ctx.require(pool.isActive, 'PoolDoesNotExist')
+        ctx.require(amountIn > 0n, 'InvalidAmount')
 
-      token.burn({ from: withdrawerLp, mint: lpMint, authority: withdrawer, amount: lpTokens })
-      token.transfer({ from: tokenAReserve, to: withdrawerTokenA, authority: pool, amount: amountA })
-      token.transfer({ from: tokenBReserve, to: withdrawerTokenB, authority: pool, amount: amountB })
+        ctx.require(tokenAReserve.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(tokenBReserve.mint === pool.tokenBMint, 'Unauthorized')
+        ctx.require(traderTokenA.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(traderTokenB.mint === pool.tokenBMint, 'Unauthorized')
 
-      pool.lpSupply -= lpTokens
+        const fee = (amountIn * pool.feeBps) / 10000n
+        const netIn = amountIn - fee
+        const amountOut = (netIn * tokenBReserve.amount) / (tokenAReserve.amount + netIn)
 
-      ctx.emit('LiquidityRemoved', { amountA, amountB, lpTokens })
-    },
-  }),
+        ctx.require(amountOut >= minOut, 'SlippageExceeded')
 
-  // ── 5. Swap token A → token B ──
-  swapAForB: ix({
-    accounts: {
-      pool: p.mut(Pool),
-      tokenAReserve: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      tokenBReserve: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      traderTokenA: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      traderTokenB: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      trader: p.signer(),
-      tokenProgram: p.tokenProgram(),
-    },
-    args: { amountIn: u64, minOut: u64 },
-    run: ({ pool, tokenAReserve, tokenBReserve, traderTokenA, traderTokenB, trader }, { amountIn, minOut }, ctx) => {
-      ctx.require(pool.isActive, 'PoolDoesNotExist')
-      ctx.require(amountIn > 0n, 'InvalidAmount')
+        token.transfer({ from: traderTokenA, to: tokenAReserve, authority: trader, amount: amountIn })
+        token.transfer({ from: tokenBReserve, to: traderTokenB, authority: pool, amount: amountOut })
 
-      const fee = (amountIn * pool.feeBps) / 10000n
-      const netIn = amountIn - fee
-      const amountOut = (netIn * tokenBReserve.amount) / (tokenAReserve.amount + netIn)
+        pool.totalVolumeA += amountIn
+        pool.totalVolumeB += amountOut
 
-      ctx.require(amountOut >= minOut, 'SlippageExceeded')
+        ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 0 })
+      },
+    }),
 
-      token.transfer({ from: traderTokenA, to: tokenAReserve, authority: trader, amount: amountIn })
-      token.transfer({ from: tokenBReserve, to: traderTokenB, authority: pool, amount: amountOut })
+    // ── 6. Swap token B → token A ──
+    swapBForA: ix({
+      accounts: {
+        pool: p.mut(Pool),
+        tokenAReserve: p.tokenAccount().mut(),
+        tokenBReserve: p.tokenAccount().mut(),
+        traderTokenA: p.tokenAccount().mut(),
+        traderTokenB: p.tokenAccount().mut(),
+        trader: p.signer(),
+        tokenProgram: p.tokenProgram(),
+      },
+      args: { amountIn: u64, minOut: u64 },
+      run: ({ pool, tokenAReserve, tokenBReserve, traderTokenA, traderTokenB, trader }, { amountIn, minOut }, ctx) => {
+        ctx.require(pool.isActive, 'PoolDoesNotExist')
+        ctx.require(amountIn > 0n, 'InvalidAmount')
 
-      pool.totalVolumeA += amountIn
-      pool.totalVolumeB += amountOut
+        ctx.require(tokenAReserve.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(tokenBReserve.mint === pool.tokenBMint, 'Unauthorized')
+        ctx.require(traderTokenA.mint === pool.tokenAMint, 'Unauthorized')
+        ctx.require(traderTokenB.mint === pool.tokenBMint, 'Unauthorized')
 
-      ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 0 })
-    },
-  }),
+        const fee = (amountIn * pool.feeBps) / 10000n
+        const netIn = amountIn - fee
+        const amountOut = (netIn * tokenAReserve.amount) / (tokenBReserve.amount + netIn)
 
-  // ── 6. Swap token B → token A ──
-  swapBForA: ix({
-    accounts: {
-      pool: p.mut(Pool),
-      tokenAReserve: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      tokenBReserve: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      traderTokenA: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      traderTokenB: p.tokenAccount(Pool, 'tokenBMint').mut(),
-      trader: p.signer(),
-      tokenProgram: p.tokenProgram(),
-    },
-    args: { amountIn: u64, minOut: u64 },
-    run: ({ pool, tokenAReserve, tokenBReserve, traderTokenA, traderTokenB, trader }, { amountIn, minOut }, ctx) => {
-      ctx.require(pool.isActive, 'PoolDoesNotExist')
-      ctx.require(amountIn > 0n, 'InvalidAmount')
+        ctx.require(amountOut >= minOut, 'SlippageExceeded')
 
-      const fee = (amountIn * pool.feeBps) / 10000n
-      const netIn = amountIn - fee
-      const amountOut = (netIn * tokenAReserve.amount) / (tokenBReserve.amount + netIn)
+        token.transfer({ from: traderTokenB, to: tokenBReserve, authority: trader, amount: amountIn })
+        token.transfer({ from: tokenAReserve, to: traderTokenA, authority: pool, amount: amountOut })
 
-      ctx.require(amountOut >= minOut, 'SlippageExceeded')
+        pool.totalVolumeA += amountOut
+        pool.totalVolumeB += amountIn
 
-      token.transfer({ from: traderTokenB, to: tokenBReserve, authority: trader, amount: amountIn })
-      token.transfer({ from: tokenAReserve, to: traderTokenA, authority: pool, amount: amountOut })
+        ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 1 })
+      },
+    }),
 
-      pool.totalVolumeA += amountOut
-      pool.totalVolumeB += amountIn
+    // ── 7. Update pool fee (admin only) ──
+    updateFee: ix({
+      accounts: {
+        pool: p.mut(Pool),
+        admin: p.signer(),
+      },
+      args: { newFeeBps: u64 },
+      run: ({ pool, admin }, { newFeeBps }, ctx) => {
+        ctx.require(admin === pool.admin, 'Unauthorized')
+        ctx.require(newFeeBps <= 1000n, 'InvalidFeeBps')
 
-      ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 1 })
-    },
-  }),
+        pool.feeBps = newFeeBps
 
-  // ── 7. Update pool fee (admin only) ──
-  updateFee: ix({
-    accounts: {
-      pool: p.mut(Pool),
-      admin: p.signer(),
-    },
-    args: { newFeeBps: u64 },
-    run: ({ pool, admin }, { newFeeBps }, ctx) => {
-      ctx.require(admin === pool.admin, 'Unauthorized')
-      ctx.require(newFeeBps <= 1000n, 'InvalidFeeBps')
-
-      pool.feeBps = newFeeBps
-
-      ctx.emit('FeeUpdated', { newFeeBps })
-      ctx.log('Fee updated to {}bps', newFeeBps)
-    },
-  }),
+        ctx.emit('FeeUpdated', { newFeeBps })
+        ctx.log('Fee updated to {}bps', newFeeBps)
+      },
+    }),
+  },
 })

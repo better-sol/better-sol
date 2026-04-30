@@ -258,7 +258,8 @@ const errors = defineErrors({ Unauthorized: 'Not authorized' })
 
 const events = defineEvents({ Incremented: { newCount: u64 } })
 
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors, events }, {
+export const counter = program({
+  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, events, instructions: {
   increment: ix({
     accounts: { counter: p.mut(Counter), authority: p.signer() },
     args: { amount: u64 },
@@ -268,6 +269,7 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       ctx.emit('Incremented', { newCount: counter.count })
     },
   }),
+  },
 })
 ```
 
@@ -366,25 +368,32 @@ programs/counter.ts
 1. Reads all `programs/*.ts` files
 2. Extracts `program()`, `account()`, `ix()` definitions using TypeScript AST parsing
 3. For each program, verifies the address matches the keypair in `.better-sol/`
-4. If no address exists, offers to generate a keypair and update the source file
-5. Builds a typed IR (accounts, fields, instructions, logic functions)
-6. Generates Anchor Rust source code (with `declare_id!()` from the address)
-7. Sends Rust to cloud compiler → gets `.so` bytecode back
-8. Deploys the `.so` to the target cluster
-9. Auto-publishes IDL to chain and cloud
+4. Builds a typed IR (accounts, fields, instructions, logic functions)
+5. Generates Anchor Rust source code (with `declare_id!()` from the address)
+6. Sends Rust to cloud compiler → gets `.so` bytecode back
+7. Deploys the `.so` to the target cluster
+8. Auto-publishes IDL to chain and cloud
 
-**Address verification:** If the address in `program()` doesn't match the keypair
-in `.better-sol/`, `deploy` errors immediately:
-```
-❌ Address mismatch for 'counter':
-   Source file: CouNTeR...
-   Keypair:     DiFfErNt...
-   Either update the address in programs/counter.ts or delete .better-sol/counter.json
-```
+**Non-interactive by design.** `deploy` never prompts. This makes it safe for CI/CD:
+- **No keypair in `.better-sol/`?** Generate one silently, save it, continue.
+- **No address in `program()`?** Error immediately with the fix:
+  ```
+  ❌ No address found for program 'counter'.
+     → Run: npx @better-sol/cli create counter
+     → Or add the address manually:
+       program({ name: 'counter', address: '<your-address>', ... })
+  ```
+- **Address mismatch?** Error immediately with the fix:
+  ```
+  ❌ Address mismatch for 'counter':
+     Source:   CouNTeR...
+     Keypair:  DiFfErNt...
+     → Update the address in programs/counter.ts
+       or delete .better-sol/counter.json to generate a new keypair
+  ```
 
-**Missing address:** If `program()` has no address and no keypair exists, `deploy`
-asks to generate one and update the source file (like `drizzle-kit push` asks
-before applying changes).
+**The `create` command is recommended** — it scaffolds the file with the address
+already in place. But `deploy` handles edge cases gracefully without interaction.
 
 ### Schema Diffing (Like Drizzle)
 
@@ -454,7 +463,8 @@ const errors = defineErrors({
   Unauthorized: 'Not the authority',
 })
 
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
+export const counter = program({
+  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
   initialize: ix({
     accounts: {
       counter: p.init(Counter),
@@ -478,6 +488,7 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       counter.count += amount
     },
   }),
+  },
 })
 ```
 
@@ -494,7 +505,7 @@ import { program, account, ix, u64, pubkey, p } from 'better-sol/program'
 
 // ... your code ...
 
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { ... }, { ... })
+export const counter = program({ name: 'counter', address: 'CouNTeR...', ... })
 ```
 
 `create` is a convenience. It gives you a working starting point with the right

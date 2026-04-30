@@ -24,7 +24,8 @@ const Counter = account({ count: u64, authority: pubkey }).seeds('counter', '{au
 
 const errors = defineErrors({ Unauthorized: 'Not the authority' })
 
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
+export const counter = program({
+  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
   increment: ix({
     accounts: { counter: p.mut(Counter), authority: p.signer() },
     args: { amount: u64 },
@@ -33,6 +34,7 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       counter.count += amount
     },
   }),
+  },
 })
 ```
 

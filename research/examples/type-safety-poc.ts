@@ -105,10 +105,7 @@ export declare const p: {
   close<T extends Record<string, SolField>>(acct: SolAccount<T>, refundTo: string): void
   mint(): void
   tokenProgram(): void
-  tokenAccount<
-    const T extends Record<string, SolField>,
-    const K extends PubkeyFields<T> & string
-  >(acct: SolAccount<T>, field: K): { mut(): void }
+  tokenAccount(): { mut(): void }
 }
 
 // ── token CPI ──
@@ -245,10 +242,12 @@ const events = defineEvents({
 
 // ── Program ──
 
-export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', {
+export const amm = program({
+  name: 'amm',
+  address: 'AMMxPooL11111111111111111111111111111111111',
   errors,
   events,
-}, {
+  instructions: {
 
   // ── Initialize config ──
   initializeConfig: ix({
@@ -256,7 +255,7 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
       config: p.init(Config),
       admin: p.signer(),
     },
-    run: ({ config, admin }, {}, ctx) => {
+    run: ({ config, admin }, ctx) => {
       // No require needed — simple init
       // No events needed for this instruction
     },
@@ -300,8 +299,8 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
   swapAForB: ix({
     accounts: {
       pool: p.mut(Pool),
-      tokenAReserve: p.tokenAccount(Pool, 'tokenAMint').mut(),
-      tokenBReserve: p.tokenAccount(Pool, 'tokenBMint').mut(),
+      tokenAReserve: p.tokenAccount().mut(),
+      tokenBReserve: p.tokenAccount().mut(),
       trader: p.signer(),
     },
     args: { amountIn: u64, minOut: u64 },
@@ -346,7 +345,7 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
       ctx.emit('FeeUpdated', { newFeeBps })
       ctx.log('Fee updated to {}bps', newFeeBps)
     },
-  }),
+  },
 })
 
 
@@ -366,9 +365,11 @@ const counterErrors = defineErrors({
   BelowZero: 'Below zero',
 })
 
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', {
+export const counter = program({
+  name: 'counter',
+  address: 'CouNTeR11111111111111111111111111111111111',
   errors: counterErrors,
-}, {
+  instructions: {
   increment: ix({
     accounts: {
       counter: p.mut(Counter),    // account named 'counter'
@@ -383,7 +384,7 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
       ctx.require(counter.isActive, 'NotActive')                      // ✅
       counter.count += amount
     },
-  }),
+  },
 })
 
 
@@ -403,5 +404,5 @@ export const counter = program('counter', 'CouNTeR111111111111111111111111111111
 // ❌ ctx.emit('SwapExecuted', { amountIn: 1n, amountOut: 1n, fee: 1n, direction: 'wrong' })
 //    TS2345: 'wrong' is not assignable to number (direction is u8)
 
-// ❌ p.tokenAccount(Pool, 'feeBps')
-//    TS2345: '"feeBps"' is not assignable to '"tokenAMint" | "tokenBMint" | ...'
+// ❌ ctx.require(tokenAReserve.mint === pool.feeBps, '...')
+//    TS2367: This condition will always return 'false' since the types 'string' and 'bigint' have no overlap.

@@ -9,7 +9,7 @@ Programs are defined with three building blocks:
 
 1. **`account({...})`** — define state schemas (like Zod)
 2. **`defineErrors({...})` / `defineEvents({...})`** — typed registries
-3. **`program('name', 'programId', { errors, events }, { instructions })`** — the program
+3. **`program({ name, address, errors, events, instructions })`** — the program
 
 Each instruction uses `ix()` with three keys: `accounts`, `args`, `run:`.
 
@@ -80,17 +80,16 @@ All names and data shapes are compile-time checked. See below for the full type 
 ## Program — Flat Instruction Map
 
 ```typescript
-export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', {
-  errors,
-  events,
-}, {
+export const amm = program({
+  name: 'amm', address: 'AMMxPooL11111111111111111111111111111111111',
+  errors, events, instructions: {
 
   initializeConfig: ix({
     accounts: {
       config: p.init(Config),
       admin: p.signer(),
     },
-    run: ({ config, admin }, {}, ctx) => {
+    run: ({ config, admin }, ctx) => {
       config.admin = admin
       config.totalPools = 0n
       config.feeBps = 30n
@@ -102,11 +101,13 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
       pool: p.mut(Pool),
       tokenAReserve: p.tokenAccount(Pool, 'tokenAMint').mut(),
       tokenBReserve: p.tokenAccount(Pool, 'tokenBMint').mut(),
+      traderTokenA: p.tokenAccount(Pool, 'tokenAMint').mut(),
+      traderTokenB: p.tokenAccount(Pool, 'tokenBMint').mut(),
       trader: p.signer(),
       tokenProgram: p.tokenProgram(),
     },
     args: { amountIn: u64, minOut: u64 },
-    run: ({ pool, tokenAReserve, tokenBReserve, trader }, { amountIn, minOut }, ctx) => {
+    run: ({ pool, tokenAReserve, tokenBReserve, traderTokenA, traderTokenB, trader }, { amountIn, minOut }, ctx) => {
       ctx.require(pool.isActive, 'PoolDoesNotExist')
       ctx.require(amountIn > 0n, 'InvalidAmount')
 
@@ -116,6 +117,10 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
       ctx.require(amountOut >= minOut, 'SlippageExceeded')
 
       token.transfer({ from: traderTokenA, to: tokenAReserve, authority: trader, amount: amountIn })
+      token.transfer({ from: tokenBReserve, to: traderTokenB, authority: pool, amount: amountOut })
+
+      pool.totalVolumeA += amountIn
+      pool.totalVolumeB += amountOut
 
       ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 0 })
     },
@@ -125,7 +130,11 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
 ```
 
 - **3 keys per instruction** — `accounts`, `args`, `run`
-- **`run:` handler** — `(accounts, args, ctx) => { ... }`
+- **`run:` handler** — flexible signature:
+  - `(accounts, args, ctx)` — when you need all three
+  - `(accounts, ctx)` — when there are no args
+  - `(accounts)` — when there are no args and ctx isn't used
+  - `()` — when nothing is needed (e.g., `p.close()` handles everything)
 - **`ctx`** — typed context with `require`, `emit`, `log`
 - **Max 2 levels nesting** — from 4 in the old approach
 
@@ -141,8 +150,8 @@ export const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111',
 | `p.signer()` | `#[account(mut)]` + `Signer<'info>` | Transaction signer |
 | `p.mint()` | `Account<'info, Mint>` | SPL token mint |
 | `p.mint().mut()` | Same + mut | Mutable mint reference |
-| `p.tokenAccount(Account, 'field')` | `Account<'info, TokenAccount>` + constraint | Type-safe token account (field must be pubkey) |
-| `p.tokenAccount(Account, 'field').mut()` | Same + mutable | Writable type-safe token account |
+| `p.tokenAccount()` | `Account<'info, TokenAccount>` | Token account |
+| `p.tokenAccount().mut()` | Same + mutable | Writable token account |
 | `p.tokenProgram()` | `Program<'info, Token>` | Token program reference |
 | `p.systemProgram()` | `Program<'info, System>` | System program reference |
 | `p.close(Account, 'recipient')` | `#[account(close = recipient)]` | Close account, return rent |
@@ -169,7 +178,7 @@ require(authority === config.admin, 'Unathroized')
 ### Problem 2: Event names and data shapes are magic
 ```typescript
 // No autocomplete for event names. No validation of data shape.
-emit('SwapExecuted', { amountin: 1n })
+emit('SwapExecuted', { amountin: 1n })  // ← without ctx type safety
 //    ^^^^^^^^^^^^^^              ^^^^^^^ typo in field name — compiles fine
 ```
 
@@ -185,16 +194,34 @@ All three are **string literals with no compile-time validation**.
 
 ## The Solution: `ctx` — ElysiaJS-Style Typed Context
 
-The `run:` handler receives **three parameters**: `(accounts, args, ctx)`.
-
-`ctx` carries the program's error and event types through TypeScript generic inference:
+The `run:` handler has a **flexible signature** — omit parameters you don't need:
 
 ```typescript
+// Full signature (accounts + args + ctx)
 run: ({ pool, trader }, { amountIn, minOut }, ctx) => {
-  //   ^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^   ^^^
-  //   typed accounts      typed args            typed context
+  ctx.require(pool.isActive, 'PoolDoesNotExist')
+  ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 0 })
+}
 
-  ctx.require(pool.isActive, 'PoolDoesNotExist')   // ✅ autocomplete errors
+// No args needed (toggle, close)
+run: ({ counter, authority }, ctx) => {
+  ctx.require(authority === counter.authority, 'Unauthorized')
+  counter.isActive = !counter.isActive
+}
+
+// No args, no ctx needed (simple init)
+run: ({ config, admin }) => {
+  config.admin = admin
+  config.totalPools = 0n
+}
+
+// Nothing needed (p.close handles everything)
+run: () => {
+  // Account closed automatically by p.close()
+}
+```
+
+`ctx` carries the program's error and event types through TypeScript generic inference:
   ctx.emit('SwapExecuted', { amountIn, amountOut, fee, direction: 0 })  // ✅ autocomplete + validate shape
   ctx.log('Swapped {} for {}', amountIn, amountOut)
 }
@@ -220,7 +247,8 @@ Same pattern, functional API:
 const errors = defineErrors({ Unauthorized: '...' })
 const events = defineEvents({ SwapExecuted: { amountIn: u64, amountOut: u64 } })
 
-const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', { errors, events }, {
+const amm = program({
+  name: 'amm', address: 'AMMxPooL11111111111111111111111111111111111', errors, events, instructions: {
   swap: ix({
     accounts: { pool: p.mut(Pool) },
     args: { amountIn: u64 },
@@ -230,6 +258,7 @@ const amm = program('amm', 'AMMxPooL11111111111111111111111111111111111', { erro
       // ctx.log     — always available
     },
   }),
+  },
 })
 ```
 
@@ -297,24 +326,39 @@ type EmitFn<TEvents extends Record<string, Record<string, SolField>>> = {
 }
 ```
 
-### `p.tokenAccount()` — Type-Safe Field References
+### `p.tokenAccount()` + `ctx.require()` — No More Magic Strings
+
+Instead of passing string field names into constraints, better-sol maps accounts to strictly-typed objects inside `run:`. Token accounts get `mint`, `owner`, and `amount`.
 
 ```typescript
 const Pool = account({
-  tokenAMint: pubkey,   // pubkey → valid for tokenAccount()
-  feeBps: u64,          // u64 → REJECTED
-  isActive: bool,       // bool → REJECTED
+  tokenAMint: pubkey,
+  // ...
 })
 
-p.tokenAccount(Pool, 'tokenAMint')  // ✅ autocomplete
-p.tokenAccount(Pool, 'feeBps')     // ❌ TS2345: not a pubkey field
+ix({
+  accounts: {
+    pool: p.mut(Pool),
+    reserve: p.tokenAccount().mut()
+  },
+  run: ({ pool, reserve }, ctx) => {
+    // 100% type-safe in TypeScript!
+    // Both sides are inferred as `string` (pubkey).
+    ctx.require(reserve.mint === pool.tokenAMint, 'InvalidMint')
+    ctx.require(reserve.owner === pool.key, 'InvalidOwner')
+  }
+})
 ```
+
+The transpiler extracts these strictly-typed `ctx.require()` comparisons into Anchor `constraint = ...` macros, giving you robust security with zero custom syntax or magic strings.
 
 The type machinery:
 ```typescript
-type PubkeyFields<T> = { [K in keyof T]: T[K] extends SolField<'pubkey'> ? K : never }[keyof T]
-
-function tokenAccount<T, K extends PubkeyFields<T> & string>(acct: SolAccount<T>, field: K): ...
+type InferAccount<T> = 
+  T extends ConstraintMut<SolAccount<infer F>> ? InferFields<F> & { key: string } :
+  T extends ConstraintTokenAccount ? { mint: string, owner: string, amount: bigint } :
+  T extends ConstraintSigner ? string :
+  unknown;
 ```
 
 ---
@@ -351,13 +395,15 @@ amm.require(cond, 'Error')  // Problem: naming collision
 This breaks when the program name matches an account name:
 
 ```typescript
-export const counter = program('counter', 'CouNTeR11111111111111111111111111111111111', { errors }, {
+export const counter = program({
+  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
   increment: ix({
     accounts: { counter: p.mut(Counter) },  // account named 'counter'
     run: ({ counter }, { amount }, ctx) => {
       ctx.require(...)  // ✅ 'ctx' is always the typed context — never collides
     },
   }),
+  },
 })
 ```
 
@@ -382,7 +428,7 @@ defineErrors({ name: message, ... })
 defineEvents({ name: { field: type, ... }, ... })
 
 // ── Program ──
-program('name', 'programId', { errors, events }, { instructions })
+program({ name, address, errors, events, instructions })
 
 // The program address is in the second argument. Generated by `create`.
 // Same address on all clusters. Generated once by `create`.
@@ -406,7 +452,7 @@ ix({
 p.init(Account)                                  // create PDA
 p.mut(Account)                                   // writable reference
 p.signer()                                       // transaction signer
-p.tokenAccount(Account, 'pubkeyField').mut()     // type-safe token account
+p.tokenAccount().mut()                           // SPL token account
 p.mint().mut()                                   // SPL token mint
 p.close(Account, 'refundTo')                     // close account
 p.tokenProgram()                                 // Token program
@@ -417,9 +463,9 @@ p.tokenProgram()                                 // Token program
 ## Impact On The DX
 
 The developer types `ctx.` and their IDE shows:
-- `require(condition, error)` — with error names autocompleted
-- `emit(name, data)` — with event names AND field shapes autocompleted
-- `log(message, ...values)` — structured logging
+- `ctx.require(condition, error)` — with error names autocompleted
+- `ctx.emit(name, data)` — with event names AND field shapes autocompleted
+- `ctx.log(message, ...values)` — structured logging
 
 Every mistake is caught at compile time, not at runtime or transpile time.
 The TypeScript compiler IS the linter. There are no additional tools needed.
@@ -591,6 +637,154 @@ rust`raw Rust code here`  // Emitted verbatim into generated Rust
 ---
 
 
+
+## Error Message Catalog
+
+Every error the developer encounters should be **short, name the exact issue,
+and suggest the fix.** No walls of generics. No ambiguous "type error on line ??."
+
+### Parse-Time Errors (from the transpiler)
+
+These errors are produced when the transpiler walks the AST of your `run:` handler:
+
+```
+❌ Line 18: Date.now() is not available on-chain.
+   → Use sol.timestamp() for the current unix timestamp.
+
+❌ Line 23: JSON.parse() is not available on-chain.
+   → Data lives in accounts. Define an account field and read it directly.
+
+❌ Line 31: Math.sqrt() is not supported.
+   → Use integer arithmetic, or the rust`...` escape hatch for complex math.
+
+❌ Line 45: console.log() is not available on-chain.
+   → Use ctx.log() for structured on-chain logging.
+
+❌ Line 52: fetch() is not available on-chain.
+   → Programs cannot make network requests. Pass data through instruction args.
+
+❌ Line 67: Promise is not available on-chain.
+   → Programs are synchronous. Remove async/await from run: handlers.
+
+❌ Line 12: 'NotAnError' is not a defined error name.
+   → Defined errors are: Unauthorized, NotActive, BelowZero
+   → Did you mean 'NotActive'?
+
+❌ Line 34: 'NotAnEvent' is not a defined event name.
+   → Defined events are: PoolCreated, SwapExecuted, FeeUpdated
+   → Did you mean 'PoolCreated'?
+```
+
+### Type Errors (from TypeScript)
+
+These should be minimal — our type system uses inference, not complex conditionals:
+
+```
+❌ Argument of type '"TypoError"' is not assignable to '"Unauthorized" | "NotActive" | "BelowZero"'.
+
+❌ Property 'amountOit' does not exist on type '{ amountIn: bigint; amountOut: bigint; fee: bigint; direction: number }'.
+   → Did you mean 'amountOut'?
+
+❌ Argument of type 'u64' is not assignable to parameter of type 'pubkey'.
+   → p.tokenAccount() requires a pubkey field, but 'feeBps' is u64.
+   → Available pubkey fields: tokenAMint, tokenBMint, lpMint, admin
+```
+
+### Deploy Errors (from the CLI)
+
+```
+❌ No address found for program 'counter'.
+   → Run: npx @better-sol/cli create counter
+   → Or add the address manually:
+     program({ name: 'counter', address: '<your-address>', ... })
+
+❌ Address mismatch for 'counter':
+   Source:   CouNTeR11111111111111111111111111111111111
+   Keypair:  DiFfErNt22222222222222222222222222222222222
+   → The address in your source file doesn't match the keypair in .better-sol/
+   → Fix: either update the address in programs/counter.ts
+          or delete .better-sol/counter.json to generate a new keypair
+
+❌ Account 'Pool' needs 188 bytes but your seed calculation returned 128.
+   → The account has 13 fields totaling 188 bytes (8 discriminator + 180 data).
+   → This usually means a field was added after initial deployment.
+   → Add a migration instruction to resize existing accounts.
+```
+
+### Client Errors (from the SDK)
+
+```
+❌ Transaction simulation failed: custom program error: 0x1770 (6000)
+   Program: counter (CouNTeR11111111111111111111111111111111111)
+   Instruction: increment
+   Error: Unauthorized — "Only the creator can perform this action"
+   → The signer does not match counter.authority.
+   → Check that you passed the correct keypair as 'authority'.
+
+❌ Account not found: 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU
+   → Expected account: Counter (discriminator: 0x53...95)
+   → The account at this address is not initialized or has been closed.
+   → Run sol.counter.initialize() first.
+```
+
+---
+
+## Type System Guarantees
+
+### Solana Type → TypeScript Mapping
+
+| Solana Type | TypeScript Type | Arithmetic | Example |
+|---|---|---|---|
+| `u64` | `bigint` | All ops (+, -, *, /, %, comparisons) | `42n`, `0n`, `1000000000n` |
+| `u8` | `number` | All ops | `255`, `0`, `1` |
+| `u32` | `number` | All ops | `1000` |
+| `bool` | `boolean` | !, &&, \|\|, truthiness | `true`, `false`, `!isActive` |
+| `pubkey` | `string` | ===, !== | `"CoUnTeR..."` |
+| `i64` | `bigint` | All ops (signed) | `-42n` |
+| `u128` | `bigint` | All ops | `340282366920938463463374607431768211455n` |
+
+### Arithmetic Rules
+
+**bigint (u64, i64, u128) — all operations type-safe:**
+```typescript
+// All of these compile with --strict:
+const fee = (amountIn * pool.feeBps) / 10000n           // bigint arithmetic ✓
+const netIn = amountIn - fee                              // bigint subtraction ✓
+const amountOut = (netIn * reserveOut) / (reserveIn + netIn)  // bigint ✓
+const min = lpFromA < lpFromB ? lpFromA : lpFromB        // bigint comparison ✓
+pool.lpSupply += lpTokens                                 // bigint increment ✓
+ctx.require(feeBps <= 1000n, 'InvalidFeeBps')             // bigint comparison ✓
+```
+
+**Cross-type operations are caught:**
+```typescript
+// @ts-expect-error — number cannot be assigned to bigint (u64) field
+pool.lpSupply = 42        // ❌ missing 'n' suffix
+
+// @ts-expect-error — number cannot be compared with bigint
+if (pool.lpSupply > 0)    // ❌ should be 0n
+
+// @ts-expect-error — cannot mix number and bigint
+const bad = pool.bump + pool.lpSupply  // ❌ u8 + u64
+```
+
+**All verified with `tsc --strict --noEmit` — zero errors on the AMM program
+covering 7 instructions, 10 CPI calls, and the constant product formula.**
+
+### Seeds Type Checking
+
+`.seeds('prefix', '{fieldName}')` validates at compile time:
+
+```typescript
+const Pool = account({
+  tokenAMint: pubkey,    // ← pubkey field
+  feeBps: u64,           // ← NOT a pubkey field
+}).seeds('pool', '{tokenAMint}')  // ✅ compiles — tokenAMint is pubkey
+
+// This would fail:
+// .seeds('pool', '{feeBps}')     // ❌ TS error: feeBps is u64, not pubkey
+```
+
 ## Summary
 
 ```
@@ -599,9 +793,11 @@ rust`raw Rust code here`  // Emitted verbatim into generated Rust
 │                                                  │
 │  import { program, ... } from 'better-sol/program'      │
 │                                                  │
-│  export const myProgram = program('...', {       │
-│    errors, events                                │
-│  }, {                                            │
+│  export const myProgram = program({              │
+│    name: '...',                                  │
+│    address: '...',                               │
+│    errors, events,                               │
+│    instructions: {                               │
 │    myInstruction: ix({                           │
 │  ┌──────────────────────────────────────────┐    │
 │  │         THE SANDBOX (run: handler)       │    │

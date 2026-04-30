@@ -107,8 +107,8 @@ the column type.
 
 **Apply to better-sol:** Our `p.` constraint system already does this:
 ```typescript
-p.tokenAccount(Pool, 'tokenAMint').mut()  // read-only → writable
-p.mint().mut()                              // read-only mint → writable mint
+p.tokenAccount().mut()  // read-only → writable
+p.mint().mut()          // read-only mint → writable mint
 ```
 This is correct. Keep it. But consider whether more chaining would help:
 ```typescript
@@ -232,7 +232,7 @@ looking at docs.
 
 ```typescript
 // ✅ Factory function (our approach)
-export const counter = program('counter', 'addr', { errors }, { instructions })
+export const counter = program({ name: 'counter', address: 'addr', errors, instructions: { ... } })
 
 // ❌ Class-based
 class CounterProgram extends Program {
@@ -328,7 +328,7 @@ second parameter:
 
 ```typescript
 // Current (works but requires empty object)
-run: ({ counter, authority }, {}, ctx) => {
+run: ({ counter, authority }, ctx) => {
 
 // Improvement (allow skipping empty args)
 run: ({ counter, authority }, ctx) => {
@@ -340,7 +340,7 @@ This is a nice-to-have. Not critical for v1.
 
 **Current:**
 ```typescript
-export const counter = program('counter', 'CouNTeR...', { errors }, { instructions })
+export const counter = program({ name: 'counter', address: 'CouNTeR...', errors, instructions: { ... } })
 ```
 
 Four positional arguments. Developer has to remember:
@@ -371,9 +371,9 @@ This is more readable but more verbose. The Zod pattern is positional
 For something with 4 args, named is better. But our 4-arg pattern is already
 established across all docs. Changing it now would be costly.
 
-**Verdict:** Keep positional. The pattern `program('name', 'addr', { config }, { instructions })`
-is consistent and the developer sees the shape immediately. The config object
-groups errors and events; the instructions object groups all ix() calls.
+**Decision:** Changed to named params. `program({ name, address, errors, instructions })`
+is self-documenting — the developer sees what each part is without counting positional args.
+The cost is 3 extra lines per program, but the clarity is worth it.
 
 #### Issue 3: The `.seeds()` Pattern Uses String Templates
 
@@ -471,7 +471,7 @@ auto-generates without asking, that's surprising.
 - But DON'T modify the source file (that's `create`'s job)
 
 If the source file has no address:
-- Error with a clear message: "Run `npx @better-sol/cli create counter` to scaffold the program file, or add the address manually: `program('counter', '<address>', ...)`"
+- Error with a clear message: "Run `npx @better-sol/cli create counter` to scaffold the program file, or add the address manually: `program({ name: 'counter', address: '<address>', ... })`"
 
 This keeps `create` as the recommended path but makes `deploy` safe for CI/CD.
 
@@ -533,17 +533,14 @@ better-sol Development:
 
 ## 6. Action Items
 
-### Must Fix Before Shipping
-- [ ] **Seed field type safety** — compile-time check that `'{fieldName}'` references a real field
-- [ ] **Deploy CI/CD safety** — non-interactive when no keypair, clear error when no address
-- [ ] **Error message audit** — every parse-time error should suggest the fix
-- [ ] **IntelliSense audit** — every `.` press should show helpful autocomplete
+### Done ✅
+- [x] **Named params for `program()`** — `program({ name, address, errors, instructions })`
+- [x] **Flexible run handler** — omit parameters you don't need (accounts, args, ctx)
+- [x] **Seed field type safety** — compile-time check that `'{fieldName}'` references a real pubkey field
+- [x] **Deploy CI/CD safety** — non-interactive, clear errors with suggested fixes
+- [x] **Error message catalog** — every error (parse, type, deploy, client) names the issue and suggests the fix
 
-### Nice to Have (v1)
-- [ ] Allow `run: ({ accounts }, ctx)` for instructions with no args (skip empty `{}`
-- [ ] Unified token operation signatures (on-chain vs off-chain)
-
-### Future (v2)
-- [ ] Named parameter option for `program()`: `program({ name, address, errors, instructions })`
-- [ ] `.seeds()` callback pattern for complex seed derivations
-- [ ] Visual debugger / instruction explorer (like Prisma Studio)
+### Still To Do
+- [ ] **IntelliSense audit** — verify every `.` press shows helpful autocomplete in VS Code
+- [ ] **Unified token operation signatures** — align on-chain `token.transfer()` with off-chain `sol.token.transfer()` parameter names
+- [ ] **Visual debugger / instruction explorer** — like Prisma Studio for Solana accounts
