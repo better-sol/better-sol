@@ -145,8 +145,8 @@ export const amm = program({
         ctx.require(creator === config.admin, 'Unauthorized')
         ctx.require(feeBps <= 1000n, 'InvalidFeeBps')
 
-        pool.tokenAMint = tokenAMint
-        pool.tokenBMint = tokenBMint
+        pool.tokenAMint = tokenAMint.key
+        pool.tokenBMint = tokenBMint.key
         pool.lpSupply = 0n
         pool.feeBps = feeBps
         pool.createdAt = sol.timestamp()

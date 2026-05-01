@@ -49,6 +49,20 @@ type InferFields<T extends Record<string, SolField>> = {
   [K in keyof T]: SolTypeMap[T[K]['__sol']]
 }
 
+// ── Option type ──
+// option(pubkey) → OptionField<'pubkey'> → inferred as string | null
+interface OptionField<T extends keyof SolTypeMap = keyof SolTypeMap> {
+  readonly __optionInner: T
+}
+declare function option<T extends keyof SolTypeMap>(inner: SolField<T>): OptionField<T>
+
+// ── Vec type ──
+// vec(pubkey) → VecField<'pubkey'> → inferred as string[]
+interface VecField<T extends keyof SolTypeMap = keyof SolTypeMap> {
+  readonly __vecInner: T
+}
+declare function vec<T extends keyof SolTypeMap>(inner: SolField<T>): VecField<T>
+
 // ── Fixed arrays (for zero-copy) ──
 // array(u64, 100) → ArrayField<u64, 100>
 // array(struct_zc({...}), 100) → ArrayField<ZcStruct<...>, 100>
@@ -68,8 +82,8 @@ declare function struct_zc<const T extends Record<string, SolField>>(fields: T):
 type InferZcFields<T extends ZcStruct<any>> =
   T extends ZcStruct<infer F> ? InferFields<F> : never
 
-// ── Account field types (SolField OR ArrayField) ──
-type AccountFieldType = SolField | ArrayField<any, any>
+// ── Account field types ──
+type AccountFieldType = SolField | ArrayField<any, any> | OptionField<any> | VecField<any>
 
 // Infer a single field or array field
 // Deep mutable helper
@@ -81,6 +95,8 @@ type InferFieldType<T> =
     E extends ZcStruct<any> ? Mutable<InferZcFields<E>>[] & { length: N } :
     E extends SolField<infer S> ? SolTypeMap[S][] & { length: N } :
     never :
+  T extends OptionField<infer S> ? SolTypeMap[S] | null :
+  T extends VecField<infer S> ? SolTypeMap[S][] :
   never
 
 // Full account data type (all fields inferred)
@@ -583,3 +599,81 @@ export const counter = program({
 // ❌ Accessing nonexistent property on token account
 // traderTokenIn.nonExistent
 // TS2339: 'nonExistent' does not exist on 'TokenAccountData'
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  TEST 5: OPTION AND VEC TYPES                               ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+const Governance = account({
+  admin: pubkey,
+  feeAuthority: option(pubkey),   // → Option<Pubkey> in Rust
+  proposalCount: u32,
+  members: vec(pubkey),           // → Vec<Pubkey> in Rust
+  voteWeights: vec(u64),          // → Vec<u64> in Rust
+})
+
+const govErrors = defineErrors({
+  Unauthorized: 'Not authorized',
+  NotMember: 'Not a member',
+  NoFeeAuthority: 'Fee authority not set',
+})
+
+export const gov = program({
+  name: 'governance',
+  address: 'Gov11111111111111111111111111111111111111111',
+  errors: govErrors,
+  instructions: {
+    setFeeAuthority: ix({
+      accounts: {
+        gov: p.mut(Governance),
+        admin: p.signer(),
+      },
+      args: { newAuthority: pubkey },
+      run: ({ gov, admin }, { newAuthority }, ctx) => {
+        ctx.require(admin === gov.admin, 'Unauthorized')
+
+        // ✅ option field: can be null or a pubkey
+        gov.feeAuthority = newAuthority
+
+        // ✅ null check works
+        if (gov.feeAuthority !== null) {
+          ctx.require(gov.feeAuthority === admin, 'Unauthorized')
+        }
+
+        // ✅ can set to null
+        gov.feeAuthority = null
+      },
+    }),
+
+    addMember: ix({
+      accounts: {
+        gov: p.mut(Governance),
+        admin: p.signer(),
+      },
+      args: { newMember: pubkey, weight: u64 },
+      run: ({ gov, admin }, { newMember, weight }, ctx) => {
+        ctx.require(admin === gov.admin, 'Unauthorized')
+
+        // ✅ vec field: array access and length
+        // gov.members is typed as string[]
+        // gov.voteWeights is typed as bigint[]
+        for (let i = 0; i < gov.members.length; i++) {
+          ctx.require(gov.members[i] !== newMember, 'Unauthorized')
+        }
+        gov.proposalCount += 1
+      },
+    }),
+
+    checkFeeAuthority: ix({
+      accounts: {
+        governance: p.mut(Governance),
+      },
+      args: {},
+      run: ({ governance }, _args, ctx) => {
+        // ✅ null check on option field
+        ctx.require(governance.feeAuthority !== null, 'NoFeeAuthority')
+      },
+    }),
+  },
+})

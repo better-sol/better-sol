@@ -35,6 +35,8 @@
 | `string` | `string` | `String` | N/A | Not Pod-compatible |
 | `f32` | `number` | `f32` | `f32` | Rarely used on-chain |
 | `f64` | `number` | `f64` | `f64` | Rarely used on-chain |
+| `option(T)` | `T \| null` | `Option<T>` | N/A | Optional field, Borsh-serialized |
+| `vec(T)` | `T[]` | `Vec<T>` | N/A | Variable-length list, max 32 entries |
 
 ### Pod-Compatible Types (zero-copy only)
 
@@ -44,11 +46,43 @@ Zero-copy accounts can ONLY contain these types:
 - `bool` → `u8` (transpiler auto-converts, 0 = false, 1 = true)
 - Fixed arrays: `array(u64, 100)` → `[u64; 100]`
 
-NOT Pod-compatible (escape hatch required):
+### Composite Types (standard Borsh accounts only)
+
+```typescript
+const Pool = account({
+  admin: pubkey,
+  feeAuthority: option(pubkey),   // → Option<Pubkey> — may or may not be set
+  reserveA: pubkey,
+  reserveB: pubkey,
+  whitelist: vec(pubkey),          // → Vec<Pubkey> — up to 32 entries
+  voteWeights: vec(u64),           // → Vec<u64> — up to 32 entries
+})
+
+// In run: handlers:
+if (pool.feeAuthority !== null) {  // → if pool.fee_authority.is_some()
+  ctx.require(authority === pool.feeAuthority, 'Unauthorized')
+}
+pool.feeAuthority = null           // → pool.fee_authority = None
+pool.feeAuthority = admin          // → pool.fee_authority = Some(admin.key())
+
+for (let i = 0; i < pool.whitelist.length; i++) {  // → pool.whitelist.len()
+  ctx.require(pool.whitelist[i] === trader, 'Unauthorized')
+}
+pool.whitelist.push(admin)         // → pool.whitelist.push(admin.key())
+```
+
+Transpiler rules:
+- `option(T)` → Rust `Option<T>`. TS type is `T | null`. Assignment of `null` → `None`.
+- `vec(T)` → Rust `Vec<T>`. TS type is `T[]`. Max 32 entries enforced at parse time.
+- Both require `.max(N)` for explicit size limits: `vec(pubkey).max(64)`.
+- Default max for `vec` is 32 (Anchor convention).
+- Space calculation: `option(pubkey)` = 1 + 32, `vec(pubkey, max=32)` = 4 + 32 * 32.
+
+NOT Pod-compatible (zero-copy escape hatch required):
 - `string` — use fixed `array(u8, N)` instead
 - `bytes` — use fixed `array(u8, N)` instead
-- `Vec<T>` — use fixed `array(T, N)` instead
-- `Option<T>` where T is not Pod — use a sentinel value instead
+- `vec(T)` — use fixed `array(T, N)` instead
+- `option(T)` — use a sentinel value instead
 - Nested structs — use `struct_zc({...})` (zero-copy sub-struct, `#[zero_copy]` in Rust)
 
 ---
@@ -190,6 +224,7 @@ Zero-copy accounts (Pod):
 | `p.init(Account)` | `init, payer, space, seeds` | `init, payer, space, seeds` + `AccountLoader` | Create new PDA |
 | `p.mut(Account)` | `mut, seeds` | `mut, seeds` + `AccountLoader` | Writable existing PDA |
 | `Account` (bare) | `seeds` (read-only) | `seeds` + `AccountLoader` | Read-only PDA |
+| `pubkey` (bare type) | `AccountInfo<'info>` (unchecked) | same | Unchecked account — address only, no data |
 | `p.signer()` | `Signer<'info>` | same | Transaction signer |
 | `p.mint()` | `Account<'info, Mint>` | same | SPL token mint |
 | `p.mint().mut()` | `mut` + `Account<'info, Mint>` | same | Mutable mint |
@@ -216,7 +251,7 @@ batchTransfer: ix({
     //                  ^^^^^^^^^^^^^^^^^^^^^^^^
     // Type annotation tells the transpiler how to deserialize
   },
-  args: { amounts: array(u64) },
+  args: { amounts: vec(u64) },
   run: ({ authority, source, destinations }, { amounts }, ctx) => {
     ctx.require(destinations.length === amounts.length, 'LengthMismatch')
 
@@ -467,10 +502,12 @@ if (condition) { } else { }
 for (let i = 0; i < n; i++) { }
 for (const item of items) { }
 return  // early exit
+const result = condition ? a : b    // ternary → if/else expression in Rust
 
 // Variables
 const x = expr
-let y = expr
+let y = expr                         // maps to let mut y = expr;
+y = newValue                          // mutation allowed on let, not const
 
 // Context
 ctx.require(condition, 'ErrorName')
@@ -488,10 +525,10 @@ token2022.transferCheckedWithFee({ from, to, authority, mint, amount, decimals, 
 system.transfer({ from, to, amount })
 ata.create({ payer, owner, mint, tokenProgram })
 
-// Sysvars
-sol.timestamp(): bigint     // Clock.unix_timestamp
-sol.slot(): bigint           // Clock.slot
-sol.epoch(): bigint          // Clock.epoch
+// Sysvars (auto-injected — no p.clock() needed in accounts)
+sol.timestamp(): bigint     // Clock::get()?.unix_timestamp — auto-injected, costs ~150 CU
+sol.slot(): bigint           // Clock::get()?.slot
+sol.epoch(): bigint          // Clock::get()?.epoch
 
 // Crypto
 crypto.sha256(data: Uint8Array): Uint8Array
@@ -506,7 +543,7 @@ rust`raw Rust code here`
 ```
 ❌ Math, JSON, Date, console, fetch, Promise, async/await
 ❌ window, document, process, Buffer, fs, require, import
-❌ try/catch, switch, ternary, class, enum, interface
+❌ try/catch, switch, class, enum, interface
 ❌ new Map(), new Set(), new WeakMap()
 ```
 
@@ -541,6 +578,17 @@ require!(admin.key() == pool.admin, ErrorCode::Unauthorized);
 ```
 
 The transpiler knows which parameters are `Signer` from `p.signer()`. When a Signer is assigned to a pubkey field or compared with one, `.key()` is auto-inserted.
+
+**For Mint and TokenAccount parameters, use `.key` explicitly:**
+
+```typescript
+// Mint/TokenAccount are objects — must extract .key for pubkey fields
+pool.tokenAMint = tokenAMint.key    // MintAccountData → string
+pool.reserveA = reserveA.key        // TokenAccountData → string
+ctx.require(reserve.owner === pool.key, 'InvalidOwner')
+```
+
+Signers don't need `.key` because they're already typed as `string`. Mint and TokenAccount are typed as objects — the developer must be explicit about extracting the address.
 
 ### Zero-Copy Borrow Scoping
 
@@ -721,17 +769,19 @@ export const t22Amm = program({
         reserveB: p.tokenAccount().mut(),
         admin: p.signer(),
         token2022Program: p.token2022Program(),
+        mintIn: p.mint(),
+        mintOut: p.mint(),
       },
       args: { feeBps: u64 },
       run: ({ config, pool, tokenAMint, tokenBMint, lpMint, reserveA, reserveB, admin, token2022Program }, { feeBps }, ctx) => {
         ctx.require(admin === config.admin, 'Unauthorized')
         ctx.require(feeBps <= 1000n, 'InvalidAmount')
 
-        pool.tokenAMint = tokenAMint
-        pool.tokenBMint = tokenBMint
-        pool.reserveA = reserveA
-        pool.reserveB = reserveB
-        pool.lpMint = lpMint
+        pool.tokenAMint = tokenAMint.key
+        pool.tokenBMint = tokenBMint.key
+        pool.reserveA = reserveA.key
+        pool.reserveB = reserveB.key
+        pool.lpMint = lpMint.key
         pool.lpSupply = 0n
         pool.feeBps = feeBps
         pool.isActive = true
@@ -751,10 +801,11 @@ export const t22Amm = program({
         traderTokenOut: p.tokenAccount().mut(),
         trader: p.signer(),
         mintIn: p.mint(),
+        mintOut: p.mint(),
         token2022Program: p.token2022Program(),
       },
       args: { amountIn: u64, minOut: u64, direction: u8 },
-      run: ({ pool, reserveA, reserveB, traderTokenIn, traderTokenOut, trader, mintIn, token2022Program }, { amountIn, minOut, direction }, ctx) => {
+      run: ({ pool, reserveA, reserveB, traderTokenIn, traderTokenOut, trader, mintIn, mintOut, token2022Program }, { amountIn, minOut, direction }, ctx) => {
         ctx.require(pool.isActive, 'PoolInactive')
         ctx.require(amountIn > 0n, 'InvalidAmount')
 
@@ -773,7 +824,7 @@ export const t22Amm = program({
           from: traderTokenIn,
           to: direction === 0 ? reserveA : reserveB,
           authority: trader,
-          mint: mintIn,
+          mint: mintIn.key,
           amount: amountIn,
           decimals: 9,  // mint decimals
         })
@@ -783,7 +834,7 @@ export const t22Amm = program({
           from: direction === 0 ? reserveB : reserveA,
           to: traderTokenOut,
           authority: pool,
-          mint: direction === 0 ? pool.tokenBMint : pool.tokenAMint,
+          mint: mintOut.key,
           amount: amountOut,
           decimals: 9,
         })
@@ -856,12 +907,12 @@ export const orderbook = program({
     initialize: ix({
       accounts: {
         book: p.init(OrderBook),
-        market: pubkey,  // the market account this book is for
+        market: pubkey,          // ← bare pubkey: unchecked AccountInfo, address only
         admin: p.signer(),
       },
       args: { baseMint: pubkey, quoteMint: pubkey },
       run: ({ book, market, admin }, { baseMint, quoteMint }) => {
-        book.market = market
+        book.market = market      // stores the account's address
         book.baseMint = baseMint
         book.quoteMint = quoteMint
         book.bidCount = 0

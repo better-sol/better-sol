@@ -129,10 +129,10 @@ export const t22Amm = program({
         ctx.require(creator === config.admin, 'Unauthorized')
         ctx.require(feeBps <= 1000n, 'InvalidFeeBps')
 
-        pool.tokenAMint = tokenAMint
-        pool.tokenBMint = tokenBMint
-        pool.reserveA = reserveA
-        pool.reserveB = reserveB
+        pool.tokenAMint = tokenAMint.key
+        pool.tokenBMint = tokenBMint.key
+        pool.reserveA = reserveA.key
+        pool.reserveB = reserveB.key
         pool.lpSupply = 0n
         pool.feeBps = feeBps
         pool.createdAt = sol.timestamp()
@@ -151,6 +151,8 @@ export const t22Amm = program({
     addLiquidity: ix({
       accounts: {
         pool: p.mut(Pool),
+        tokenAMint: p.mint(),
+        tokenBMint: p.mint(),
         reserveA: p.tokenAccount().mut(),
         reserveB: p.tokenAccount().mut(),
         lpMint: p.mint().mut(),
@@ -161,16 +163,16 @@ export const t22Amm = program({
         token2022Program: p.token2022Program(),
       },
       args: { amountA: u64, amountB: u64, minLpTokens: u64 },
-      run: ({ pool, reserveA, reserveB, lpMint, depositorTokenA, depositorTokenB, depositorLp, depositor }, { amountA, amountB, minLpTokens }, ctx) => {
+      run: ({ pool, tokenAMint, tokenBMint, reserveA, reserveB, lpMint, depositorTokenA, depositorTokenB, depositorLp, depositor }, { amountA, amountB, minLpTokens }, ctx) => {
         ctx.require(pool.isActive, 'PoolInactive')
         ctx.require(amountA > 0n, 'InvalidAmount')
         ctx.require(amountB > 0n, 'InvalidAmount')
 
         // Validate mints
-        ctx.require(reserveA.mint === pool.tokenAMint, 'InvalidMint')
-        ctx.require(reserveB.mint === pool.tokenBMint, 'InvalidMint')
-        ctx.require(depositorTokenA.mint === pool.tokenAMint, 'InvalidMint')
-        ctx.require(depositorTokenB.mint === pool.tokenBMint, 'InvalidMint')
+        ctx.require(reserveA.mint === tokenAMint.key, 'InvalidMint')
+        ctx.require(reserveB.mint === tokenBMint.key, 'InvalidMint')
+        ctx.require(depositorTokenA.mint === tokenAMint.key, 'InvalidMint')
+        ctx.require(depositorTokenB.mint === tokenBMint.key, 'InvalidMint')
         ctx.require(depositorLp.mint === lpMint.key, 'InvalidMint')
 
         // Validate reserves belong to pool
@@ -187,12 +189,12 @@ export const t22Amm = program({
         }
         ctx.require(lpTokens >= minLpTokens, 'SlippageExceeded')
 
-        // Token-2022: use transferChecked for Token-2022 compatibility
+        // Token-2022: transferChecked requires mint AccountInfo
         token.transferChecked({
           from: depositorTokenA,
           to: reserveA,
           authority: depositor,
-          mint: pool.tokenAMint,
+          mint: tokenAMint,
           amount: amountA,
           decimals: 9,
         })
@@ -201,7 +203,7 @@ export const t22Amm = program({
           from: depositorTokenB,
           to: reserveB,
           authority: depositor,
-          mint: pool.tokenBMint,
+          mint: tokenBMint,
           amount: amountB,
           decimals: 9,
         })
@@ -227,18 +229,18 @@ export const t22Amm = program({
         traderTokenB: p.tokenAccount().mut(),
         trader: p.signer(),
         mintA: p.mint(),
+        mintB: p.mint(),
         token2022Program: p.token2022Program(),
       },
       args: { amountIn: u64, minOut: u64 },
-      run: ({ pool, reserveA, reserveB, traderTokenA, traderTokenB, trader, mintA }, { amountIn, minOut }, ctx) => {
+      run: ({ pool, reserveA, reserveB, traderTokenA, traderTokenB, trader, mintA, mintB }, { amountIn, minOut }, ctx) => {
         ctx.require(pool.isActive, 'PoolInactive')
         ctx.require(amountIn > 0n, 'InvalidAmount')
 
-        ctx.require(traderTokenA.mint === pool.tokenAMint, 'InvalidMint')
-        ctx.require(traderTokenB.mint === pool.tokenBMint, 'InvalidMint')
-        ctx.require(reserveA.mint === pool.tokenAMint, 'InvalidMint')
-        ctx.require(reserveB.mint === pool.tokenBMint, 'InvalidMint')
-        ctx.require(mintA.key === pool.tokenAMint, 'InvalidMint')
+        ctx.require(traderTokenA.mint === mintA.key, 'InvalidMint')
+        ctx.require(traderTokenB.mint === mintB.key, 'InvalidMint')
+        ctx.require(reserveA.mint === mintA.key, 'InvalidMint')
+        ctx.require(reserveB.mint === mintB.key, 'InvalidMint')
 
         const fee = (amountIn * pool.feeBps) / 10000n
         const netIn = amountIn - fee
@@ -260,7 +262,7 @@ export const t22Amm = program({
           from: reserveB,
           to: traderTokenB,
           authority: pool,
-          mint: pool.tokenBMint,
+          mint: mintB,
           amount: amountOut,
           decimals: 9,
         })
@@ -281,19 +283,19 @@ export const t22Amm = program({
         traderTokenA: p.tokenAccount().mut(),
         traderTokenB: p.tokenAccount().mut(),
         trader: p.signer(),
+        mintA: p.mint(),
         mintB: p.mint(),
         token2022Program: p.token2022Program(),
       },
       args: { amountIn: u64, minOut: u64 },
-      run: ({ pool, reserveA, reserveB, traderTokenA, traderTokenB, trader, mintB }, { amountIn, minOut }, ctx) => {
+      run: ({ pool, reserveA, reserveB, traderTokenA, traderTokenB, trader, mintA, mintB }, { amountIn, minOut }, ctx) => {
         ctx.require(pool.isActive, 'PoolInactive')
         ctx.require(amountIn > 0n, 'InvalidAmount')
 
-        ctx.require(traderTokenA.mint === pool.tokenAMint, 'InvalidMint')
-        ctx.require(traderTokenB.mint === pool.tokenBMint, 'InvalidMint')
-        ctx.require(reserveA.mint === pool.tokenAMint, 'InvalidMint')
-        ctx.require(reserveB.mint === pool.tokenBMint, 'InvalidMint')
-        ctx.require(mintB.key === pool.tokenBMint, 'InvalidMint')
+        ctx.require(traderTokenA.mint === mintA.key, 'InvalidMint')
+        ctx.require(traderTokenB.mint === mintB.key, 'InvalidMint')
+        ctx.require(reserveA.mint === mintA.key, 'InvalidMint')
+        ctx.require(reserveB.mint === mintB.key, 'InvalidMint')
 
         const fee = (amountIn * pool.feeBps) / 10000n
         const netIn = amountIn - fee
@@ -313,7 +315,7 @@ export const t22Amm = program({
           from: reserveA,
           to: traderTokenA,
           authority: pool,
-          mint: pool.tokenAMint,
+          mint: mintA,
           amount: amountOut,
           decimals: 9,
         })
@@ -329,6 +331,8 @@ export const t22Amm = program({
     removeLiquidity: ix({
       accounts: {
         pool: p.mut(Pool),
+        tokenAMint: p.mint(),
+        tokenBMint: p.mint(),
         reserveA: p.tokenAccount().mut(),
         reserveB: p.tokenAccount().mut(),
         lpMint: p.mint().mut(),
@@ -339,7 +343,7 @@ export const t22Amm = program({
         token2022Program: p.token2022Program(),
       },
       args: { lpTokens: u64, minAmountA: u64, minAmountB: u64 },
-      run: ({ pool, reserveA, reserveB, lpMint, withdrawerTokenA, withdrawerTokenB, withdrawerLp, withdrawer }, { lpTokens, minAmountA, minAmountB }, ctx) => {
+      run: ({ pool, tokenAMint, tokenBMint, reserveA, reserveB, lpMint, withdrawerTokenA, withdrawerTokenB, withdrawerLp, withdrawer }, { lpTokens, minAmountA, minAmountB }, ctx) => {
         ctx.require(pool.isActive, 'PoolInactive')
         ctx.require(lpTokens > 0n, 'InvalidAmount')
         ctx.require(pool.lpSupply > 0n, 'InvalidAmount')
@@ -360,7 +364,7 @@ export const t22Amm = program({
           from: reserveA,
           to: withdrawerTokenA,
           authority: pool,
-          mint: pool.tokenAMint,
+          mint: tokenAMint,
           amount: amountA,
           decimals: 9,
         })
@@ -369,7 +373,7 @@ export const t22Amm = program({
           from: reserveB,
           to: withdrawerTokenB,
           authority: pool,
-          mint: pool.tokenBMint,
+          mint: tokenBMint,
           amount: amountB,
           decimals: 9,
         })
