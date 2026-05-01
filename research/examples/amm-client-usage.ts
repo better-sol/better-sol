@@ -174,7 +174,7 @@ console.log(updatedPool)
 
 
 // ══════════════════════════════════════════
-// Listen to events
+// Event subscriptions via WebSocket (client SDK provides typed .on() listeners)
 // ══════════════════════════════════════════
 
 amm.on('SwapExecuted', (event) => {

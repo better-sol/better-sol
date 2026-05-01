@@ -12,7 +12,7 @@
 //
 // Type safety (all compile-time, zero annotations):
 // - ctx.require(cond, 'ErrorName') — autocomplete, checked
-// - p.tokenAccount(Account, 'field') — only pubkey fields
+// - p.tokenAccount() — SPL token account (inferred mint/owner via ctx.require comparisons)
 // - seeds('{field}') — validated against account fields at compile time
 // ============================================================
 

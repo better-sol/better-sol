@@ -1469,7 +1469,7 @@ await sol.token.transfer({ mint, from, to, amount })
 
 ### Where Does the Program Address Come From?
 
-The `program()` definition includes the address as the second argument.
+The `program()` definition includes the address as the named `address` parameter.
 It was put there by `create`. You never type it manually.
 
 ```typescript
@@ -1486,7 +1486,7 @@ const sol = betterSol({
 })
 ```
 
-The address is in the program definition — it's the second argument of `program()`.
+The address is in the program definition — it's the named `address` parameter of `program()`.
 It was put there by `create`. You never type it manually.
 
 Same address across all clusters:

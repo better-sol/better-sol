@@ -1,13 +1,12 @@
 // ============================================================
 // COMPLETE TYPE-SAFE CONTEXT POC
 //
-// ctx.require()  — compile-time checked error names
-// ctx.emit()     — compile-time checked event names AND data shapes
-// ctx.log()      — structured logging
+// ⚠️ SUPERSEDED by type-safety-complete.ts which proves:
+// - All features below PLUS zero-copy, remaining accounts, Token-2022
+// - Verified with tsc --strict (zero errors)
 //
-// All types inferred from program() definition. Zero annotations.
-//
-// Verified with tsc 6.0.3 --strict
+// This file is kept for reference but may have type inference issues.
+// See type-safety-complete.ts for the current working proof.
 // ============================================================
 
 // ══════════════════════════════════════════
@@ -166,13 +165,13 @@ export declare function program<
   const TEvents extends Record<string, Record<string, SolField>>,
   const TInstructions extends Record<string, IxConfig<any, any, TErrors, TEvents>>,
 >(
-  name: TName,
-  id: TId,
   config: {
+    name: TName
+    address: TId
     errors: ErrorRegistry<TErrors>
     events?: EventRegistry<TEvents>
+    instructions: TInstructions
   },
-  instructions: TInstructions,
 ): ProgramApi<TName, TId, TErrors, TEvents>
 
 
@@ -345,6 +344,7 @@ export const amm = program({
       ctx.emit('FeeUpdated', { newFeeBps })
       ctx.log('Fee updated to {}bps', newFeeBps)
     },
+  }),
   },
 })
 
@@ -370,20 +370,21 @@ export const counter = program({
   address: 'CouNTeR11111111111111111111111111111111111',
   errors: counterErrors,
   instructions: {
-  increment: ix({
-    accounts: {
-      counter: p.mut(Counter),    // account named 'counter'
-      authority: p.signer(),
-    },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      //     ^^^^^^^ account    ^^^^^^^^^ args  ^^^ ctx
-      //     NO collision! ctx is always the 3rd parameter.
+    increment: ix({
+      accounts: {
+        counter: p.mut(Counter),    // account named 'counter'
+        authority: p.signer(),
+      },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        //     ^^^^^^^ account    ^^^^^^^^^ args  ^^^ ctx
+        //     NO collision! ctx is always the 3rd parameter.
 
-      ctx.require(authority === counter.authority, 'Unauthorized')  // ✅
-      ctx.require(counter.isActive, 'NotActive')                      // ✅
-      counter.count += amount
-    },
+        ctx.require(authority === counter.authority, 'Unauthorized')  // ✅
+        ctx.require(counter.isActive, 'NotActive')                      // ✅
+        counter.count += amount
+      },
+    }),
   },
 })
 

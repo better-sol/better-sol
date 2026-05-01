@@ -146,7 +146,7 @@ The keypair file is stored in `.better-sol/{program-name}.json`:
 - The **full keypair** stays in `.better-sol/{program-name}.json` (private, gitignored)
 
 At runtime, the client reads the address from the program definition —
-it's the second argument of `program()`. The private key stays in
+it's the named `address` parameter of `program()`. The private key stays in
 `.better-sol/` and is only used during `deploy` to sign deploy transactions.
 
 ```
