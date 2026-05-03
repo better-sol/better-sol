@@ -12,6 +12,26 @@
     "./program": {
       "types": "./dist/program.d.ts",
       "import": "./dist/program.js"
+    },
+    "./wallets": {
+      "types": "./dist/wallets/index.d.ts",
+      "import": "./dist/wallets/index.js"
+    },
+    "./wallets/wallet-adapter": {
+      "types": "./dist/wallets/wallet-adapter.d.ts",
+      "import": "./dist/wallets/wallet-adapter.js"
+    },
+    "./wallets/reown": {
+      "types": "./dist/wallets/reown.d.ts",
+      "import": "./dist/wallets/reown.js"
+    },
+    "./wallets/privy": {
+      "types": "./dist/wallets/privy.d.ts",
+      "import": "./dist/wallets/privy.js"
+    },
+    "./wallets/dynamic": {
+      "types": "./dist/wallets/dynamic.d.ts",
+      "import": "./dist/wallets/dynamic.js"
     }
   },
   "files": [
@@ -20,7 +40,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts src/program.ts --outdir dist --target bun",
+    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts src/program.ts --outdir dist --target bun && bun build src/wallets/index.ts src/wallets/wallet-adapter.ts src/wallets/reown.ts src/wallets/privy.ts src/wallets/dynamic.ts --outdir dist --target bun --external @solana/web3.js --external @solana/wallet-adapter-react --external @solana/wallet-adapter-base --external @privy-io/react-auth --external @dynamic-labs/sdk-react-core --external @dynamic-labs/solana --external @reown/appkit --external @reown/appkit-adapter-solana",
     "check": "tsc --noEmit",
     "test": "bun test",
     "lint": "oxlint .",
@@ -35,5 +55,10 @@
   },
   "peerDependencies": {
     "typescript": "^6"
+  },
+  "devDependencies": {
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/web3.js": "^1.98.4"
   }
 }

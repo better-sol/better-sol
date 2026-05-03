@@ -2,7 +2,7 @@
 
 The client SDK. Programs as plugins, like Better Auth. Zero code generation.
 
-> **Implementation status (May 2026):** The client SDK is now implemented: async `betterSol()` factory, typed instruction methods, async PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()`, Kit-backed core operations (`getBalance`, `transfer`, `sol.token.*`), and Borsh encoding/decoding from TypeToken runtime objects. The `program()` function now accepts an optional `accounts` config to register account definitions for the client. Implemented now: Kit-backed `sol.withSigner()` for Kit `TransactionSigner`s, `sol.token.*`, `fromIdl()`, `.instruction()`, `.transaction()`, and confirmed transaction sending. Not yet implemented: framework-specific wallet adapter subpaths, multi-step transactions (`sol.send`/`sol.steps`), testing SDK.
+> **Implementation status (May 2026):** The client SDK is now implemented: async `betterSol()` factory, typed instruction methods, async PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()`, Kit-backed core operations (`getBalance`, `transfer`, `sol.token.*`), and Borsh encoding/decoding from TypeToken runtime objects. The `program()` function now accepts an optional `accounts` config to register account definitions for the client. Implemented now: Kit-backed `sol.withSigner()` for Kit `TransactionSigner`s, `sol.token.*`, `fromIdl()`, `.instruction()`, `.transaction()`, and confirmed transaction sending. Not yet implemented: testing SDK.
 
 ---
 
@@ -548,11 +548,11 @@ No legacy `@solana/web3.js` transaction type is part of the core SDK API. If a w
 
 | API | Status | Use case |
 |---|---|---|
-| `sol.program.method(args)` | ✅ Implemented | Sign and send with the active Kit signer |
-| `sol.withSigner(signer).program.method(args)` | ✅ Implemented | Scoped browser/user signer |
+| `sol.program.method(args)` | ✅ Implemented | Sign, send, and confirm with the active Kit signer |
+| `sol.withSigner(signer).program.method(args)` | ✅ Implemented | Scoped browser/user signer with adapter subpaths |
 | `payer` in `betterSol()` | ✅ Implemented | Backend automation / admin / cranks |
-| Framework wallet adapter subpaths | 📋 Planned | Convert popular wallet libraries to Kit signers |
-| `.transaction(args)` / `.prepare(args)` | 📋 Planned | Build-only flows, multisig, hardware wallets |
+| Framework wallet adapter subpaths | ✅ Implemented | `better-sol/wallets/*` converts Wallet Adapter, Reown, Privy, Dynamic to Kit `TransactionSigner` |
+| `.transaction(args)` / `.instruction(args)` | ✅ Implemented | Kit-native build-and-sign or build-only flows |
 
 **Guardrail:** signer auto-fill only uses the active signer for `p.signer()` accounts. If an explicit signer account is supplied, it must match the active signer. Use `sol.withSigner()` for a different signer.
 
@@ -767,7 +767,7 @@ The full `program()` runtime target is a typed namespace. At runtime, this objec
 - IDL export: `counter.idl` — auto-generated Anchor IDL for Codama/Anchor/IDL Space compatibility
 - Type-safe require/emit in handlers through the scoped builder pattern below
 
-**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, `generateSigner()`, or a Kit `TransactionSigner`. Not yet implemented: framework-specific wallet adapter subpaths, multi-step transactions, testing SDK.
+**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, `generateSigner()`, or a Kit `TransactionSigner`. Not yet implemented: testing SDK.
 
 **All source-definition typing works without any build step.**
 

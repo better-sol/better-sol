@@ -207,6 +207,11 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   readonly rpcSubscriptions: KitRpcSubscriptions;
   readonly token: TokenClient;
   withSigner(signer: SolSigner): Promise<BetterSolClient<TPrograms>>;
+  send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string>;
+  steps<T1>(steps: [() => Promise<T1>]): Promise<[T1]>;
+  steps<T1, T2>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>]): Promise<[T1, T2]>;
+  steps<T1, T2, T3>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>, (r1: T1, r2: T2) => Promise<T3>]): Promise<[T1, T2, T3]>;
+  steps<T1, T2, T3, T4>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>, (r1: T1, r2: T2) => Promise<T3>, (r1: T1, r2: T2, r3: T3) => Promise<T4>]): Promise<[T1, T2, T3, T4]>;
   getBalance(address: Address): Promise<bigint>;
   transfer(params: { readonly to: Address; readonly amount: bigint }): Promise<string>;
 } & {
@@ -291,6 +296,19 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
       });
       const signedTx = await buildAndSignTransaction([ix], params.rpc, params.signer);
       return await sendAndConfirm(signedTx, params.rpc);
+    },
+    send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string> => {
+      const resolved = await Promise.all(instructions);
+      const signedTx = await buildAndSignTransaction(resolved, params.rpc, params.signer);
+      return await sendAndConfirm(signedTx, params.rpc);
+    },
+    steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {
+      const results: unknown[] = [];
+      for (const fn of stepFns) {
+        // eslint-disable-next-line no-await-in-loop
+        results.push(await fn(...results));
+      }
+      return results;
     },
   };
 

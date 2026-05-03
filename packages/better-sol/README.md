@@ -79,8 +79,49 @@ const tx = await sol.counter.increment.transaction({ counter: addr, amount: 10n 
 ```
 
 - `.instruction()` returns a Kit `Instruction` for manual composition.
-- `.transaction()` returns a fully signed sendable transaction.
-- The callable form `end()` signs and sends with confirmation.
+- `.transaction()` returns a fully signed sendable transaction for RPC submission.
+- The callable form `()` signs, sends with confirmation, and returns the signature.
+
+## Multi-Instruction Batching
+
+```ts
+await sol.send([
+  sol.counter.increment.instruction({ counter: addr1, amount: 1n }),
+  sol.counter.increment.instruction({ counter: addr2, amount: 2n }),
+]);
+```
+
+## Sequential Steps
+
+```ts
+const [mintResult, mintSig] = await sol.steps([
+  () => sol.token.createMint({ decimals: 9 }),
+  ({ mint }) => sol.token.mintTo({ mint, destination: sol.payer, amount: 1000n }),
+]);
+```
+
+Each step receives the return values of all previous steps. Use for multi-step flows where each action depends on the prior result.
+
+## Browser Wallets
+
+Wallet adapter subpaths convert popular wallet libraries to Kit-compatible signers:
+
+```ts
+import { walletAdapter } from "better-sol/wallets/wallet-adapter";
+import { useWallet } from "@solana/wallet-adapter-react";
+
+const wallet = useWallet();
+const userSol = await sol.withSigner(walletAdapter(wallet));
+await userSol.counter.increment({ counter: addr, amount: 1n });
+```
+
+Available adapters:
+- `better-sol/wallets/wallet-adapter` — `@solana/wallet-adapter-react`
+- `better-sol/wallets/reown` — Reown AppKit
+- `better-sol/wallets/privy` — Privy Solana
+- `better-sol/wallets/dynamic` — Dynamic Solana
+
+Each adapter requires its corresponding wallet library as a peer dependency.
 
 ## Scoped Signers
 
