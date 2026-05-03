@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { version } from "../src/index";
 import {
-  account, array, p, program,
+  account, AccountConstraint, array, p, program,
   pubkey, sol, struct, token, u8, u64,
   type InstructionAccounts, type InstructionArgs,
 } from "../src/program";
-import { anchorDiscriminator, accountDiscriminator, encodeField, decodeField, encodeAccount, decodeAccount } from "../src/coder";
-import { bool, option, vec } from "../src/program";
+import { anchorDiscriminator, accountDiscriminator, encodeField, decodeField, encodeAccount, decodeAccount, encodeInstruction } from "../src/coder";
+import { bool, i64, option, string, vec } from "../src/program";
+import { fromIdl } from "../src/idl";
+import type { AnchorIdl } from "../src/idl";
 
 test("exports a version", () => {
   expect(version).toBe("0.1.0");
@@ -208,6 +210,261 @@ describe("Borsh coder", () => {
     const disc = await accountDiscriminator("counter");
     expect(disc.length).toBe(8);
   });
+
+  test("encodeInstruction includes discriminator followed by encoded args", async () => {
+    const args = { amount: u64 };
+    const data = await encodeInstruction("increment", args, { amount: 42n });
+    const disc = await anchorDiscriminator("increment");
+    expect(data.length).toBe(16);
+    expect(data[0]).toBe(disc[0]);
+    expect(data[7]).toBe(disc[7]);
+  });
+
+  test("encodeInstruction with no args returns only discriminator", async () => {
+    const data = await encodeInstruction("ping", {}, {});
+    expect(data.length).toBe(8);
+  });
+
+  test("encodeField handles signed integers", () => {
+    const encoded = encodeField(i64, -1n);
+    expect(encoded.length).toBe(8);
+    expect(decodeField(i64, encoded, 0).value).toBe(-1n);
+  });
+
+  test("encodeField handles string", () => {
+    const encoded = encodeField(string, "hello");
+    expect(encoded.length).toBe(9);
+    expect(decodeField(string, encoded, 0).value).toBe("hello");
+  });
+});
+
+describe("fromIdl", () => {
+  test("parses a minimal IDL", () => {
+    const idl = {
+      name: "minimal",
+      instructions: [],
+    };
+    const prog = fromIdl(idl);
+    expect(prog.name).toBe("minimal");
+    expect(prog.address).toBe("");
+    expect(Object.keys(prog.instructions)).toEqual([]);
+    expect(Object.keys(prog.accounts)).toEqual([]);
+  });
+
+  test("parses an IDL with address in metadata", () => {
+    const idl = {
+      name: "with_address",
+      instructions: [],
+      metadata: { address: "MyPr0g11111111111111111111111111111111111" },
+    };
+    const prog = fromIdl(idl);
+    expect(prog.address).toBe("MyPr0g11111111111111111111111111111111111");
+  });
+
+  test("parses instructions with accounts and args", () => {
+    const idl = {
+      name: "counter",
+      instructions: [
+        {
+          name: "initialize",
+          accounts: [
+            { name: "counter", writable: true, signer: false },
+            { name: "authority", writable: false, signer: true },
+          ],
+          args: [{ name: "initialValue", type: "u64" as const }],
+        },
+        {
+          name: "increment",
+          accounts: [
+            { name: "counter", writable: true, signer: false },
+            { name: "authority", writable: false, signer: true },
+          ],
+          args: [{ name: "amount", type: "u64" as const }],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(Object.keys(prog.instructions)).toEqual(["initialize", "increment"]);
+
+    const init = prog.instructions.initialize!;
+    expect(init.args).toBeDefined();
+    expect(init.args !== undefined ? Object.keys(init.args) : []).toEqual(["initialValue"]);
+    expect(Object.keys(init.accounts)).toEqual(["counter", "authority"]);
+
+    const authInput = init.accounts["authority"]!;
+    expect(authInput instanceof AccountConstraint).toBe(true);
+  });
+
+  test("parses instructions without args", () => {
+    const idl = {
+      name: "simple",
+      instructions: [
+        {
+          name: "ping",
+          accounts: [{ name: "authority", writable: false, signer: true }],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(prog.instructions.ping!.args).toBeUndefined();
+  });
+
+  test("parses accounts", () => {
+    const idl = {
+      name: "counter",
+      instructions: [],
+      accounts: [
+        {
+          name: "Counter",
+          type: {
+            kind: "struct" as const,
+            fields: [
+              { name: "count", type: "u64" as const },
+              { name: "authority", type: "publicKey" as const },
+            ],
+          },
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(Object.keys(prog.accounts)).toEqual(["Counter"]);
+    expect(prog.accounts["Counter"]!.fields.count!.kind).toBe("u64");
+    expect(prog.accounts["Counter"]!.fields.authority!.kind).toBe("pubkey");
+  });
+
+  test("parses errors", () => {
+    const idl = {
+      name: "counter",
+      instructions: [],
+      errors: [
+        { code: 6000, name: "Unauthorized", msg: "Only authority" },
+        { code: 6001, name: "Underflow", msg: "Arithmetic underflow" },
+      ],
+    };
+    const prog = fromIdl(idl);
+    expect(prog.errors).toEqual({ Unauthorized: "Only authority", Underflow: "Arithmetic underflow" });
+  });
+
+  test("handles missing errors gracefully", () => {
+    const idl = {
+      name: "no_errors",
+      instructions: [],
+    };
+    const prog = fromIdl(idl);
+    expect(prog.errors).toEqual({});
+    expect(prog.events).toEqual({});
+  });
+
+  test("handles writable signer account", () => {
+    const idl = {
+      name: "test",
+      instructions: [
+        {
+          name: "write",
+          accounts: [
+            { name: "feePayer", writable: true, signer: true },
+            { name: "data", writable: true, signer: false },
+          ],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    const ix = prog.instructions.write!;
+    const feePayer = ix.accounts["feePayer"]!;
+    expect(feePayer instanceof AccountConstraint).toBe(true);
+    if (feePayer instanceof AccountConstraint) {
+      expect(feePayer.constraintKind).toBe("signer");
+      expect(feePayer.mutable).toBe(true);
+    }
+  });
+
+  test("handles readonly non-signer account", () => {
+    const idl = {
+      name: "test",
+      instructions: [
+        {
+          name: "read",
+          accounts: [
+            { name: "sysvar", writable: false, signer: false },
+          ],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    const ix = prog.instructions.read!;
+    const sysvar = ix.accounts["sysvar"]!;
+    expect(sysvar instanceof AccountConstraint).toBe(true);
+    if (sysvar instanceof AccountConstraint) {
+      expect(sysvar.mutable).toBe(false);
+    }
+  });
+
+  test("parses compound IDL types", () => {
+    const idl = {
+      name: "complex",
+      instructions: [],
+      accounts: [
+        {
+          name: "Complex",
+          type: {
+            kind: "struct" as const,
+            fields: [
+              { name: "optVal", type: { option: "u64" as const } },
+              { name: "vecVal", type: { vec: "u8" as const } },
+              { name: "arrVal", type: { array: ["u8" as const, 4] as const } },
+            ],
+          },
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(prog.accounts["Complex"]!.fields.optVal!.kind).toBe("option");
+    expect(prog.accounts["Complex"]!.fields.vecVal!.kind).toBe("vec");
+    expect(prog.accounts["Complex"]!.fields.arrVal!.kind).toBe("array");
+  });
+
+  test("parses an IDL with no accounts section", () => {
+    const idl = {
+      name: "no_accounts",
+      instructions: [
+        {
+          name: "ping",
+          accounts: [],
+        },
+      ],
+    };
+    const prog = fromIdl(idl);
+    expect(Object.keys(prog.accounts)).toEqual([]);
+  });
+
+  test("parses a realistic multi-instruction IDL", () => {
+    const idl = {
+      name: "amm",
+      instructions: [
+        { name: "initializeConfig", accounts: [{ name: "config", writable: true, signer: false }, { name: "admin", writable: false, signer: true }], args: [] },
+        { name: "createPool", accounts: [{ name: "config", writable: true, signer: false }, { name: "pool", writable: true, signer: false }, { name: "creator", writable: false, signer: true }], args: [{ name: "feeBps", type: "u64" as const }] },
+        { name: "swap", accounts: [{ name: "pool", writable: true, signer: false }, { name: "reserveIn", writable: true, signer: false }, { name: "reserveOut", writable: true, signer: false }, { name: "trader", writable: false, signer: true }], args: [{ name: "amountIn", type: "u64" as const }, { name: "minOut", type: "u64" as const }] },
+      ],
+      accounts: [
+        { name: "Config", type: { kind: "struct" as const, fields: [{ name: "admin", type: "publicKey" as const }, { name: "feeBps", type: "u64" as const }, { name: "bump", type: "u8" as const }] } },
+        { name: "Pool", type: { kind: "struct" as const, fields: [{ name: "tokenAMint", type: "publicKey" as const }, { name: "tokenBMint", type: "publicKey" as const }, { name: "lpSupply", type: "u64" as const }] } },
+      ],
+      errors: [{ code: 6000, name: "SlippageExceeded", msg: "Output below minimum" }],
+      metadata: { address: "AMM111111111111111111111111111111111111111" },
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(prog.name).toBe("amm");
+    expect(prog.address).toBe("AMM111111111111111111111111111111111111111");
+    expect(Object.keys(prog.instructions)).toEqual(["initializeConfig", "createPool", "swap"]);
+    expect(Object.keys(prog.accounts)).toEqual(["Config", "Pool"]);
+
+    const swap = prog.instructions.swap!;
+    expect(Object.keys(swap.accounts)).toEqual(["pool", "reserveIn", "reserveOut", "trader"]);
+    expect(swap.args).toBeDefined();
+    if (swap.args) expect(Object.keys(swap.args)).toEqual(["amountIn", "minOut"]);
+
+    expect(prog.errors).toEqual({ SlippageExceeded: "Output below minimum" });
+  });
 });
 
 describe("client SDK", () => {
@@ -245,6 +502,94 @@ describe("client SDK", () => {
     );
 
     expect(Object.keys(counterProg.accounts)).toEqual([]);
+  });
+
+  test("instruction methods expose .instruction() and .transaction() at type level", () => {
+    const Counter = account({ count: u64, authority: pubkey });
+    const prog = program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      ix => ({
+        increment: ix({
+          accounts: { counter: p.mut(Counter), authority: p.signer() },
+          args: { amount: u64 },
+          run: () => {},
+        }),
+      }),
+    );
+
+    const method = prog.instructions.increment!;
+    expect(method.accounts.counter!.constraintKind).toBe("mut");
+    expect(method.accounts.authority!.constraintKind).toBe("signer");
+  });
+
+  test("instruction definition exposes p.signer and p.mut constraints correctly", () => {
+    const Counter = account({ count: u64, authority: pubkey });
+    const prog = program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      ix => ({
+        initialize: ix({
+          accounts: { counter: p.create(Counter), authority: p.signer(), systemProgram: p.systemProgram() },
+          args: { initialValue: u64 },
+          run: () => {},
+        }),
+        transfer: ix({
+          accounts: {
+            from: p.tokenAccount().mut(),
+            to: p.tokenAccount().mut(),
+            authority: p.signer(),
+            tokenProgram: p.tokenProgram(),
+          },
+          args: { amount: u64 },
+          run: () => {},
+        }),
+        close: ix({
+          accounts: { counter: p.close(Counter, "authority"), authority: p.signer() },
+          run: () => {},
+        }),
+      }),
+    );
+
+    const init = prog.instructions.initialize;
+    expect(init.accounts.counter.constraintKind).toBe("init");
+    expect(init.accounts.authority.constraintKind).toBe("signer");
+    expect(init.accounts.systemProgram.constraintKind).toBe("systemProgram");
+
+    const tr = prog.instructions.transfer;
+    expect(tr.accounts.tokenProgram.constraintKind).toBe("tokenProgram");
+
+    const cl = prog.instructions.close;
+    expect(cl.accounts.counter.constraintKind).toBe("close");
+  });
+
+  test("instruction args respect their type tokens", () => {
+    const prog = program(
+      { name: "multi", address: "11111111111111111111111111111111" },
+      ix => ({
+        multi: ix({
+          accounts: { authority: p.signer() },
+          args: { flag: bool, score: i64, name: string },
+          run: () => {},
+        }),
+      }),
+    );
+
+    const args = prog.instructions.multi.args;
+    expect(args.flag.kind).toBe("bool");
+    expect(args.score.kind).toBe("i64");
+    expect(args.name.kind).toBe("string");
+  });
+
+  test("instruction with no args produces undefined args", () => {
+    const prog = program(
+      { name: "simple", address: "11111111111111111111111111111111" },
+      ix => ({
+        ping: ix({
+          accounts: { authority: p.signer() },
+          run: () => {},
+        }),
+      }),
+    );
+    expect(prog.instructions.ping.args).toBeUndefined();
   });
 });
 
