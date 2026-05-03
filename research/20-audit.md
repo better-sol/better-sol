@@ -16,7 +16,6 @@ Compares the current implementation against research, identifies gaps, and track
 | Client SDK (`betterSol()`) | ✅ Implemented | Async Kit-backed factory, typed instruction methods (sign+send, `.instruction()`, `.transaction()`), PDA derivation, account fetching with owner verification, Borsh codec, token helpers, transaction confirmation, `sol.send()`, `sol.steps()` |
 | Scoped Kit signer (`sol.withSigner()`) | ✅ Implemented | Accepts Kit `TransactionSigner`; wallet adapter subpaths implemented for Wallet Adapter, Reown, Privy, Dynamic |
 | `fromIdl()` | ✅ Implemented | Consumes Anchor IDLs, produces a `ProgramDefinition`-compatible object |
-| Testing SDK (`better-sol/testing`) | 📋 Planned | `createTestSol()` with LiteSVM |
 
 ## API Design
 

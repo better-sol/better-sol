@@ -435,7 +435,7 @@ Before we ship, every example should pass this test:
 | 4 | Does every error message tell you exactly what to fix? | Deliberately make mistakes |
 | 5 | Does the type system prevent invalid states? | Try passing wrong types to `ctx.require` |
 | 6 | Does the same file work as both on-chain program and client? | Write a program, then import it client-side |
-| 7 | Can you test without running a validator? | Write a test with `createTestSol()` |
+| 7 | Can you test without running a validator? | Use `bun test` / `vitest` against devnet or a local validator |
 | 8 | Does `deploy` "just work"? | Run it on a fresh project |
 | 9 | Can you read someone else's program in 30 seconds? | Show the AMM to a friend |
 | 10 | Does it feel like "this is how it should have been"? | Gut check |
@@ -514,4 +514,3 @@ The implementation also tightens two compile-time safety gates beyond the origin
 - [ ] **Unified token operation signatures** — align on-chain `token.transfer()` with future off-chain `sol.token.transfer()` parameter names
 - [ ] **Runtime client SDK** — `betterSol()`, `program.accounts.*.derive`, `fetch`, typed instruction methods
 - [ ] **Wallet adapter subpath exports** — Reown, Wallet Adapter, Privy, Dynamic, generic
-- [ ] **Testing framework** — `createTestSol()` with LiteSVM integration

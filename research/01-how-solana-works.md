@@ -623,7 +623,7 @@ Our SDK defaults to devnet.
 | Deploy with | `solana program deploy` | **`npx @better-sol/cli deploy`** |
 | Client SDK | Generate from IDL with Codama | **Same TS file is the client** (IDL auto-published for others) |
 | Type safety | None (raw bytes) | **Full compile-time checking** |
-| Testing | bankrun/LocalValidator | **`createTestSol()` with LiteSVM** |
+| Testing | bankrun/LocalValidator | Any test framework (`bun test`, `vitest`) |
 | Error messages | Numeric codes | **Named, autocomplete-checked errors** |
 | Events | Raw logs, parsed manually | **Typed event registry** |
 

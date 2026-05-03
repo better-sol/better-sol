@@ -113,7 +113,7 @@ The same `counter` export provides typed instruction methods, PDA derivation, an
 | CLI commands | ✅ Complete | `create`, `generate`, `deploy`, `verify` |
 | Runtime client SDK | 🔄 In progress | `program.accounts.*.derive`, `fetch`, typed instruction clients |
 | Wallet adapter | 📋 Planned | Subpath exports for wallet libraries |
-| Testing framework | 📋 Planned | LiteSVM-based `createTestSol()` |
+
 | Database schema gen | 📋 Planned | Drizzle schema from account definitions |
 
 ---
@@ -271,7 +271,7 @@ Nobody else does **TypeScript → Rust transpilation** for Solana programs.
 | 04 | `04-reference-competition.md` | Kite/Gill/Codama comparison, hackathon strategy |
 | 05 | `05-design.md` | Complete design — type system, accounts, CPI, transpilation |
 | 06 | `06-compiler.md` | Cloud compiler pipeline, deploy workflow |
-| 07 | `07-sdk.md` | Client SDK design, wallet integration, testing |
+| 07 | `07-sdk.md` | Client SDK design, wallet integration |
 | 08 | `08-dx-principles.md` | DX principles, self-audit, "wow" checklist |
 | 20 | `20-audit.md` | Implementation audit — current state vs research |
 

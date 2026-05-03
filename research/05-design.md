@@ -1164,10 +1164,6 @@ Each exports `walletSigner(adapter)` that returns `{ publicKey, signTransaction 
 
 ---
 
-## Testing — `better-sol/testing`
-
-```typescript
-import { testSol, expectIx } from 'better-sol/testing'
 
 const sol = testSol({ programs: { amm, orderbook } })
 

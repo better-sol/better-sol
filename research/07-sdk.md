@@ -2,7 +2,7 @@
 
 The client SDK. Programs as plugins, like Better Auth. Zero code generation.
 
-> **Implementation status (May 2026):** The client SDK is now implemented: async `betterSol()` factory, typed instruction methods, async PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()`, Kit-backed core operations (`getBalance`, `transfer`, `sol.token.*`), and Borsh encoding/decoding from TypeToken runtime objects. The `program()` function now accepts an optional `accounts` config to register account definitions for the client. Implemented now: Kit-backed `sol.withSigner()` for Kit `TransactionSigner`s, `sol.token.*`, `fromIdl()`, `.instruction()`, `.transaction()`, and confirmed transaction sending. Not yet implemented: testing SDK.
+> **Implementation status (May 2026):** The client SDK is now implemented: async `betterSol()` factory, typed instruction methods, async PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()`, Kit-backed core operations (`getBalance`, `transfer`, `sol.token.*`), and Borsh encoding/decoding from TypeToken runtime objects. The `program()` function now accepts an optional `accounts` config to register account definitions for the client. Implemented now: Kit-backed `sol.withSigner()` for Kit `TransactionSigner`s, `sol.token.*`, `fromIdl()`, `.instruction()`, `.transaction()`, and confirmed transaction sending. Not yet implemented: none.
 
 ---
 
@@ -641,32 +641,9 @@ This gives the best DX without turning better-sol into a wallet framework.
 
 ---
 
-## 7. Testing
+## 7. Use Your Test Runner
 
-Use any test runner. No special setup.
-
-```typescript
-import { test, equal } from 'node:test'
-import { createTestSol } from 'better-sol/testing'
-
-test('transfer SOL', async () => {
-  // createTestSol spins up LiteSVM — milliseconds, no validator
-  const sol = createTestSol()
-  const sender = sol.payer
-  const receiver = await sol.createAccount()
-
-  await sol.transfer({ from: sender, to: receiver.address, amount: 5000n })
-
-  const balance = await sol.getBalance(receiver.address)
-  equal(balance, 5000n)
-})
-```
-
-```bash
-node --test tests/transfer.ts
-```
-
-Your test runner. Your files. Your structure.
+Use any test runner. No special setup — `bun test`, `vitest`, `node --test` all work.
 
 ---
 
@@ -675,7 +652,6 @@ Your test runner. Your files. Your structure.
 ```
 better-sol                    # async betterSol(), sol.transfer(), sol.token.*, sol.withSigner()
 better-sol/program            # program(), account(), callback-scoped ix, p, token (CPI), sol (sysvars)
-better-sol/testing            # planned createTestSol() with LiteSVM
 ```
 
 ---
@@ -766,7 +742,7 @@ The full `program()` runtime target is a typed namespace. At runtime, this objec
 - IDL export: `counter.idl` — auto-generated Anchor IDL for Codama/Anchor/IDL Space compatibility
 - Type-safe require/emit in handlers through the scoped builder pattern below
 
-**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, `generateSigner()`, or a Kit `TransactionSigner`. Not yet implemented: testing SDK.
+**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, `generateSigner()`, or a Kit `TransactionSigner`. Not yet implemented: none.
 
 **All source-definition typing works without any build step.**
 
@@ -1219,14 +1195,6 @@ await sol.steps([
 // import { sol } from './lib/sol'
 // const userSol = await sol.withSigner(kitTransactionSigner)
 // await userSol.counter.increment({ counter: addr, amount: 1n })  // signer auto-fills
-
-// ── Testing ──
-import { createTestSol } from 'better-sol/testing'
-
-const sol = createTestSol({
-  programs: { counter },
-})
-// Uses LiteSVM — milliseconds per test, no validator
 ```
 
 ### How Programs Become Client Methods
