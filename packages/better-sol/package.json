@@ -1,0 +1,39 @@
+{
+  "name": "better-sol",
+  "version": "0.1.0",
+  "type": "module",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./program": {
+      "types": "./dist/program.d.ts",
+      "import": "./dist/program.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts src/program.ts --outdir dist --target bun",
+    "check": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxlint --fix .",
+    "format:check": "oxlint ."
+  },
+  "dependencies": {
+    "@solana-program/system": "^0.12.0",
+    "@solana-program/token": "^0.13.0",
+    "@solana/kit": "^6.8.0"
+  },
+  "peerDependencies": {
+    "typescript": "^6"
+  }
+}
