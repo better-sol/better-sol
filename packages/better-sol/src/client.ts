@@ -140,6 +140,10 @@ type InstructionParams<TIx extends InstructionDefinition<AccountInputs, ArgsSche
   [K in IxArgKeys<TIx>]: K extends keyof IxArgTypes<TIx> ? IxArgTypes<TIx>[K] : never;
 };
 
+type RequiredKeys<TValue> = {
+  [K in keyof TValue]-?: Record<string, never> extends Pick<TValue, K> ? never : K;
+}[keyof TValue];
+
 export type IxInstruction<_TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>> =
   Instruction & InstructionWithSigners;
 
@@ -147,11 +151,17 @@ export type IxTransaction<_TIx extends InstructionDefinition<AccountInputs, Args
   SignedTransaction;
 
 type InstructionMethod<TIx> = TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>
-  ? {
-      (params: InstructionParams<TIx>): Promise<string>;
-      instruction(params: InstructionParams<TIx>): Promise<IxInstruction<TIx>>;
-      transaction(params: InstructionParams<TIx>): Promise<IxTransaction<TIx>>;
-    }
+  ? RequiredKeys<InstructionParams<TIx>> extends never
+    ? {
+        (params?: InstructionParams<TIx>): Promise<string>;
+        instruction(params?: InstructionParams<TIx>): Promise<IxInstruction<TIx>>;
+        transaction(params?: InstructionParams<TIx>): Promise<IxTransaction<TIx>>;
+      }
+    : {
+        (params: InstructionParams<TIx>): Promise<string>;
+        instruction(params: InstructionParams<TIx>): Promise<IxInstruction<TIx>>;
+        transaction(params: InstructionParams<TIx>): Promise<IxTransaction<TIx>>;
+      }
   : never;
 
 type ExtractInstructions<T> = T extends ProgramDefinition<string, Address, ErrorMessages, EventSchema, infer TInstructions, AccountDefs> ? TInstructions : never;
@@ -362,19 +372,22 @@ function buildProgramClient(
     const snakeName = toSnake(ixName);
     const programId = program.address;
 
-    const sendAndConfirmFn = async (params: Record<string, unknown>): Promise<string> => {
+    const sendAndConfirmFn = async (inputParams?: Record<string, unknown>): Promise<string> => {
+      const params = inputParams ?? {};
       const activeSigner = requireSigner(signer);
       const ix = await buildInstruction(def, params, programId, snakeName, activeSigner);
       const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, rpcRetries);
       return await sendFn(signedTx);
     };
 
-    const instructionFn = async (params: Record<string, unknown>): Promise<Instruction & InstructionWithSigners> => {
+    const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction & InstructionWithSigners> => {
+      const params = inputParams ?? {};
       const activeSigner = requireSigner(signer);
       return await buildInstruction(def, params, programId, snakeName, activeSigner);
     };
 
-    const transactionFn = async (params: Record<string, unknown>): Promise<SignedTransaction> => {
+    const transactionFn = async (inputParams?: Record<string, unknown>): Promise<SignedTransaction> => {
+      const params = inputParams ?? {};
       const activeSigner = requireSigner(signer);
       const ix = await buildInstruction(def, params, programId, snakeName, activeSigner);
       return await buildAndSignTransaction([ix], rpc, activeSigner, commitment, rpcRetries);

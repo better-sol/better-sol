@@ -73,6 +73,19 @@ await sol.transfer({ to: "recipient...", amount: 1000n });
 
 Signer accounts declared with `p.signer()` auto-fill from the active signer when omitted.
 
+## Natural Instruction Signatures
+
+Instruction methods only require the data the instruction actually needs:
+
+```ts
+await sol.app.ping();                              // no accounts, no params
+await sol.app.setValue({ value: 1n });             // params only
+await sol.app.close({ account: accountAddress });  // accounts only
+await sol.counter.increment({ counter: addr, amount: 10n });
+```
+
+Signer accounts declared with `p.signer()` are optional at the call site and auto-fill from the active signer.
+
 ## Transaction-Building API
 
 ```ts

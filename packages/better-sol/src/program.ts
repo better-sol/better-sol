@@ -241,23 +241,47 @@ export type InstructionContext<TErrors extends ErrorMessages = ErrorMessages, TE
   log(message: string, ...values: readonly (string | number | bigint | boolean | Address)[]): void;
 };
 
-type IxRunWithArgs<TAccounts extends AccountInputs, TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> =
+type IxRunWithAccountsAndArgs<TAccounts extends AccountInputs, TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> =
   (accounts: InferAccounts<TAccounts>, args: InferArgs<TArgs>, ctx: InstructionContext<TErrors, TEvents>) => void;
 
-type IxRunWithoutArgs<TAccounts extends AccountInputs, TErrors extends ErrorMessages, TEvents extends EventSchema> =
+type IxRunWithAccounts<TAccounts extends AccountInputs, TErrors extends ErrorMessages, TEvents extends EventSchema> =
   (accounts: InferAccounts<TAccounts>, ctx: InstructionContext<TErrors, TEvents>) => void;
 
-type IxConfigWithArgs<TAccounts extends AccountInputs, TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
+type IxRunWithArgs<TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> =
+  (args: InferArgs<TArgs>, ctx: InstructionContext<TErrors, TEvents>) => void;
+
+type IxRunWithoutAccountsOrArgs<TErrors extends ErrorMessages, TEvents extends EventSchema> =
+  (ctx: InstructionContext<TErrors, TEvents>) => void;
+
+type IxConfigWithAccountsAndArgs<TAccounts extends AccountInputs, TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   readonly accounts: TAccounts;
   readonly args: TArgs;
-  readonly run: IxRunWithArgs<TAccounts, TArgs, TErrors, TEvents>;
+  readonly run: IxRunWithAccountsAndArgs<TAccounts, TArgs, TErrors, TEvents>;
 };
 
-type IxConfigWithoutArgs<TAccounts extends AccountInputs, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
+type IxConfigWithAccounts<TAccounts extends AccountInputs, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   readonly accounts: TAccounts;
   readonly args?: undefined;
-  readonly run: IxRunWithoutArgs<TAccounts, TErrors, TEvents>;
+  readonly run: IxRunWithAccounts<TAccounts, TErrors, TEvents>;
 };
+
+type IxConfigWithArgs<TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
+  readonly accounts?: undefined;
+  readonly args: TArgs;
+  readonly run: IxRunWithArgs<TArgs, TErrors, TEvents>;
+};
+
+type IxConfigWithoutAccountsOrArgs<TErrors extends ErrorMessages, TEvents extends EventSchema> = {
+  readonly accounts?: undefined;
+  readonly args?: undefined;
+  readonly run: IxRunWithoutAccountsOrArgs<TErrors, TEvents>;
+};
+
+type IxConfig<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined, TErrors extends ErrorMessages, TEvents extends EventSchema> =
+  | IxConfigWithAccountsAndArgs<TAccounts, TArgs & ArgsSchema, TErrors, TEvents>
+  | IxConfigWithAccounts<TAccounts, TErrors, TEvents>
+  | IxConfigWithArgs<TArgs & ArgsSchema, TErrors, TEvents>
+  | IxConfigWithoutAccountsOrArgs<TErrors, TEvents>;
 
 export class InstructionDefinition<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined> {
   public constructor(
@@ -268,17 +292,20 @@ export class InstructionDefinition<TAccounts extends AccountInputs, TArgs extend
 }
 
 type IxOverloads<TErrors extends ErrorMessages, TEvents extends EventSchema> = {
-  <const TAccounts extends AccountInputs>(config: IxConfigWithoutArgs<TAccounts, TErrors, TEvents>): InstructionDefinition<TAccounts, undefined>;
-  <const TAccounts extends AccountInputs, const TArgs extends ArgsSchema>(config: IxConfigWithArgs<TAccounts, TArgs, TErrors, TEvents>): InstructionDefinition<TAccounts, TArgs>;
+  <const TAccounts extends AccountInputs, const TArgs extends ArgsSchema>(config: IxConfigWithAccountsAndArgs<TAccounts, TArgs, TErrors, TEvents>): InstructionDefinition<TAccounts, TArgs>;
+  <const TAccounts extends AccountInputs>(config: IxConfigWithAccounts<TAccounts, TErrors, TEvents>): InstructionDefinition<TAccounts, undefined>;
+  <const TArgs extends ArgsSchema>(config: IxConfigWithArgs<TArgs, TErrors, TEvents>): InstructionDefinition<Record<string, never>, TArgs>;
+  (config: IxConfigWithoutAccountsOrArgs<TErrors, TEvents>): InstructionDefinition<Record<string, never>, undefined>;
 };
 
 function makeIx(): IxOverloads<ErrorMessages, EventSchema> {
   const fn = function ix<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined>(
-    config: IxConfigWithoutArgs<TAccounts, ErrorMessages, EventSchema> | IxConfigWithArgs<TAccounts, TArgs & ArgsSchema, ErrorMessages, EventSchema>,
-  ): InstructionDefinition<TAccounts, TArgs | undefined> {
+    config: IxConfig<TAccounts, TArgs, ErrorMessages, EventSchema>,
+  ): InstructionDefinition<TAccounts | Record<string, never>, TArgs | undefined> {
+    const accounts = "accounts" in config && config.accounts !== undefined ? config.accounts : {};
     const args = "args" in config ? config.args : undefined;
-    assertDistinctAccountAndArgNames(config.accounts, args);
-    return new InstructionDefinition(config.accounts, args, config.run);
+    assertDistinctAccountAndArgNames(accounts, args);
+    return new InstructionDefinition(accounts, args, config.run);
   };
   return fn as unknown as IxOverloads<ErrorMessages, EventSchema>;
 }

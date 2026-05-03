@@ -127,7 +127,33 @@ console.log(account.count) // → 52n
 
 ---
 
-## 5. Multi-Step Operations
+## 5. Natural Instruction Signatures
+
+Instruction methods only require a parameter object when the instruction has required account or arg inputs:
+
+```typescript
+await sol.app.ping()                              // no accounts, no args
+await sol.app.setConfig({ value: 1n })            // args only
+await sol.app.closeVault({ vault })               // accounts only
+await sol.counter.increment({ counter, amount })  // accounts + args
+```
+
+Signer accounts declared with `p.signer()` are optional and auto-fill from the active signer. Instructions with only optional signer accounts can be called with no arguments or with explicit signer addresses.
+
+Program definitions follow the same rule:
+
+```typescript
+ping: ix({
+  run: (ctx) => ctx.log('ping'),
+})
+
+setConfig: ix({
+  args: { value: u64 },
+  run: ({ value }, ctx) => ctx.log('value', value),
+})
+```
+
+## 6. Multi-Step Operations
 
 ```typescript
 // Array of instructions → one transaction
@@ -151,7 +177,7 @@ result[2].signature  // Final tx signature
 
 ---
 
-## 6. Browser — Wallet Agnostic
+## 7. Browser — Wallet Agnostic
 
 better-sol does NOT include wallet connection. It gives you a shared Solana client and lets any wallet library provide a signing context.
 
@@ -635,7 +661,7 @@ This gives the best DX without turning better-sol into a wallet framework.
 
 ---
 
-## 7. Use Your Test Runner
+## 8. Use Your Test Runner
 
 Use any test runner. No special setup — `bun test`, `vitest`, `node --test` all work.
 
@@ -663,7 +689,7 @@ Most developers will only use `better-sol`.
 
 ---
 
-## 8. Define a Program
+## 9. Define a Program
 
 ```typescript
 import {
@@ -774,7 +800,7 @@ The CLI parser extracts errors/events from the `program()` config directly. Call
 
 ---
 
-## 9. Compile to On-Chain (The Hard Part)
+## 10. Compile to On-Chain (The Hard Part)
 
 ### The Honest Reality
 
@@ -812,7 +838,7 @@ The `program()` definition works as a client regardless — even without compila
 
 ---
 
-## 10. Using the Program Builder with the SDK
+## 11. Using the Program Builder with the SDK
 
 The two packages compose naturally:
 
@@ -849,7 +875,7 @@ console.log(account.count) // → 10n
 
 ---
 
-## 11. Full Example: Token + Escrow
+## 12. Full Example: Token + Escrow
 
 ```typescript
 import { betterSol, keypairFile } from 'better-sol'

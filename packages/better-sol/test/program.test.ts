@@ -78,7 +78,7 @@ describe("program builder stubs", () => {
     expect(counterProgram.events.Incremented.amount.kind).toBe("u64");
   });
 
-  test("creates program with events only", () => {
+  test("creates program with params-only instruction", () => {
     const pingProgram = program(
       {
         name: "ping_program",
@@ -87,16 +87,32 @@ describe("program builder stubs", () => {
       },
       ix => ({
         ping: ix({
-          accounts: {} as const,
           args: { value: u64 },
-          run: (_accounts, { value }, ctx) => {
+          run: ({ value }, ctx) => {
             ctx.emit("Pinged", { value });
           },
         }),
       })
     );
 
+    expect(Object.keys(pingProgram.instructions.ping.accounts)).toEqual([]);
     expect(pingProgram.events.Pinged.value.kind).toBe("u64");
+  });
+
+  test("creates program with no accounts and no params", () => {
+    const heartbeatProgram = program(
+      { name: "heartbeat", address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs" },
+      ix => ({
+        ping: ix({
+          run: (ctx) => {
+            ctx.log("ping");
+          },
+        }),
+      }),
+    );
+
+    expect(Object.keys(heartbeatProgram.instructions.ping.accounts)).toEqual([]);
+    expect(heartbeatProgram.instructions.ping.args).toBeUndefined();
   });
 
   test("supports nested zero-copy array field tokens", () => {

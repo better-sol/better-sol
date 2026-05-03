@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { address } from "@solana/kit";
 import { betterSol } from "../src/index";
 import { account, bool, i64, p, program, pubkey, string, u8, u64 } from "../src/program";
+
+const signer = {
+  address: address("11111111111111111111111111111111"),
+  signTransactions: async <T extends readonly unknown[]>(transactions: T): Promise<T> => transactions,
+};
 
 describe("client SDK", () => {
   test("program accepts accounts config", () => {
@@ -114,6 +120,60 @@ describe("client SDK", () => {
     expect(args.name.kind).toBe("string");
   });
 
+  test("instruction call signatures match required inputs", async () => {
+    const Counter = account({ count: u64, authority: pubkey });
+    const prog = program(
+      { name: "signatures", address: "11111111111111111111111111111111", accounts: { Counter } },
+      ix => ({
+        ping: ix({
+          run: () => {},
+        }),
+        setAuthority: ix({
+          args: { authority: pubkey },
+          run: () => {},
+        }),
+        close: ix({
+          accounts: { counter: p.mut(Counter) },
+          run: () => {},
+        }),
+        increment: ix({
+          accounts: { counter: p.mut(Counter), authority: p.signer() },
+          args: { amount: u64 },
+          run: () => {},
+        }),
+        signedPing: ix({
+          accounts: { authority: p.signer() },
+          run: () => {},
+        }),
+      }),
+    );
+
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { prog } });
+
+    await client.prog.ping.instruction();
+    await client.prog.setAuthority.instruction({ authority: signer.address });
+    await client.prog.close.instruction({ counter: signer.address });
+    await client.prog.increment.instruction({ counter: signer.address, amount: 1n });
+    await client.prog.signedPing.instruction();
+    await client.prog.signedPing.instruction({ authority: signer.address });
+  });
+
+  test("instruction calls reject missing required accounts at runtime", async () => {
+    const Counter = account({ count: u64 });
+    const prog = program(
+      { name: "runtime", address: "11111111111111111111111111111111" },
+      ix => ({
+        close: ix({
+          accounts: { counter: p.mut(Counter) },
+          run: () => {},
+        }),
+      }),
+    );
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { prog } });
+    const close = client.prog.close.instruction as (params?: Record<string, unknown>) => Promise<unknown>;
+    await expect(close()).rejects.toThrow("Missing account 'counter'");
+  });
+
   test("instruction with no args produces undefined args", () => {
     const prog = program(
       { name: "simple", address: "11111111111111111111111111111111" },
@@ -132,7 +192,7 @@ test("derive with no field seeds accepts empty object", () => {
   const Config = account({ admin: pubkey, bump: u8 }).derive(() => ["config"]);
   const prog = program(
     { name: "test", address: "11111111111111111111111111111111", accounts: { Config } },
-    ix => ({ ping: ix({ accounts: {}, run: () => {} }) }),
+    ix => ({ ping: ix({ run: () => {} }) }),
   );
   expect([...prog.accounts.Config.seedValues]).toEqual(["config"]);
 });
