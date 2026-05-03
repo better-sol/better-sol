@@ -11,11 +11,13 @@ Compares the current implementation against research, identifies gaps, and track
 | Body transpiler | ✅ Complete | Assignments, arithmetic, control flow, CPI, sysvars, `null` → `None` |
 | Anchor Rust generator | ✅ Complete | `lib.rs`, `Cargo.toml`, IDL |
 | Unsupported-pattern diagnostics | ✅ Complete | 18 failure fixtures with specific diagnostics |
-| CLI commands | ✅ Complete | `create`, `generate`, `deploy`, `verify` |
+| CLI commands | ✅ Complete | `create`, `deploy`, `generate db`, `verify` |
 | `cargo check` validation | ✅ Complete | 12 programs pass with zero warnings |
-| Client SDK (`betterSol()`) | ✅ Implemented | Async Kit-backed factory, typed instruction methods (sign+send, `.instruction()`, `.transaction()`), PDA derivation, account fetching with owner verification and zero-copy support, Borsh codec, token helpers (Token + Token-2022), transaction confirmation with configurable retries, pre-flight simulation, configurable commitment, read-only clients without a payer, `sol.send()`, typed `sol.steps()`, `sol.withSigner()` |
-| Scoped Kit signer (`sol.withSigner()`) | ✅ Implemented | Accepts Kit `TransactionSigner`; wallet adapter subpaths implemented for Wallet Adapter, Reown, Privy, Dynamic |
-| `fromIdl()` | ✅ Implemented | Consumes Anchor IDLs, produces a `ProgramDefinition`-compatible object |
+| Natural instruction signatures | ✅ Complete | `ix()` supports no-accounts/no-args, args-only, accounts-only, and accounts+args — client calls match |
+| Client SDK (`betterSol()`) | ✅ Complete | Async Kit-backed factory, typed instruction methods (sign+send, `.instruction()`, `.transaction()`), PDA derivation, account fetching with owner verification and zero-copy support, Borsh codec, token helpers (Token + Token-2022), transaction confirmation with configurable retries, pre-flight simulation, configurable commitment, read-only clients without a payer, `sol.send()`, typed `sol.steps()`, `sol.withSigner()` |
+| Scoped Kit signer (`sol.withSigner()`) | ✅ Complete | Accepts Kit `TransactionSigner` or `SolSigner` (secretKey, keypairFile); wallet adapter subpaths implemented for Wallet Adapter, Reown, Privy, Dynamic |
+| `fromIdl()` | ✅ Complete | Consumes Anchor IDLs, produces a `ProgramDefinition`-compatible object |
+| Database schema gen | ✅ Complete | `generate db` — Drizzle ORM from account definitions |
 
 ## API Design
 

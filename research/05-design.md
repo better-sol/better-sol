@@ -43,8 +43,10 @@
 Zero-copy accounts can ONLY contain these types:
 - `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`
 - `pubkey` (stored as `[u8; 32]`, accessed via `ZeroCopyAccessor`)
-- `bool` → `u8` (transpiler auto-converts, 0 = false, 1 = true)
+- `u8` as boolean flag (use `=== 1` for truthy checks)
 - Fixed arrays: `array(u64, 100)` → `[u64; 100]`
+
+**`bool` is NOT allowed in zero-copy accounts** — it is not Pod-safe because not all bit patterns are valid. Use `u8` with explicit `=== 0` / `=== 1` checks.`
 
 ### Composite Types (standard Borsh accounts only)
 
@@ -867,7 +869,7 @@ const OrderBook = account({
   askCount: u32,
   bestBid: u64,
   bestAsk: u64,
-  isActive: bool,     // → u8 in Rust (Pod constraint)
+  isActive: u8,           // explicit flag — bool rejected in zero-copy
   bump: u8,
   bids: array(Order, 256),
   asks: array(Order, 256),

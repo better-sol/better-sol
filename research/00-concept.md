@@ -92,29 +92,31 @@ npx @better-sol/cli deploy programs/counter.ts
 
 This parses the TypeScript, generates Anchor Rust, compiles via cloud service, and deploys to devnet.
 
-### 4. Use the Client (planned)
+### 4. Use the Client SDK
 
-The same `counter` export provides typed instruction methods, PDA derivation, and account fetching. This runtime layer is the next milestone — the program definition API and transpiler are complete and validated.
+The same `counter` export provides typed instruction methods, PDA derivation, and account fetching. The runtime SDK also supports read-only clients (no payer needed), token operations (Token + Token-2022), wallet adapter subpaths, multi-instruction batching, sequential steps, and `fromIdl()` for existing Anchor programs.
 
 ---
 
-## What Actually Exists
+## What Currently Exists
 
 | Layer | Status | Details |
 |---|---|---|
-| Program definition API | ✅ Complete | `account()`, `ix()`, `program()`, `p.*`, type tokens |
-| Program definition API | ✅ Complete | `program()` with inline errors/events, `account()`, `ix()`, `p.*`, type tokens |
+| Program definition API | ✅ Complete | `program()` with inline errors/events, `account()`, `ix()` with natural run signatures, `p.*` constraints, type tokens |
 | Type-safe errors + events | ✅ Complete | Errors and events validated by transpiler at build time |
-| TypeScript AST parser | ✅ Complete | Parses `better-sol/program` syntax via `ts-morph` |
-| Body transpiler | ✅ Complete | Converts `run()` bodies to Rust — assignments, arithmetic, control flow, CPI |
-| Anchor Rust generator | ✅ Complete | Generates `lib.rs`, `Cargo.toml`, IDL |
-| Unsupported-pattern diagnostics | ✅ Complete | Clear errors for unsupported TS patterns |
+| TypeScript AST parser | ✅ Complete | Parses `better-sol/program` syntax via `ts-morph` — understands full DSL |
+| Body transpiler | ✅ Complete | Converts `run()` bodies to Rust — assignments, arithmetic, control flow, CPI, sysvars |
+| Anchor Rust generator | ✅ Complete | Generates `lib.rs`, `Cargo.toml`, IDL — warning-free, Anchor 1.0.1 |
+| Unsupported-pattern diagnostics | ✅ Complete | 18 failure fixtures with clear diagnostics for unsupported TS patterns |
 | Cloud compiler API | ✅ Complete | Rust API server that runs `cargo build-sbf` |
-| CLI commands | ✅ Complete | `create`, `generate`, `deploy`, `verify` |
-| Runtime client SDK | 🔄 In progress | `program.accounts.*.derive`, `fetch`, typed instruction clients |
-| Wallet adapter | 📋 Planned | Subpath exports for wallet libraries |
-
-| Database schema gen | 📋 Planned | Drizzle schema from account definitions |
+| CLI commands | ✅ Complete | `create`, `deploy`, `generate db`, `verify` |
+| Runtime client SDK | ✅ Complete | Typed instruction methods (sign+send, `.instruction()`, `.transaction()`), PDA derivation, account fetching (Borsh + zero-copy), Borsh codec |
+| Read-only clients | ✅ Complete | `betterSol({ cluster })` without payer for reads, balances, PDA derivation |
+| Token operations | ✅ Complete | `sol.token.*` and `sol.token2022.*` — createMint, mintTo, transfer, getBalance |
+| Wallet adapters | ✅ Complete | Subpath exports for Wallet Adapter, Reown, Privy, Dynamic |
+| `fromIdl()` | ✅ Complete | Import existing Anchor IDLs as typed programs |
+| Database schema gen | ✅ Complete | `generate db` — Drizzle ORM from account definitions (Postgres, MySQL, SQLite) |
+| Natural call signatures | ✅ Complete | Instruction methods match what the definition requires — no unnecessary args |
 
 ---
 

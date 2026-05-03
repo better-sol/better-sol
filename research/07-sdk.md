@@ -663,15 +663,20 @@ This gives the best DX without turning better-sol into a wallet framework.
 
 ## 8. Use Your Test Runner
 
-Use any test runner. No special setup — `bun test`, `vitest`, `node --test` all work.
+Use any test runner. No special setup — `bun test`, `vitest`, `node --test` all work. There is no testing SDK — use the real `betterSol()` client with localnet.
 
 ---
 
 ## What `better-sol` Ships
 
 ```
-better-sol                    # async betterSol(), sol.transfer(), sol.token.*, sol.token2022.*, sol.withSigner()
-better-sol/program            # program(), account(), callback-scoped ix, p, token (CPI), sol (sysvars)
+better-sol                        # betterSol(), keypairFile(), secretKey(), fromIdl(), version
+better-sol/program                # program(), account(), struct(), callback-scoped ix, p.*, token (CPI stubs), sol (sysvars)
+better-sol/wallets                # walletAdapter, reownWallet, privyWallet, dynamicWallet
+better-sol/wallets/wallet-adapter # walletAdapter
+better-sol/wallets/reown          # reownWallet
+better-sol/wallets/privy          # privyWallet
+better-sol/wallets/dynamic        # dynamicWallet
 ```
 
 ---
