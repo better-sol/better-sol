@@ -1,13 +1,7 @@
-import {
-  getBase64EncodedWireTransaction,
-  type Address,
-  type SignatureBytes,
-  type SignatureDictionary,
-  type Transaction,
-  type TransactionSigner,
-} from "@solana/kit";
+import { getBase64EncodedWireTransaction, type Address, type SignatureDictionary, type Transaction, type TransactionSigner } from "@solana/kit";
+import { VersionedTransaction } from "@solana/web3.js";
 
-type PrivySignTransaction = (args: { readonly transaction: Uint8Array; readonly wallet: unknown }) => Promise<{ readonly signature: Uint8Array }>;
+type PrivySignTransaction = (args: { readonly transaction: Uint8Array; readonly wallet: unknown }) => Promise<{ readonly signedTransaction: Uint8Array }>;
 type PrivyWallet = { readonly address: string };
 
 type PrivyWalletLike = {
@@ -24,11 +18,16 @@ export function privyWallet(wallet: PrivyWalletLike): TransactionSigner {
       return Promise.all(
         transactions.map(async (tx) => {
           const wireBytes = Buffer.from(getBase64EncodedWireTransaction(tx), "base64");
-          const { signature } = await wallet.signTransaction({
+          const { signedTransaction } = await wallet.signTransaction({
             transaction: wireBytes,
             wallet: wallet.wallet,
           });
-          return { [address]: signature as unknown as SignatureBytes } as SignatureDictionary;
+          const signedTx = VersionedTransaction.deserialize(signedTransaction);
+          const firstSig = signedTx.signatures[0];
+          const sigBytes = firstSig !== undefined && firstSig !== null
+            ? new Uint8Array(firstSig)
+            : new Uint8Array(64);
+          return { [address]: sigBytes } as SignatureDictionary;
         }),
       );
     },
