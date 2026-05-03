@@ -2,7 +2,9 @@
 
 The client SDK. Programs as plugins, like Better Auth. Zero code generation.
 
-> **Implementation status (May 2026):** The client SDK is fully implemented: async `betterSol()` factory, typed instruction methods, typed PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()` with zero-copy support, Kit-backed core operations (`getBalance`, `transfer`), Borsh encoding/decoding from TypeToken runtime objects, Token and Token-2022 client support (`sol.token.*`, `sol.token2022.*`), transaction confirmation with configurable retries, pre-flight simulation option, configurable commitment levels, `fromIdl()`, `.instruction()`, `.transaction()`, `sol.send()`, `sol.steps()`, `sol.withSigner()`, `sol.destroy()`, and wallet adapter subpaths.
+> **Implementation status (May 2026):** The client SDK is fully implemented: async `betterSol()` factory, typed instruction methods, typed PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()` with zero-copy support, Kit-backed core operations (`getBalance`, `transfer`), Borsh encoding/decoding from TypeToken runtime objects, Token and Token-2022 client support (`sol.token.*`, `sol.token2022.*`), transaction confirmation with configurable retries, pre-flight simulation option, configurable commitment levels, `fromIdl()`, `.instruction()`, `.transaction()`, `sol.send()`, `sol.steps()`, `sol.withSigner()`, and wallet adapter subpaths.
+
+> **Seed semantics:** Account seeds are defined via `.derive((seed) => ['literal', seed.fieldName])`. For seeds that reference instruction args or other accounts (not fields on the account itself), use raw string templates: `.derive(() => ['prefix', '{argName}'])`. The transpiler validates these at compile time.
 
 ---
 
@@ -741,7 +743,7 @@ The full `program()` runtime target is a typed namespace. At runtime, this objec
 - IDL export: `counter.idl` — auto-generated Anchor IDL for Codama/Anchor/IDL Space compatibility
 - Type-safe require/emit in handlers through the scoped builder pattern below
 
-**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, `generateSigner()`, or a Kit `TransactionSigner`. Not yet implemented: none.
+**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, or a Kit `TransactionSigner`. Not yet implemented: none.
 
 **All source-definition typing works without any build step.**
 

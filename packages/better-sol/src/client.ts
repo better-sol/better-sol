@@ -85,8 +85,7 @@ type KitRpcSubscriptions = ReturnType<typeof createSolanaRpcSubscriptions>;
 export type SolSigner =
   | TransactionSigner
   | { readonly type: "secretKey"; readonly value: Uint8Array }
-  | { readonly type: "file"; readonly path: string }
-  | { readonly type: "generate" };
+  | { readonly type: "file"; readonly path: string };
 
 export function secretKey(bytes: Uint8Array): SolSigner {
   return { type: "secretKey", value: bytes };
@@ -94,10 +93,6 @@ export function secretKey(bytes: Uint8Array): SolSigner {
 
 export function keypairFile(path: string): SolSigner {
   return { type: "file", path };
-}
-
-export function generateSigner(): SolSigner {
-  return { type: "generate" };
 }
 
 export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, never>> = {
@@ -212,13 +207,9 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   readonly token2022: TokenClient;
   withSigner(signer: SolSigner): Promise<BetterSolClient<TPrograms>>;
   send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string>;
-  steps<T1>(steps: [() => Promise<T1>]): Promise<[T1]>;
-  steps<T1, T2>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>]): Promise<[T1, T2]>;
-  steps<T1, T2, T3>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>, (r1: T1, r2: T2) => Promise<T3>]): Promise<[T1, T2, T3]>;
-  steps<T1, T2, T3, T4>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>, (r1: T1, r2: T2) => Promise<T3>, (r1: T1, r2: T2, r3: T3) => Promise<T4>]): Promise<[T1, T2, T3, T4]>;
+  steps(steps: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]>;
   getBalance(address: Address): Promise<bigint>;
   transfer(params: { readonly to: Address; readonly amount: bigint; readonly from?: Address }): Promise<string>;
-  destroy(): void;
 } & {
   [K in keyof TPrograms]: TPrograms[K] extends AnyProgram ? ProgramClient<TPrograms[K]> : never;
 };
@@ -270,11 +261,10 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
   const rpcRetries = config.rpcRetries ?? RPC_RETRIES;
   const simulate = config.simulate ?? false;
   const rpc = createSolanaRpc(rpcUrl);
-  const abortController = new AbortController();
   const rpcSubscriptions = createSolanaRpcSubscriptions(rpcSubscriptionsUrl);
   const signer = await resolveSigner(config.payer);
   const programs = config.programs ?? {} as TPrograms;
-  return buildClient({ config, programs, rpc, rpcSubscriptions, signer, commitment, confirmationRetries, confirmationInterval, rpcRetries, abortController, simulate });
+  return buildClient({ config, programs, rpc, rpcSubscriptions, signer, commitment, confirmationRetries, confirmationInterval, rpcRetries, simulate });
 }
 
 function buildClient<const TPrograms extends ProgramInputs>(params: {
@@ -287,7 +277,6 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
   readonly confirmationRetries: number;
   readonly confirmationInterval: number;
   readonly rpcRetries: number;
-  readonly abortController: AbortController;
   readonly simulate: boolean;
 }): BetterSolClient<TPrograms> {
   const sendFn = (tx: SignedTransaction): Promise<string> =>
@@ -316,9 +305,6 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
       });
       const signedTx = await buildAndSignTransaction([ix], params.rpc, params.signer, params.commitment, params.rpcRetries);
       return await sendFn(signedTx);
-    },
-    destroy: (): void => {
-      params.abortController.abort();
     },
     send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string> => {
       const resolved = await Promise.all(instructions);
@@ -416,7 +402,7 @@ function buildTokenClient(
   return {
     getATA: async (params) => await deriveAtaAddr(params.owner, params.mint),
     createMint: async (params) => {
-      const mint = await resolveSigner(generateSigner());
+      const mint = await createGeneratedSigner();
       const plan = getCreateMintInstructionPlan({
         payer: signer,
         newMint: mint,
@@ -655,9 +641,8 @@ function encodeU64Seed(value: bigint): Uint8Array {
 }
 
 async function resolveSigner(signer: SolSigner | undefined): Promise<TransactionSigner> {
-  if (signer === undefined) throw new Error("No payer configured. Pass payer: keypairFile('./keypair.json') or payer: secretKey(bytes) to betterSol(). Or use payer: generateSigner() for a random keypair (not recommended for production).");
+  if (signer === undefined) throw new Error("No payer configured. Pass payer: keypairFile('./keypair.json') or payer: secretKey(bytes) to betterSol().");
   if (isTransactionSignerInput(signer)) return signer;
-  if (signer.type === "generate") return await createGeneratedSigner();
   if (signer.type === "secretKey") return await createKeyPairSignerFromBytes(signer.value, false);
   if (signer.type === "file") return await loadKeypairFile(signer.path);
   signer satisfies never;

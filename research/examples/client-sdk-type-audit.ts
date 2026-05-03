@@ -1,4 +1,5 @@
-import { betterSol, secretKey, keypairFile, type SolSigner } from "better-sol";
+import { betterSol, secretKey, keypairFile } from "better-sol";
+import type { TransactionSigner } from "@solana/kit";
 import {
   account, p, program, pubkey, u64, bool, type Address,
 } from "better-sol/program";
@@ -103,7 +104,7 @@ async function testSimpleProgram() {
   await sol2.simple.ping({ authority: sol2.payer });
 }
 
-async function testScopedSigner(signer: SolSigner) {
+async function testScopedSigner(signer: TransactionSigner) {
   const userSol = await sol.withSigner(signer);
   await userSol.counter.increment({ counter: "11111111111111111111111111111111", authority: userSol.payer, amount: 1n });
 }

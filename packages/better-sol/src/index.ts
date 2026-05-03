@@ -1,5 +1,5 @@
-export { betterSol, secretKey, keypairFile, generateSigner } from "./client";
-export type { BetterSolClient, BetterSolConfig, BoundAccount, Cluster, IxInstruction, IxTransaction, SolSigner, TokenClient } from "./client";
+export { betterSol, secretKey, keypairFile } from "./client";
+export type { BetterSolClient, BetterSolConfig, BoundAccount } from "./client";
 
 export { fromIdl } from "./idl";
 export type { AnchorIdl, IdlProgram } from "./idl";
