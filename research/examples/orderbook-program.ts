@@ -3,7 +3,7 @@
 //
 // Demonstrates:
 // - account().zeroCopy() → #[account(zero_copy)] in Rust
-// - struct_zc() → #[zero_copy] sub-struct
+// - struct() → #[zero_copy] sub-struct
 // - array(T, N) → [T; N] fixed-size array
 // - p.remaining() → ctx.remaining_accounts with typed deserialization
 // - bool in zero-copy (maps to u8 in Rust)
@@ -14,11 +14,10 @@
 // ============================================================
 
 import {
-  program, account, struct_zc, ix, defineErrors, defineEvents,
+  program, account, struct,
   u64, u32, i64, u8, bool, pubkey, array,
-  p, token, sol,
+  p, sol,
 } from 'better-sol/program'
-
 
 // ══════════════════════════════════════════
 // ZERO-COPY SUB-STRUCTS
@@ -26,7 +25,7 @@ import {
 // These are Pod types in Rust — no Borsh, no heap allocation.
 // All fields must be fixed-size (no String, no Vec).
 
-const Order = struct_zc({
+const Order = struct({
   trader: pubkey,      // 32 bytes — stored as [u8; 32], auto-converted
   price: u64,          // 8 bytes
   quantity: u64,       // 8 bytes
@@ -35,14 +34,13 @@ const Order = struct_zc({
   // Total: 57 bytes + 7 padding = 64 bytes (u64 alignment)
 })
 
-const MarketInfo = struct_zc({
+const MarketInfo = struct({
   baseDecimals: u8,    // 1 byte
   quoteDecimals: u8,   // 1 byte
   minOrderSize: u64,   // 8 bytes (+ 6 padding for alignment)
   tickSize: u64,       // 8 bytes
   // Total: 24 bytes
 })
-
 
 // ══════════════════════════════════════════
 // ACCOUNTS
@@ -63,7 +61,7 @@ const OrderBook = account({
   bump: u8,
   bids: array(Order, 256),      // Fixed-size array of Orders
   asks: array(Order, 256),      // Fixed-size array of Orders
-}).seeds('orderbook', '{market}').zeroCopy()
+}).derive((seed) => ["orderbook", seed.market]).zeroCopy()
 //                                     ^^^^^^^^^ zero-copy mode
 
 // Standard (Borsh) account for fill records
@@ -74,7 +72,7 @@ const FillRecord = account({
   price: u64,
   quantity: u64,
   timestamp: i64,
-}).seeds('fill', '{orderBook}', '{trader}', '{timestamp}')
+}).derive((seed) => ["fill", seed.orderBook, seed.trader, seed.timestamp])
 
 const TradeHistory = account({
   orderBook: pubkey,
@@ -83,14 +81,20 @@ const TradeHistory = account({
   highPrice: u64,
   lowPrice: u64,
   lastPrice: u64,
-}).seeds('history', '{orderBook}')
-
+}).derive((seed) => ["history", seed.orderBook])
 
 // ══════════════════════════════════════════
 // ERRORS & EVENTS
 // ══════════════════════════════════════════
 
-const errors = defineErrors({
+// ══════════════════════════════════════════
+// PROGRAM
+// ══════════════════════════════════════════
+
+export const orderbook = program({
+  name: 'orderbook',
+  address: 'AyX4nb665MQwz1riwohTAFvXLCuCqDnBD8PZaWHBHurg',
+  errors: {
   Unauthorized: 'Not authorized to perform this action',
   OrderbookInactive: 'Orderbook is not active',
   OrderbookFull: 'No space for more orders on this side',
@@ -101,9 +105,8 @@ const errors = defineErrors({
   SelfTrade: 'Cannot match own orders',
   PriceBelowMin: 'Price below minimum order size',
   NoMatchFound: 'No matching orders found',
-})
-
-const events = defineEvents({
+},
+  events: {
   OrderPlaced: {
     trader: pubkey,
     side: u8,
@@ -122,24 +125,13 @@ const events = defineEvents({
     bestBid: u64,
     bestAsk: u64,
   },
-})
-
-
-// ══════════════════════════════════════════
-// PROGRAM
-// ══════════════════════════════════════════
-
-export const orderbook = program({
-  name: 'orderbook',
-  address: '0rdrB00k11111111111111111111111111111111111',
-  errors,
-  events,
-  instructions: {
+},
+  }, ix => ({
 
     // ── 1. Initialize orderbook ──
     initialize: ix({
       accounts: {
-        book: p.init(OrderBook),
+        book: p.create(OrderBook),
         admin: p.signer(),
       },
       args: { baseMint: pubkey, quoteMint: pubkey, baseDecimals: u8, quoteDecimals: u8, minOrderSize: u64, tickSize: u64 },
@@ -239,7 +231,7 @@ export const orderbook = program({
         history: p.mut(TradeHistory),
       },
       args: { maxMatches: u32 },
-      run: ({ book, baseReserve, quoteReserve, matchingEngine, fills, history }, { maxMatches }, ctx) => {
+      run: ({ book, baseReserve, quoteReserve, fills, history }, { maxMatches }, ctx) => {
         ctx.require(book.isActive, 'OrderbookInactive')
         ctx.require(book.bidCount > 0, 'NoOrders')
         ctx.require(book.askCount > 0, 'NoOrders')
@@ -314,27 +306,29 @@ export const orderbook = program({
         ctx.require(book.isActive, 'OrderbookInactive')
         ctx.require(side === 0 || side === 1, 'InvalidSide')
 
-        const orders = side === 0 ? book.bids : book.asks
-        const count = side === 0 ? book.bidCount : book.askCount
-
-        ctx.require(orderIndex < count, 'InvalidPrice')  // reuse error
-
-        const order = orders[orderIndex]
-        ctx.require(order.trader === trader, 'Unauthorized')
-
-        // Zero out the order (soft cancel)
-        orders[orderIndex] = {
-          trader: '',
-          price: 0n,
-          quantity: 0n,
-          side: 0,
-          timestamp: 0n,
-        }
-
-        // Update volume
         if (side === 0) {
+          ctx.require(orderIndex < book.bidCount, 'InvalidPrice')
+          const order = book.bids[orderIndex]
+          ctx.require(order.trader === trader, 'Unauthorized')
+          book.bids[orderIndex] = {
+            trader: '',
+            price: 0n,
+            quantity: 0n,
+            side: 0,
+            timestamp: 0n,
+          }
           book.totalBidVolume -= order.quantity
         } else {
+          ctx.require(orderIndex < book.askCount, 'InvalidPrice')
+          const order = book.asks[orderIndex]
+          ctx.require(order.trader === trader, 'Unauthorized')
+          book.asks[orderIndex] = {
+            trader: '',
+            price: 0n,
+            quantity: 0n,
+            side: 0,
+            timestamp: 0n,
+          }
           book.totalAskVolume -= order.quantity
         }
       },
@@ -353,5 +347,4 @@ export const orderbook = program({
         ctx.emit('OrderbookClosed', { market: book.market })
       },
     }),
-  },
-})
+}))

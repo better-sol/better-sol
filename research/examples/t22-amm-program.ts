@@ -11,11 +11,10 @@
 // ============================================================
 
 import {
-  program, account, ix, defineErrors, defineEvents,
+  program, account,
   u64, u8, bool, pubkey,
   p, token, sol,
 } from 'better-sol/program'
-
 
 // ══════════════════════════════════════════
 // ACCOUNTS
@@ -26,7 +25,7 @@ const Config = account({
   totalPools: u64,
   feeBps: u64,
   bump: u8,
-}).seeds('config')
+}).derive(() => ["config"])
 
 const Pool = account({
   tokenAMint: pubkey,
@@ -42,14 +41,20 @@ const Pool = account({
   totalVolumeA: u64,
   totalVolumeB: u64,
   bump: u8,
-}).seeds('pool', '{tokenAMint}', '{tokenBMint}')
-
+}).derive((seed) => ["pool", seed.tokenAMint, seed.tokenBMint])
 
 // ══════════════════════════════════════════
 // ERRORS & EVENTS
 // ══════════════════════════════════════════
 
-const errors = defineErrors({
+// ══════════════════════════════════════════
+// PROGRAM — Token-2022 AMM
+// ══════════════════════════════════════════
+
+export const t22Amm = program({
+  name: 't22_amm',
+  address: 'A2zYxr2XzXMqP1NNWRJHzUgtHpSQ9NPTDWN45UVn25Yv',
+  errors: {
   Unauthorized: 'Caller is not authorized',
   PoolInactive: 'Pool does not exist or is inactive',
   InvalidAmount: 'Amount must be greater than zero',
@@ -57,9 +62,8 @@ const errors = defineErrors({
   SlippageExceeded: 'Output amount below minimum (slippage)',
   InvalidMint: 'Token mint does not match pool',
   InvalidReserve: 'Reserve account does not match pool',
-})
-
-const events = defineEvents({
+},
+  events: {
   PoolCreated: {
     tokenA: pubkey,
     tokenB: pubkey,
@@ -84,24 +88,13 @@ const events = defineEvents({
   FeeUpdated: {
     newFeeBps: u64,
   },
-})
-
-
-// ══════════════════════════════════════════
-// PROGRAM — Token-2022 AMM
-// ══════════════════════════════════════════
-
-export const t22Amm = program({
-  name: 't22_amm',
-  address: 'T22AMM11111111111111111111111111111111111111',
-  errors,
-  events,
-  instructions: {
+},
+  }, ix => ({
 
     // ── 1. Initialize global config ──
     initializeConfig: ix({
       accounts: {
-        config: p.init(Config),
+        config: p.create(Config),
         admin: p.signer(),
       },
       run: ({ config, admin }) => {
@@ -115,7 +108,7 @@ export const t22Amm = program({
     createPool: ix({
       accounts: {
         config: p.mut(Config),
-        pool: p.init(Pool),
+        pool: p.create(Pool),
         tokenAMint: p.mint(),
         tokenBMint: p.mint(),
         lpMint: p.mint(),
@@ -401,5 +394,4 @@ export const t22Amm = program({
         ctx.log('Fee updated to {}bps', newFeeBps)
       },
     }),
-  },
-})
+}))

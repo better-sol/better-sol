@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "better-sol": ["../../packages/better-sol/src/index"],
+      "better-sol/program": ["../../packages/better-sol/src/program"]
+    }
+  },
+  "include": ["./*.ts"]
+}

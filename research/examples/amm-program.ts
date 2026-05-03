@@ -19,18 +19,17 @@
 // - 7 instructions that compose together
 //
 // Type safety (all compile-time checked):
-// - ctx.require(cond, 'ErrorName') — autocomplete from defineErrors()
-// - ctx.emit('EventName', { data }) — autocomplete names + validated shapes
+// - ctx.require(cond, 'ErrorName') — validated by transpiler
+// - ctx.emit('EventName', { data }) — validated by transpiler
 // - ctx.require(tokenAReserve.mint === pool.tokenAMint) — strongly-typed account fields
 // - seeds('{field}') — validated against account pubkey fields
 // ============================================================
 
 import {
-  program, account, ix, defineErrors, defineEvents,
+  program, account,
   u64, u8, bool, pubkey,
   p, token, sol,
 } from 'better-sol/program'
-
 
 // ══════════════════════════════════════════
 // ACCOUNTS — Like Zod schemas
@@ -41,7 +40,7 @@ const Config = account({
   totalPools: u64,
   feeBps: u64,
   bump: u8,
-}).seeds('config')
+}).derive(() => ["config"])
 
 const Pool = account({
   tokenAMint: pubkey,
@@ -57,30 +56,35 @@ const Pool = account({
   totalVolumeA: u64,
   totalVolumeB: u64,
   bump: u8,
-}).seeds('pool', '{tokenAMint}', '{tokenBMint}')
+}).derive((seed) => ["pool", seed.tokenAMint, seed.tokenBMint])
 //              ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^ compile-time checked pubkey fields
-
 
 // ══════════════════════════════════════════
 // ERRORS — Typed registry for ctx.require()
 // ══════════════════════════════════════════
-
-const errors = defineErrors({
-  Unauthorized: 'Caller is not authorized',
-  PoolDoesNotExist: 'Pool does not exist or is inactive',
-  InsufficientLiquidity: 'Not enough liquidity in the pool',
-  SlippageExceeded: 'Output amount below minimum (slippage)',
-  InvalidAmount: 'Amount must be greater than zero',
-  InvalidFeeBps: 'Fee must be between 0 and 1000 basis points',
-})
-
 
 // ══════════════════════════════════════════
 // EVENTS — Typed registry for ctx.emit()
 // Event names autocomplete, data shapes validated
 // ══════════════════════════════════════════
 
-const events = defineEvents({
+// ══════════════════════════════════════════
+// PROGRAM — Named params, ctx carries types
+// ══════════════════════════════════════════
+
+export const amm = program({
+  name: 'amm',
+  address: '2u8vhuKF7oRyRUuQ4d8v2ZqKBmtEYieufyb9vGsFLrQY',
+  accounts: { Config, Pool },
+  errors: {
+  Unauthorized: 'Caller is not authorized',
+  PoolDoesNotExist: 'Pool does not exist or is inactive',
+  InsufficientLiquidity: 'Not enough liquidity in the pool',
+  SlippageExceeded: 'Output amount below minimum (slippage)',
+  InvalidAmount: 'Amount must be greater than zero',
+  InvalidFeeBps: 'Fee must be between 0 and 1000 basis points',
+},
+  events: {
   PoolCreated: {
     tokenA: pubkey,
     tokenB: pubkey,
@@ -104,24 +108,13 @@ const events = defineEvents({
   FeeUpdated: {
     newFeeBps: u64,
   },
-})
-
-
-// ══════════════════════════════════════════
-// PROGRAM — Named params, ctx carries types
-// ══════════════════════════════════════════
-
-export const amm = program({
-  name: 'amm',
-  address: 'AMMxPooL11111111111111111111111111111111111',
-  errors,
-  events,
-  instructions: {
+},
+  }, ix => ({
 
     // ── 1. Initialize the global config ──
     initializeConfig: ix({
       accounts: {
-        config: p.init(Config),
+        config: p.create(Config),
         admin: p.signer(),
       },
       run: ({ config, admin }) => {
@@ -134,8 +127,8 @@ export const amm = program({
     // ── 2. Create a new trading pool ──
     createPool: ix({
       accounts: {
-        config: Config,
-        pool: p.init(Pool),
+        config: p.mut(Config),
+        pool: p.create(Pool),
         tokenAMint: p.mint(),
         tokenBMint: p.mint(),
         creator: p.signer(),
@@ -349,5 +342,4 @@ export const amm = program({
         ctx.log('Fee updated to {}bps', newFeeBps)
       },
     }),
-  },
-})
+}))

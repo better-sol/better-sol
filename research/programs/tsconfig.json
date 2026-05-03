@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "better-sol": ["packages/better-sol/src/index.ts"],
+      "better-sol/program": ["packages/better-sol/src/program.ts"]
+    }
+  },
+  "include": ["success/**/*.ts"]
+}
