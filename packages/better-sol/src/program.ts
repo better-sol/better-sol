@@ -130,6 +130,9 @@ function normalizePdaSeed(seed: string | PdaSeedField<string>): string {
   return typeof seed === "string" ? seed : `{${seed.name}}`;
 }
 
+type NormalizeSeed<T> = T extends PdaSeedField<infer K> ? `{${K}}` : T extends string ? T : never;
+type NormalizeSeeds<T extends readonly unknown[]> = { [I in keyof T]: NormalizeSeed<T[I]> };
+
 export class StructZCDefinition<TFields extends FieldSchema> implements TypeToken<InferFields<TFields>, "struct_zc_ref"> {
   public readonly kind = "struct_zc_ref";
   public declare readonly [typeValue]: InferFields<TFields>;
@@ -144,9 +147,9 @@ export class AccountDefinition<TFields extends FieldSchema, TZeroCopy extends bo
     public readonly zeroCopyEnabled: TZeroCopy,
   ) {}
 
-  public derive<const TNextSeeds extends readonly PdaSeedInput<TFields>[]>(buildSeeds: (seed: PdaSeedBuilder<TFields>) => TNextSeeds): AccountDefinition<TFields, TZeroCopy, readonly string[]> {
+  public derive<const TNextSeeds extends readonly PdaSeedInput<TFields>[]>(buildSeeds: (seed: PdaSeedBuilder<TFields>) => TNextSeeds): AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>> {
     const seedValues: readonly string[] = buildSeeds(createPdaSeedBuilder<TFields>()).map(normalizePdaSeed);
-    return new AccountDefinition(this.fields, seedValues, this.zeroCopyEnabled);
+    return new AccountDefinition(this.fields, seedValues, this.zeroCopyEnabled) as AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>>;
   }
 
   public zeroCopy(this: AccountDefinition<ZeroCopyFields<TFields>, TZeroCopy, TSeeds>): AccountDefinition<TFields, true, TSeeds> {

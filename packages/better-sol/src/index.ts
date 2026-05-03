@@ -1,4 +1,4 @@
-export { betterSol, secretKey, keypairFile, generateSigner, walletSigner } from "./client";
+export { betterSol, secretKey, keypairFile, generateSigner } from "./client";
 export type { BetterSolClient, BetterSolConfig, BoundAccount, Cluster, IxInstruction, IxTransaction, SolSigner, TokenClient } from "./client";
 
 export { fromIdl } from "./idl";

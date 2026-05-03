@@ -119,6 +119,70 @@ export function decodeAccount<TFields extends FieldSchema>(fields: TFields, data
   return result as InferFields<TFields>;
 }
 
+export function decodeZeroCopyAccount<TFields extends FieldSchema>(fields: TFields, data: Uint8Array): InferFields<TFields> {
+  const result = {} as Record<string, unknown>;
+  let offset = 0;
+  let maxAlign = 1;
+  for (const key of Object.keys(fields)) {
+    const token = fields[key as keyof TFields];
+    if (token === undefined) continue;
+    const layout = zeroCopyLayout(token);
+    const padding = (layout.align - (offset % layout.align)) % layout.align;
+    offset += padding;
+    const view = data.subarray(offset, offset + layout.size);
+    result[key] = decodeZeroCopyField(token, view);
+    offset += layout.size;
+    if (layout.align > maxAlign) maxAlign = layout.align;
+  }
+  return result as InferFields<TFields>;
+}
+
+function zeroCopyLayout(token: TypeToken<unknown, TypeKind>): { readonly size: number; readonly align: number } {
+  switch (token.kind) {
+    case "u8": case "i8": case "bool": return { size: 1, align: 1 };
+    case "u16": case "i16": return { size: 2, align: 2 };
+    case "u32": case "i32": case "f32": return { size: 4, align: 4 };
+    case "u64": case "i64": case "f64": return { size: 8, align: 8 };
+    case "u128": case "i128": return { size: 16, align: 16 };
+    case "pubkey": return { size: 32, align: 1 };
+    case "array": {
+      if (!hasInnerAndSize(token)) throw new Error("Array token missing inner/size");
+      const inner = zeroCopyLayout(token.inner);
+      return { size: inner.size * token.size, align: inner.align };
+    }
+    default: throw new Error(`Zero-copy decoding not supported for type: ${token.kind}`);
+  }
+}
+
+function decodeZeroCopyField(token: TypeToken<unknown, TypeKind>, data: Uint8Array): unknown {
+  switch (token.kind) {
+    case "u8": return data[0]!;
+    case "u16": return data[0]! | (data[1]! << 8);
+    case "u32": return decodeU32(data, 0);
+    case "u64": return decodeU64(data, 0);
+    case "u128": return decodeU128(data, 0);
+    case "i8": return data[0]! > 127 ? data[0]! - 256 : data[0]!;
+    case "i16": { const v = data[0]! | (data[1]! << 8); return v > 32767 ? v - 65536 : v; }
+    case "i32": { const v = decodeU32(data, 0); return v > 2147483647 ? v - 4294967296 : v; }
+    case "i64": return decodeI64(data, 0);
+    case "i128": return decodeI128(data, 0);
+    case "f32": return decodeF32(data, 0);
+    case "f64": return decodeF64(data, 0);
+    case "bool": return data[0]! !== 0;
+    case "pubkey": return getAddressDecoder().decode(data);
+    case "array": {
+      if (!hasInnerAndSize(token)) throw new Error("Array token missing inner/size");
+      const inner = zeroCopyLayout(token.inner);
+      const values: unknown[] = [];
+      for (let i = 0; i < token.size; i++) {
+        values.push(decodeZeroCopyField(token.inner, data.subarray(i * inner.size, (i + 1) * inner.size)));
+      }
+      return values;
+    }
+    default: throw new Error(`Zero-copy field decoding not supported for: ${token.kind}`);
+  }
+}
+
 export async function encodeInstruction<TArgs extends Record<string, TypeToken<unknown, TypeKind>>>(ixName: string, argTypes: TArgs, args: { [K in keyof TArgs]?: InferType<TArgs[K]> }): Promise<Uint8Array> {
   const disc = await anchorDiscriminator(ixName);
   const parts: Uint8Array[] = [disc];

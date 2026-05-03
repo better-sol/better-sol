@@ -22,12 +22,12 @@ import {
   u64,
   u8,
   vec as vecToken,
+  ProgramDefinition,
   type Address,
   type ArgsSchema,
   type FieldSchema,
   type TypeToken,
   type TypeKind,
-  type ProgramDefinition,
   type AccountInputs,
 } from "./program";
 
@@ -104,14 +104,14 @@ export type IdlProgram = ProgramDefinition<
 >;
 
 export function fromIdl(idl: AnchorIdl): IdlProgram {
-  return {
-    name: idl.name,
-    address: idl.metadata?.address ?? "",
-    errors: buildErrors(idl.errors),
-    events: {},
-    instructions: buildInstructions(idl.instructions),
-    accounts: buildAccounts(idl.accounts),
-  } as unknown as IdlProgram;
+  return new ProgramDefinition(
+    idl.name,
+    idl.metadata?.address ?? "",
+    buildErrors(idl.errors),
+    {},
+    buildInstructions(idl.instructions),
+    buildAccounts(idl.accounts),
+  ) as unknown as IdlProgram;
 }
 
 function buildErrors(errors: readonly IdlErrorDef[] | undefined): Record<string, string> {

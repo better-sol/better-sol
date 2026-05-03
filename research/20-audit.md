@@ -13,7 +13,7 @@ Compares the current implementation against research, identifies gaps, and track
 | Unsupported-pattern diagnostics | ✅ Complete | 18 failure fixtures with specific diagnostics |
 | CLI commands | ✅ Complete | `create`, `generate`, `deploy`, `verify` |
 | `cargo check` validation | ✅ Complete | 12 programs pass with zero warnings |
-| Client SDK (`betterSol()`) | ✅ Implemented | Async Kit-backed factory, typed instruction methods (sign+send, `.instruction()`, `.transaction()`), PDA derivation, account fetching with owner verification, Borsh codec, token helpers, transaction confirmation, `sol.send()`, `sol.steps()` |
+| Client SDK (`betterSol()`) | ✅ Implemented | Async Kit-backed factory, typed instruction methods (sign+send, `.instruction()`, `.transaction()`), PDA derivation, account fetching with owner verification and zero-copy support, Borsh codec, token helpers (Token + Token-2022), transaction confirmation with configurable retries, pre-flight simulation, configurable commitment, `sol.send()`, `sol.steps()`, `sol.destroy()` |
 | Scoped Kit signer (`sol.withSigner()`) | ✅ Implemented | Accepts Kit `TransactionSigner`; wallet adapter subpaths implemented for Wallet Adapter, Reown, Privy, Dynamic |
 | `fromIdl()` | ✅ Implemented | Consumes Anchor IDLs, produces a `ProgramDefinition`-compatible object |
 

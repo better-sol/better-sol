@@ -33,7 +33,8 @@ import {
   getTransferCheckedInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
-import { accountDiscriminator, anchorDiscriminator, decodeAccount, encodeField, encodeInstruction } from "./coder";
+const TOKEN_2022_PROGRAM_ADDRESS = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
+import { accountDiscriminator, anchorDiscriminator, decodeAccount, decodeZeroCopyAccount, encodeField, encodeInstruction } from "./coder";
 import {
   AccountConstraint,
   AccountDefinition,
@@ -71,6 +72,8 @@ const CLUSTER_WS_URLS: Record<Cluster, string> = {
 
 const CONFIRMATION_RETRIES = 30;
 const CONFIRMATION_INTERVAL_MS = 1000;
+const RPC_RETRIES = 3;
+const RPC_RETRY_DELAY_MS = 1000;
 
 type AnyProgram = ProgramDefinition<string, Address, ErrorMessages, EventSchema, Instructions, AccountDefs>;
 type ProgramInputs = Record<string, AnyProgram>;
@@ -97,16 +100,17 @@ export function generateSigner(): SolSigner {
   return { type: "generate" };
 }
 
-export function walletSigner(signer: TransactionSigner): TransactionSigner {
-  return signer;
-}
-
 export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, never>> = {
   readonly cluster?: Cluster;
   readonly rpcUrl?: string;
   readonly rpcSubscriptionsUrl?: string;
   readonly payer?: SolSigner;
   readonly programs?: TPrograms;
+  readonly commitment?: "processed" | "confirmed" | "finalized";
+  readonly confirmationRetries?: number;
+  readonly confirmationInterval?: number;
+  readonly rpcRetries?: number;
+  readonly simulate?: boolean;
 };
 
 type IxAccountDefs<TIx> = TIx extends InstructionDefinition<infer TAccounts, ArgsSchema | undefined> ? TAccounts : never;
@@ -179,7 +183,6 @@ type DeriveInput<TFields extends FieldSchema, TSeeds extends readonly string[]> 
 export interface BoundAccount<TFields extends FieldSchema, TSeeds extends readonly string[]> {
   derive(values: DeriveInput<TFields, TSeeds>): Promise<Address>;
   fetch(address: Address): Promise<InferFields<TFields> | null>;
-  readonly size: number;
 }
 
 type AccountNamespace<TDefs extends AccountDefs> = {
@@ -195,7 +198,7 @@ type ProgramClient<TProgram> = {
 
 export type TokenClient = {
   getATA(params: { readonly owner: Address; readonly mint: Address }): Promise<Address>;
-  createMint(params: { readonly decimals: number; readonly authority?: Address; readonly freezeAuthority?: Address | null }): Promise<{ readonly mint: Address; readonly signature: string }>;
+  createMint(params: { readonly decimals: number; readonly authority?: Address; readonly freezeAuthority?: Address | null }): Promise<{ readonly mint: Address; readonly mintSigner: TransactionSigner; readonly signature: string }>;
   mintTo(params: { readonly mint: Address; readonly destination: Address; readonly amount: bigint; readonly decimals?: number }): Promise<string>;
   transfer(params: { readonly mint: Address; readonly to: Address; readonly amount: bigint; readonly from?: Address; readonly decimals?: number }): Promise<string>;
   getBalance(params: { readonly owner: Address; readonly mint: Address }): Promise<bigint>;
@@ -206,6 +209,7 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   readonly rpc: KitRpc;
   readonly rpcSubscriptions: KitRpcSubscriptions;
   readonly token: TokenClient;
+  readonly token2022: TokenClient;
   withSigner(signer: SolSigner): Promise<BetterSolClient<TPrograms>>;
   send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string>;
   steps<T1>(steps: [() => Promise<T1>]): Promise<[T1]>;
@@ -213,7 +217,8 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   steps<T1, T2, T3>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>, (r1: T1, r2: T2) => Promise<T3>]): Promise<[T1, T2, T3]>;
   steps<T1, T2, T3, T4>(steps: [() => Promise<T1>, (r1: T1) => Promise<T2>, (r1: T1, r2: T2) => Promise<T3>, (r1: T1, r2: T2, r3: T3) => Promise<T4>]): Promise<[T1, T2, T3, T4]>;
   getBalance(address: Address): Promise<bigint>;
-  transfer(params: { readonly to: Address; readonly amount: bigint }): Promise<string>;
+  transfer(params: { readonly to: Address; readonly amount: bigint; readonly from?: Address }): Promise<string>;
+  destroy(): void;
 } & {
   [K in keyof TPrograms]: TPrograms[K] extends AnyProgram ? ProgramClient<TPrograms[K]> : never;
 };
@@ -224,6 +229,7 @@ class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readonly stri
     private readonly programAddress: Address,
     private readonly rpc: KitRpc,
     private readonly accountName: string,
+    private readonly commitment: "processed" | "confirmed" | "finalized",
   ) {}
 
   public async derive(values: DeriveInput<TFields, TSeeds>): Promise<Address> {
@@ -239,19 +245,15 @@ class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readonly stri
   }
 
   public async fetch(address: Address): Promise<InferFields<TFields> | null> {
-    const account = await fetchEncodedAccount(this.rpc, kitAddress(address));
+    const account = await fetchEncodedAccount(this.rpc, kitAddress(address), { commitment: this.commitment });
     if (!account.exists || account.data.length === 0) return null;
     if (account.programAddress !== kitAddress(this.programAddress)) return null;
     const disc = await accountDiscriminator(this.accountName);
     if (!account.data.subarray(0, 8).every((b, i) => b === disc[i])) return null;
-    return decodeAccount(this.definition.fields, new Uint8Array(account.data.subarray(8)));
-  }
-
-  public get size(): number {
-    return 8 + Object.values(this.definition.fields as Record<string, TypeToken<unknown, TypeKind>>).reduce(
-      (sum, token) => sum + borshSize(token),
-      0,
-    );
+    const data = new Uint8Array(account.data.subarray(8));
+    return this.definition.zeroCopyEnabled
+      ? decodeZeroCopyAccount(this.definition.fields, data)
+      : decodeAccount(this.definition.fields, data);
   }
 }
 
@@ -260,12 +262,19 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
 ): Promise<BetterSolClient<TPrograms>> {
   const cluster = config.cluster ?? "devnet";
   const rpcUrl = config.rpcUrl ?? CLUSTER_URLS[cluster];
-  const rpcSubscriptionsUrl = config.rpcSubscriptionsUrl ?? CLUSTER_WS_URLS[cluster] ?? rpcUrlToWsUrl(rpcUrl);
+  const rpcSubscriptionsUrl = config.rpcSubscriptionsUrl ?? (config.rpcUrl === undefined ? CLUSTER_WS_URLS[cluster] : undefined);
+  if (rpcSubscriptionsUrl === undefined) throw new Error("Custom RPC URL requires explicit rpcSubscriptionsUrl in betterSol config.");
+  const commitment = config.commitment ?? "confirmed";
+  const confirmationRetries = config.confirmationRetries ?? CONFIRMATION_RETRIES;
+  const confirmationInterval = config.confirmationInterval ?? CONFIRMATION_INTERVAL_MS;
+  const rpcRetries = config.rpcRetries ?? RPC_RETRIES;
+  const simulate = config.simulate ?? false;
   const rpc = createSolanaRpc(rpcUrl);
+  const abortController = new AbortController();
   const rpcSubscriptions = createSolanaRpcSubscriptions(rpcSubscriptionsUrl);
   const signer = await resolveSigner(config.payer);
   const programs = config.programs ?? {} as TPrograms;
-  return buildClient({ config, programs, rpc, rpcSubscriptions, signer });
+  return buildClient({ config, programs, rpc, rpcSubscriptions, signer, commitment, confirmationRetries, confirmationInterval, rpcRetries, abortController, simulate });
 }
 
 function buildClient<const TPrograms extends ProgramInputs>(params: {
@@ -274,33 +283,47 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
   readonly rpc: KitRpc;
   readonly rpcSubscriptions: KitRpcSubscriptions;
   readonly signer: TransactionSigner;
+  readonly commitment: "processed" | "confirmed" | "finalized";
+  readonly confirmationRetries: number;
+  readonly confirmationInterval: number;
+  readonly rpcRetries: number;
+  readonly abortController: AbortController;
+  readonly simulate: boolean;
 }): BetterSolClient<TPrograms> {
+  const sendFn = (tx: SignedTransaction): Promise<string> =>
+    sendAndConfirm(tx, params.rpc, params.commitment, params.confirmationRetries, params.confirmationInterval, params.rpcRetries, params.simulate);
   const client: Record<string, unknown> = {
     payer: params.signer.address,
     rpc: params.rpc,
     rpcSubscriptions: params.rpcSubscriptions,
-    token: buildTokenClient(params.rpc, params.rpcSubscriptions, params.signer),
+    token: buildTokenClient(params.rpc, params.rpcSubscriptions, params.signer, params.commitment, sendFn, params.rpcRetries, TOKEN_PROGRAM_ADDRESS),
+    token2022: buildTokenClient(params.rpc, params.rpcSubscriptions, params.signer, params.commitment, sendFn, params.rpcRetries, TOKEN_2022_PROGRAM_ADDRESS as Address),
     withSigner: async (signerInput: SolSigner): Promise<BetterSolClient<TPrograms>> => {
       const nextSigner = await resolveSigner(signerInput);
       return buildClient({ ...params, signer: nextSigner });
     },
     getBalance: async (addressValue: Address): Promise<bigint> => {
-      const { value } = await params.rpc.getBalance(kitAddress(addressValue)).send();
+      const { value } = await params.rpc.getBalance(kitAddress(addressValue), { commitment: params.commitment }).send();
       return value;
     },
-    transfer: async (transferParams: { readonly to: Address; readonly amount: bigint }): Promise<string> => {
+    transfer: async (transferParams: { readonly to: Address; readonly amount: bigint; readonly from?: Address }): Promise<string> => {
+      const sourceAddress = transferParams.from ?? params.signer.address;
+      if (kitAddress(sourceAddress) !== params.signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
       const ix = getTransferSolInstruction({
         source: params.signer,
         destination: kitAddress(transferParams.to),
         amount: transferParams.amount,
       });
-      const signedTx = await buildAndSignTransaction([ix], params.rpc, params.signer);
-      return await sendAndConfirm(signedTx, params.rpc);
+      const signedTx = await buildAndSignTransaction([ix], params.rpc, params.signer, params.commitment, params.rpcRetries);
+      return await sendFn(signedTx);
+    },
+    destroy: (): void => {
+      params.abortController.abort();
     },
     send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string> => {
       const resolved = await Promise.all(instructions);
-      const signedTx = await buildAndSignTransaction(resolved, params.rpc, params.signer);
-      return await sendAndConfirm(signedTx, params.rpc);
+      const signedTx = await buildAndSignTransaction(resolved, params.rpc, params.signer, params.commitment, params.rpcRetries);
+      return await sendFn(signedTx);
     },
     steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {
       const results: unknown[] = [];
@@ -317,6 +340,9 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
       programDef as AnyProgram,
       params.rpc,
       params.signer,
+      params.commitment,
+      sendFn,
+      params.rpcRetries,
     );
   }
 
@@ -327,6 +353,9 @@ function buildProgramClient(
   program: AnyProgram,
   rpc: KitRpc,
   signer: TransactionSigner,
+  commitment: "processed" | "confirmed" | "finalized",
+  sendFn: (tx: SignedTransaction) => Promise<string>,
+  rpcRetries: number,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { address: program.address };
 
@@ -337,8 +366,8 @@ function buildProgramClient(
 
     const sendAndConfirmFn = async (params: Record<string, unknown>): Promise<string> => {
       const ix = await buildInstruction(def, params, programId, snakeName, signer);
-      const signedTx = await buildAndSignTransaction([ix], rpc, signer);
-      return await sendAndConfirm(signedTx, rpc);
+      const signedTx = await buildAndSignTransaction([ix], rpc, signer, commitment, rpcRetries);
+      return await sendFn(signedTx);
     };
 
     const instructionFn = async (params: Record<string, unknown>): Promise<Instruction & InstructionWithSigners> => {
@@ -347,7 +376,7 @@ function buildProgramClient(
 
     const transactionFn = async (params: Record<string, unknown>): Promise<SignedTransaction> => {
       const ix = await buildInstruction(def, params, programId, snakeName, signer);
-      return await buildAndSignTransaction([ix], rpc, signer);
+      return await buildAndSignTransaction([ix], rpc, signer, commitment, rpcRetries);
     };
 
     const method = sendAndConfirmFn as unknown as Record<string, unknown>;
@@ -363,6 +392,7 @@ function buildProgramClient(
       program.address,
       rpc,
       accountName,
+      commitment,
     );
   }
   result["accounts"] = accountNamespace;
@@ -374,9 +404,17 @@ function buildTokenClient(
   rpc: KitRpc,
   rpcSubscriptions: KitRpcSubscriptions,
   signer: TransactionSigner,
+  commitment: "processed" | "confirmed" | "finalized",
+  sendFn: (tx: SignedTransaction) => Promise<string>,
+  rpcRetries: number,
+  tokenProgramAddress: Address,
 ): TokenClient {
+  const deriveAtaAddr = async (owner: Address, mint: Address): Promise<Address> => {
+    const [ata] = await findAssociatedTokenPda({ owner: kitAddress(owner), tokenProgram: kitAddress(tokenProgramAddress), mint: kitAddress(mint) });
+    return ata;
+  };
   return {
-    getATA: async (params) => await deriveAta(params.owner, params.mint),
+    getATA: async (params) => await deriveAtaAddr(params.owner, params.mint),
     createMint: async (params) => {
       const mint = await resolveSigner(generateSigner());
       const plan = getCreateMintInstructionPlan({
@@ -387,27 +425,27 @@ function buildTokenClient(
         freezeAuthority: params.freezeAuthority === undefined ? null : params.freezeAuthority === null ? null : kitAddress(params.freezeAuthority),
       });
       const instructions = flattenInstructionPlan(plan).flatMap((leaf) => leaf.kind === "single" ? [leaf.instruction] : []);
-      const signedTx = await buildAndSignTransaction(instructions, rpc, signer);
-      const sig = await sendAndConfirm(signedTx, rpc);
-      return { mint: mint.address, signature: sig };
+      const signedTx = await buildAndSignTransaction(instructions, rpc, signer, commitment, rpcRetries);
+      const sig = await sendFn(signedTx);
+      return { mint: mint.address, mintSigner: mint, signature: sig };
     },
     mintTo: async (params) => {
       const mint = kitAddress(params.mint);
       const owner = kitAddress(params.destination);
-      const ata = kitAddress(await deriveAta(params.destination, params.mint));
-      const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint);
+      const ata = kitAddress(await deriveAtaAddr(params.destination, params.mint));
+      const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
       const createAtaIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: signer, owner, mint });
-      const mintIx = getMintToCheckedInstruction({ mint, token: ata, mintAuthority: signer, amount: params.amount, decimals });
-      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, signer);
-      return await sendAndConfirm(signedTx, rpc);
+      const mintIx = getMintToCheckedInstruction({ mint, token: ata, mintAuthority: signer, amount: params.amount, decimals }, { programAddress: kitAddress(tokenProgramAddress) });
+      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, signer, commitment, rpcRetries);
+      return await sendFn(signedTx);
     },
     transfer: async (params) => {
       const mint = kitAddress(params.mint);
       const sourceOwner = params.from ?? signer.address;
       if (sourceOwner !== signer.address) throw new Error("Token transfer source must match the active signer. Use sol.withSigner() for another owner.");
-      const source = kitAddress(await deriveAta(sourceOwner, params.mint));
-      const destination = kitAddress(await deriveAta(params.to, params.mint));
-      const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint);
+      const source = kitAddress(await deriveAtaAddr(sourceOwner, params.mint));
+      const destination = kitAddress(await deriveAtaAddr(params.to, params.mint));
+      const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
       const createDestinationIx = await getCreateAssociatedTokenIdempotentInstructionAsync({
         payer: signer,
         owner: kitAddress(params.to),
@@ -420,13 +458,13 @@ function buildTokenClient(
         authority: signer,
         amount: params.amount,
         decimals,
-      });
-      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, signer);
-      return await sendAndConfirm(signedTx, rpc);
+      }, { programAddress: kitAddress(tokenProgramAddress) });
+      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, signer, commitment, rpcRetries);
+      return await sendFn(signedTx);
     },
     getBalance: async (params) => {
-      const ata = await deriveAta(params.owner, params.mint);
-      const tokenAccount = await fetchMaybeToken(rpc, kitAddress(ata));
+      const ata = await deriveAtaAddr(params.owner, params.mint);
+      const tokenAccount = await fetchMaybeToken(rpc, kitAddress(ata), { commitment });
       return tokenAccount.exists ? tokenAccount.data.amount : 0n;
     },
   };
@@ -448,8 +486,14 @@ async function buildAndSignTransaction(
   instructions: readonly Instruction[],
   rpc: KitRpc,
   signer: TransactionSigner,
+  commitment: "processed" | "confirmed" | "finalized",
+  rpcRetries: number,
 ): Promise<SignedTransaction> {
-  const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
+  const { value: latestBlockhash } = await withRetry(
+    () => rpc.getLatestBlockhash({ commitment }).send(),
+    rpcRetries,
+    RPC_RETRY_DELAY_MS,
+  );
   const message = appendTransactionMessageInstructions(
     instructions,
     setTransactionMessageLifetimeUsingBlockhash(
@@ -463,21 +507,46 @@ async function buildAndSignTransaction(
 async function sendAndConfirm(
   transaction: SignedTransaction,
   rpc: KitRpc,
+  commitment: "processed" | "confirmed" | "finalized",
+  confirmationRetries: number = CONFIRMATION_RETRIES,
+  confirmationInterval: number = CONFIRMATION_INTERVAL_MS,
+  rpcRetries: number = RPC_RETRIES,
+  simulate: boolean = false,
 ): Promise<string> {
   const signature = getSignatureFromTransaction(transaction);
-  await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
 
-  for (let attempt = 0; attempt < CONFIRMATION_RETRIES; attempt++) {
+  if (simulate) {
+    const simResult = await withRetry(
+      () => rpc.simulateTransaction(
+        getBase64EncodedWireTransaction(transaction),
+        { encoding: "base64", sigVerify: true, commitment },
+      ).send(),
+      rpcRetries,
+      RPC_RETRY_DELAY_MS,
+    );
+    if (simResult.value.err !== null && simResult.value.err !== undefined) {
+      const errStr = typeof simResult.value.err === "string" ? simResult.value.err : JSON.stringify(simResult.value.err);
+      const logs = simResult.value.logs?.join("\n") ?? "";
+      throw new Error(`Transaction simulation failed: ${errStr}\nLogs:\n${logs}`);
+    }
+  }
+  await withRetry(
+    () => rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send(),
+    rpcRetries,
+    RPC_RETRY_DELAY_MS,
+  );
+
+  for (let attempt = 0; attempt < confirmationRetries; attempt++) {
     // eslint-disable-next-line no-await-in-loop
-    const { value: statuses } = await rpc.getSignatureStatuses([signature]).send();
+    const { value: statuses } = await rpc.getSignatureStatuses([signature], { searchTransactionHistory: true }).send();
     const status = statuses[0];
     if (status !== null && status !== undefined && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
       return signature;
     }
     // eslint-disable-next-line no-await-in-loop
-    await new Promise((resolve) => setTimeout(resolve, CONFIRMATION_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, confirmationInterval));
   }
-  throw new Error(`Transaction ${signature} not confirmed within ${CONFIRMATION_RETRIES * CONFIRMATION_INTERVAL_MS}ms`);
+  throw new Error(`Transaction ${signature} not confirmed within ${confirmationRetries * confirmationInterval}ms`);
 }
 
 function buildAccountMetas(
@@ -559,12 +628,7 @@ async function buildInstructionData(
   return await encodeInstruction(snakeName, ixDef.args, params);
 }
 
-async function deriveAta(owner: Address, mint: Address): Promise<Address> {
-  const [ata] = await findAssociatedTokenPda({ owner: kitAddress(owner), tokenProgram: TOKEN_PROGRAM_ADDRESS, mint: kitAddress(mint) });
-  return ata;
-}
-
-async function fetchMintDecimals(rpc: KitRpc, mint: Address): Promise<number> {
+async function fetchMintDecimals(rpc: KitRpc, mint: Address, _tokenProgramAddress: Address): Promise<number> {
   const mintAccount = await fetchMaybeMint(rpc, kitAddress(mint));
   if (!mintAccount.exists) throw new Error(`Mint not found: ${mint}`);
   return mintAccount.data.decimals;
@@ -591,7 +655,7 @@ function encodeU64Seed(value: bigint): Uint8Array {
 }
 
 async function resolveSigner(signer: SolSigner | undefined): Promise<TransactionSigner> {
-  if (signer === undefined) return await createGeneratedSigner();
+  if (signer === undefined) throw new Error("No payer configured. Pass payer: keypairFile('./keypair.json') or payer: secretKey(bytes) to betterSol(). Or use payer: generateSigner() for a random keypair (not recommended for production).");
   if (isTransactionSignerInput(signer)) return signer;
   if (signer.type === "generate") return await createGeneratedSigner();
   if (signer.type === "secretKey") return await createKeyPairSignerFromBytes(signer.value, false);
@@ -630,26 +694,30 @@ function readSecretKeyBytes(value: unknown): Uint8Array {
   throw new Error("Invalid keypair file");
 }
 
-function rpcUrlToWsUrl(rpcUrl: string): string {
-  if (rpcUrl.startsWith("https://")) return `wss://${rpcUrl.slice("https://".length)}`;
-  if (rpcUrl.startsWith("http://")) return `ws://${rpcUrl.slice("http://".length)}`;
-  return rpcUrl;
-}
-
 function toSnake(name: string): string {
   return name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
 }
 
-function borshSize(token: TypeToken<unknown, TypeKind>): number {
-  switch (token.kind) {
-    case "u8": case "i8": case "bool": return 1;
-    case "u16": case "i16": return 2;
-    case "u32": case "i32": case "f32": return 4;
-    case "u64": case "i64": case "f64": return 8;
-    case "u128": case "i128": return 16;
-    case "pubkey": return 32;
-    case "string": case "bytes": return 64;
-    case "option": case "vec": case "array": return 64;
-    default: return 32;
+async function withRetry<T>(fn: () => Promise<T>, retries: number, delayMs: number): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries && isRetryableError(error)) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
+      } else {
+        throw lastError;
+      }
+    }
   }
+  throw lastError;
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "AbortError") return false;
+  return true;
 }

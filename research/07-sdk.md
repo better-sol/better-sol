@@ -2,7 +2,7 @@
 
 The client SDK. Programs as plugins, like Better Auth. Zero code generation.
 
-> **Implementation status (May 2026):** The client SDK is now implemented: async `betterSol()` factory, typed instruction methods, async PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()`, Kit-backed core operations (`getBalance`, `transfer`, `sol.token.*`), and Borsh encoding/decoding from TypeToken runtime objects. The `program()` function now accepts an optional `accounts` config to register account definitions for the client. Implemented now: Kit-backed `sol.withSigner()` for Kit `TransactionSigner`s, `sol.token.*`, `fromIdl()`, `.instruction()`, `.transaction()`, and confirmed transaction sending. Not yet implemented: none.
+> **Implementation status (May 2026):** The client SDK is fully implemented: async `betterSol()` factory, typed instruction methods, typed PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()` with zero-copy support, Kit-backed core operations (`getBalance`, `transfer`), Borsh encoding/decoding from TypeToken runtime objects, Token and Token-2022 client support (`sol.token.*`, `sol.token2022.*`), transaction confirmation with configurable retries, pre-flight simulation option, configurable commitment levels, `fromIdl()`, `.instruction()`, `.transaction()`, `sol.send()`, `sol.steps()`, `sol.withSigner()`, `sol.destroy()`, and wallet adapter subpaths.
 
 ---
 
@@ -52,7 +52,6 @@ const sol = await betterSol({
 const sender = sol.payer
 
 const signature = await sol.transfer({
-  from: sender,
   to: 'GdG9JHTSWBChvf6dfBATEYCZbDwKtcC6tJEpqoyuVfqV',
   amount: 10_000_000n,
 })
@@ -650,7 +649,7 @@ Use any test runner. No special setup — `bun test`, `vitest`, `node --test` al
 ## What `better-sol` Ships
 
 ```
-better-sol                    # async betterSol(), sol.transfer(), sol.token.*, sol.withSigner()
+better-sol                    # async betterSol(), sol.transfer(), sol.token.*, sol.token2022.*, sol.withSigner()
 better-sol/program            # program(), account(), callback-scoped ix, p, token (CPI), sol (sysvars)
 ```
 
@@ -946,7 +945,7 @@ const sol = await betterSol({
 
 // Core
 sol.getBalance(address)
-sol.transfer({ from, to, amount })
+sol.transfer({ to, amount })
 
 // Token (built-in)
 sol.token.createMint({ decimals, authority })
@@ -1138,7 +1137,7 @@ const sol = await betterSol({
 })
 
 await sol.token.createMint({ decimals: 9, authority: payer })
-await sol.token.transfer({ from, to, amount: 100n })
+await sol.token.transfer({ to: user, amount: 100n })
 ```
 
 ### The Key Insight: Programs ARE Plugins
@@ -1166,7 +1165,7 @@ const sol = await betterSol({
 
 // ── Core operations (always available) ──
 await sol.getBalance(address)
-await sol.transfer({ from, to, amount })
+await sol.transfer({ to, amount })
 await sol.execute(instruction)            // raw instruction execution
 
 // ── Program-specific operations (from programs config) ──
@@ -1181,7 +1180,7 @@ await sol.counter.accounts.Counter.derive({ authority: payer })  // → PDA addr
 // token program — built-in, same API shape
 await sol.token.createMint({ decimals: 9, authority: payer })
 await sol.token.mintTo({ mint, destination, amount })
-await sol.token.transfer({ mint, from, to, amount })
+await sol.token.transfer({ mint, to, amount })
 await sol.token.getBalance({ owner, mint })
 
 // ── Multi-step (composing programs together) ──
@@ -1357,7 +1356,7 @@ const sol = await betterSol({
 })
 
 // sol.token is always available — no registration needed
-await sol.token.transfer({ mint, from, to, amount })
+await sol.token.transfer({ mint, to, amount })
 ```
 
 ### Where Does the Program Address Come From?
