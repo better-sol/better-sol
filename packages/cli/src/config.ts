@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { access } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import type { CliConfig, Cluster } from "./types";
 
 const clusterValues: readonly Cluster[] = ["devnet", "testnet", "mainnet-beta", "localnet"];
@@ -22,10 +24,13 @@ export async function loadConfig(): Promise<CliConfig> {
   };
 
   const configPath = join(process.cwd(), "better-sol.config.ts");
-  const file = Bun.file(configPath);
-  if (!(await file.exists())) return defaults;
+  try {
+    await access(configPath);
+  } catch {
+    return defaults;
+  }
 
-  const module = await import(`${configPath}?t=${Date.now()}`) as unknown;
+  const module = await import(`${pathToFileURL(configPath)}?t=${Date.now()}`) as unknown;
   if (!isConfigModule(module)) return defaults;
 
   return {

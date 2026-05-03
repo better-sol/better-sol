@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts --outdir dist --target bun",
+    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts --outdir dist --target node",
     "check": "tsc --noEmit",
     "test": "bun test",
     "lint": "oxlint .",

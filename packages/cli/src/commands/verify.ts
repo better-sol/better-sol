@@ -1,5 +1,5 @@
 import { intro, log, outro, spinner } from "@clack/prompts";
-import { $ } from "bun";
+import { execSync } from "node:child_process";
 import type { VerifyOptions } from "../types";
 
 const OTTERSEC_API = "https://verify.osec.io";
@@ -104,9 +104,11 @@ async function submitToOtterSec(
 }
 
 async function gitRemote(): Promise<string> {
-  const result = await $`git config --get remote.origin.url`.quiet().nothrow();
-  const value = result.stdout.toString().trim();
-  if (result.exitCode !== 0 || value.length === 0) {
+  try {
+    const value = execSync("git config --get remote.origin.url", { encoding: "utf8", timeout: 5000 }).trim();
+    if (value.length === 0) throw new Error("empty remote");
+    return value;
+  } catch {
     throw new Error(
       "Could not determine git remote URL.\n" +
       "Prerequisites:\n" +
@@ -115,16 +117,14 @@ async function gitRemote(): Promise<string> {
       "  Run: git remote add origin <url>",
     );
   }
-  return value;
 }
 
 async function gitCommit(): Promise<string> {
-  const result = await $`git rev-parse HEAD`.quiet().nothrow();
-  const value = result.stdout.toString().trim();
-  if (result.exitCode !== 0 || value.length === 0) {
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8", timeout: 5000 }).trim();
+  } catch {
     throw new Error(
       "Could not determine current commit hash. Make sure you are in a Git repository with at least one commit.",
     );
   }
-  return value;
 }

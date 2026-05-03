@@ -29,11 +29,25 @@ The CLI uses `ts-morph` for AST parsing. It analyzes the syntax tree directly â€
 
 ## Installation
 
+No installation needed. Run directly with your preferred package runner:
+
 ```bash
-bun add -D @better-sol/cli
+# npm
+npx @better-sol/cli create counter
+npx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
+
+# Bun
+bunx @better-sol/cli create counter
+bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
 ```
 
-Prerequisites: [bun](https://bun.sh) runtime.
+For local development, install as a dev dependency:
+
+```bash
+npm install -D @better-sol/cli
+# or
+bun add -D @better-sol/cli
+```
 
 ---
 

@@ -1,6 +1,7 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { cancel, log } from "@clack/prompts";
 import { Command } from "commander";
+import { fileURLToPath } from "node:url";
 import { create } from "./commands/create";
 import { deploy } from "./commands/deploy";
 import { generateDb } from "./commands/generate";
@@ -61,7 +62,8 @@ cli
   .option("--mount-path <path>", "subdirectory in repo where Cargo.toml lives (defaults to generated/<name>)")
   .action((program: string | undefined, options: VerifyOptions) => run(() => verify(program, options)));
 
-if (import.meta.main) {
+
+if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
   cli.parse(process.argv);
 }
 

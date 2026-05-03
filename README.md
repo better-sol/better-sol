@@ -5,16 +5,16 @@
 Stop maintaining separate Anchor Rust programs and hand-written TypeScript clients. Write your Solana program once in TypeScript. Derive everything else from it.
 
 ```bash
-# Create a program
-bunx @better-sol/cli create counter
+# Create a program (no installation needed — runs via npx/bunx)
+npx @better-sol/cli create counter
 
 # Edit programs/counter.ts with your logic
 
 # Generate Rust + deploy to devnet
-bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
+npx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
 
 # Use the typed SDK client-side
-bun add better-sol
+npm install better-sol
 ```
 
 ---
