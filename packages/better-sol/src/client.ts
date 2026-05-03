@@ -69,8 +69,13 @@ const CLUSTER_WS_URLS: Record<Cluster, string> = {
   localnet: "ws://127.0.0.1:8900",
 };
 
+const CONFIRMATION_RETRIES = 30;
+const CONFIRMATION_INTERVAL_MS = 1000;
+
 type AnyProgram = ProgramDefinition<string, Address, ErrorMessages, EventSchema, Instructions, AccountDefs>;
 type ProgramInputs = Record<string, AnyProgram>;
+type SignedTransaction = Awaited<ReturnType<typeof signTransactionMessageWithSigners>>;
+
 type KitRpc = ReturnType<typeof createSolanaRpc>;
 type KitRpcSubscriptions = ReturnType<typeof createSolanaRpcSubscriptions>;
 
@@ -104,19 +109,46 @@ export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, nev
   readonly programs?: TPrograms;
 };
 
-type IxAccountKeys<T> = T extends InstructionDefinition<infer TAccounts, ArgsSchema | undefined> ? keyof TAccounts & string : never;
-type IxArgKeys<T> = T extends InstructionDefinition<AccountInputs, infer TArgs> ? TArgs extends ArgsSchema ? keyof TArgs & string : never : never;
-type IxArgTypes<T> = T extends InstructionDefinition<AccountInputs, infer TArgs> ? TArgs extends ArgsSchema ? { [K in keyof TArgs]: InferType<TArgs[K]> } : {} : {};
+type IxAccountDefs<TIx> = TIx extends InstructionDefinition<infer TAccounts, ArgsSchema | undefined> ? TAccounts : never;
 
-type InstructionParams<
-  TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>,
-  TKeys extends string = IxAccountKeys<TIx>,
-  TArgKeys extends string = IxArgKeys<TIx>,
-  TArgValues = IxArgTypes<TIx>,
-> = { [K in TKeys]: Address } & { [K in TArgKeys]: K extends keyof TArgValues ? TArgValues[K] : never };
+type IxArgKeys<TIx> = TIx extends InstructionDefinition<AccountInputs, infer TArgs>
+  ? TArgs extends ArgsSchema ? keyof TArgs & string : never
+  : never;
+
+type IxArgTypes<TIx> = TIx extends InstructionDefinition<AccountInputs, infer TArgs>
+  ? TArgs extends ArgsSchema ? { [K in keyof TArgs]: InferType<TArgs[K]> } : {}
+  : {};
+
+type IxRequiredAccountKeys<TIx> = {
+  [K in keyof IxAccountDefs<TIx> & string]:
+    IxAccountDefs<TIx>[K] extends AccountConstraint<unknown, "signer", boolean> ? never : K;
+}[keyof IxAccountDefs<TIx> & string];
+
+type IxOptionalAccountKeys<TIx> = {
+  [K in keyof IxAccountDefs<TIx> & string]:
+    IxAccountDefs<TIx>[K] extends AccountConstraint<unknown, "signer", boolean> ? K : never;
+}[keyof IxAccountDefs<TIx> & string];
+
+type InstructionParams<TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>> = {
+  [K in IxRequiredAccountKeys<TIx>]: Address;
+} & {
+  [K in IxOptionalAccountKeys<TIx>]?: Address;
+} & {
+  [K in IxArgKeys<TIx>]: K extends keyof IxArgTypes<TIx> ? IxArgTypes<TIx>[K] : never;
+};
+
+export type IxInstruction<_TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>> =
+  Instruction & InstructionWithSigners;
+
+export type IxTransaction<_TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>> =
+  SignedTransaction;
 
 type InstructionMethod<TIx> = TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>
-  ? (params: InstructionParams<TIx>) => Promise<string>
+  ? {
+      (params: InstructionParams<TIx>): Promise<string>;
+      instruction(params: InstructionParams<TIx>): Promise<IxInstruction<TIx>>;
+      transaction(params: InstructionParams<TIx>): Promise<IxTransaction<TIx>>;
+    }
   : never;
 
 type ExtractInstructions<T> = T extends ProgramDefinition<string, Address, ErrorMessages, EventSchema, infer TInstructions, AccountDefs> ? TInstructions : never;
@@ -204,6 +236,7 @@ class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readonly stri
   public async fetch(address: Address): Promise<InferFields<TFields> | null> {
     const account = await fetchEncodedAccount(this.rpc, kitAddress(address));
     if (!account.exists || account.data.length === 0) return null;
+    if (account.programAddress !== kitAddress(this.programAddress)) return null;
     const disc = await accountDiscriminator(this.accountName);
     if (!account.data.subarray(0, 8).every((b, i) => b === disc[i])) return null;
     return decodeAccount(this.definition.fields, new Uint8Array(account.data.subarray(8)));
@@ -256,30 +289,53 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
         destination: kitAddress(transferParams.to),
         amount: transferParams.amount,
       });
-      return await sendInstructions([ix], params.rpc, params.rpcSubscriptions, params.signer);
+      const signedTx = await buildAndSignTransaction([ix], params.rpc, params.signer);
+      return await sendAndConfirm(signedTx, params.rpc);
     },
   };
 
   for (const [programName, programDef] of Object.entries(params.programs)) {
-    client[programName] = buildProgramClient(programDef as AnyProgram, params.rpc, params.rpcSubscriptions, params.signer);
+    client[programName] = buildProgramClient(
+      programDef as AnyProgram,
+      params.rpc,
+      params.signer,
+    );
   }
 
   return client as unknown as BetterSolClient<TPrograms>;
 }
 
-function buildProgramClient(program: AnyProgram, rpc: KitRpc, rpcSubscriptions: KitRpcSubscriptions, signer: TransactionSigner): Record<string, unknown> {
+function buildProgramClient(
+  program: AnyProgram,
+  rpc: KitRpc,
+  signer: TransactionSigner,
+): Record<string, unknown> {
   const result: Record<string, unknown> = { address: program.address };
 
   for (const [ixName, ixDef] of Object.entries(program.instructions)) {
     const def = ixDef as InstructionDefinition<AccountInputs, ArgsSchema | undefined>;
     const snakeName = toSnake(ixName);
+    const programId = program.address;
 
-    result[ixName] = async (params: Record<string, unknown>): Promise<string> => {
-      const accounts = buildAccountMetas(def, params, signer);
-      const data = await buildInstructionData(snakeName, def, params);
-      const ix: Instruction & InstructionWithSigners = { programAddress: kitAddress(program.address), accounts, data };
-      return await sendInstructions([ix], rpc, rpcSubscriptions, signer);
+    const sendAndConfirmFn = async (params: Record<string, unknown>): Promise<string> => {
+      const ix = await buildInstruction(def, params, programId, snakeName, signer);
+      const signedTx = await buildAndSignTransaction([ix], rpc, signer);
+      return await sendAndConfirm(signedTx, rpc);
     };
+
+    const instructionFn = async (params: Record<string, unknown>): Promise<Instruction & InstructionWithSigners> => {
+      return await buildInstruction(def, params, programId, snakeName, signer);
+    };
+
+    const transactionFn = async (params: Record<string, unknown>): Promise<SignedTransaction> => {
+      const ix = await buildInstruction(def, params, programId, snakeName, signer);
+      return await buildAndSignTransaction([ix], rpc, signer);
+    };
+
+    const method = sendAndConfirmFn as unknown as Record<string, unknown>;
+    method.instruction = instructionFn;
+    method.transaction = transactionFn;
+    result[ixName] = method;
   }
 
   const accountNamespace: Record<string, unknown> = {};
@@ -296,7 +352,11 @@ function buildProgramClient(program: AnyProgram, rpc: KitRpc, rpcSubscriptions: 
   return result;
 }
 
-function buildTokenClient(rpc: KitRpc, rpcSubscriptions: KitRpcSubscriptions, signer: TransactionSigner): TokenClient {
+function buildTokenClient(
+  rpc: KitRpc,
+  rpcSubscriptions: KitRpcSubscriptions,
+  signer: TransactionSigner,
+): TokenClient {
   return {
     getATA: async (params) => await deriveAta(params.owner, params.mint),
     createMint: async (params) => {
@@ -309,8 +369,9 @@ function buildTokenClient(rpc: KitRpc, rpcSubscriptions: KitRpcSubscriptions, si
         freezeAuthority: params.freezeAuthority === undefined ? null : params.freezeAuthority === null ? null : kitAddress(params.freezeAuthority),
       });
       const instructions = flattenInstructionPlan(plan).flatMap((leaf) => leaf.kind === "single" ? [leaf.instruction] : []);
-      const signature = await sendInstructions(instructions, rpc, rpcSubscriptions, signer);
-      return { mint: mint.address, signature };
+      const signedTx = await buildAndSignTransaction(instructions, rpc, signer);
+      const sig = await sendAndConfirm(signedTx, rpc);
+      return { mint: mint.address, signature: sig };
     },
     mintTo: async (params) => {
       const mint = kitAddress(params.mint);
@@ -318,14 +379,9 @@ function buildTokenClient(rpc: KitRpc, rpcSubscriptions: KitRpcSubscriptions, si
       const ata = kitAddress(await deriveAta(params.destination, params.mint));
       const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint);
       const createAtaIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: signer, owner, mint });
-      const mintIx = getMintToCheckedInstruction({
-        mint,
-        token: ata,
-        mintAuthority: signer,
-        amount: params.amount,
-        decimals,
-      });
-      return await sendInstructions([createAtaIx, mintIx], rpc, rpcSubscriptions, signer);
+      const mintIx = getMintToCheckedInstruction({ mint, token: ata, mintAuthority: signer, amount: params.amount, decimals });
+      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, signer);
+      return await sendAndConfirm(signedTx, rpc);
     },
     transfer: async (params) => {
       const mint = kitAddress(params.mint);
@@ -347,7 +403,8 @@ function buildTokenClient(rpc: KitRpc, rpcSubscriptions: KitRpcSubscriptions, si
         amount: params.amount,
         decimals,
       });
-      return await sendInstructions([createDestinationIx, transferIx], rpc, rpcSubscriptions, signer);
+      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, signer);
+      return await sendAndConfirm(signedTx, rpc);
     },
     getBalance: async (params) => {
       const ata = await deriveAta(params.owner, params.mint);
@@ -357,6 +414,54 @@ function buildTokenClient(rpc: KitRpc, rpcSubscriptions: KitRpcSubscriptions, si
   };
 }
 
+async function buildInstruction(
+  ixDef: InstructionDefinition<AccountInputs, ArgsSchema | undefined>,
+  params: Record<string, unknown>,
+  programId: string,
+  snakeName: string,
+  signer: TransactionSigner,
+): Promise<Instruction & InstructionWithSigners> {
+  const accounts = buildAccountMetas(ixDef, params, signer);
+  const data = await buildInstructionData(snakeName, ixDef, params);
+  return { programAddress: kitAddress(programId), accounts, data };
+}
+
+async function buildAndSignTransaction(
+  instructions: readonly Instruction[],
+  rpc: KitRpc,
+  signer: TransactionSigner,
+): Promise<SignedTransaction> {
+  const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
+  const message = appendTransactionMessageInstructions(
+    instructions,
+    setTransactionMessageLifetimeUsingBlockhash(
+      latestBlockhash,
+      setTransactionMessageFeePayerSigner(signer, createTransactionMessage({ version: 0 })),
+    ),
+  );
+  return await signTransactionMessageWithSigners(message);
+}
+
+async function sendAndConfirm(
+  transaction: SignedTransaction,
+  rpc: KitRpc,
+): Promise<string> {
+  const signature = getSignatureFromTransaction(transaction);
+  await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
+
+  for (let attempt = 0; attempt < CONFIRMATION_RETRIES; attempt++) {
+    // eslint-disable-next-line no-await-in-loop
+    const { value: statuses } = await rpc.getSignatureStatuses([signature]).send();
+    const status = statuses[0];
+    if (status !== null && status !== undefined && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
+      return signature;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, CONFIRMATION_INTERVAL_MS));
+  }
+  throw new Error(`Transaction ${signature} not confirmed within ${CONFIRMATION_RETRIES * CONFIRMATION_INTERVAL_MS}ms`);
+}
+
 function buildAccountMetas(
   ixDef: InstructionDefinition<AccountInputs, ArgsSchema | undefined>,
   params: Record<string, unknown>,
@@ -364,6 +469,17 @@ function buildAccountMetas(
 ): readonly (AccountMeta | AccountSignerMeta)[] {
   const accountMetas: (AccountMeta | AccountSignerMeta)[] = [];
   const argKeys = ixDef.args !== undefined ? new Set(Object.keys(ixDef.args)) : new Set<string>();
+
+  let omittedSignerCount = 0;
+  for (const [name, input] of Object.entries(ixDef.accounts)) {
+    if (argKeys.has(name)) continue;
+    if (input instanceof AccountConstraint && input.constraintKind === "signer" && params[name] === undefined) {
+      omittedSignerCount++;
+    }
+  }
+  if (omittedSignerCount > 1) {
+    throw new Error("Multiple signer accounts omitted. Pass explicit addresses for all but one signer, or use sol.withSigner() for a different signer.");
+  }
 
   for (const [name, input] of Object.entries(ixDef.accounts)) {
     if (argKeys.has(name)) continue;
@@ -382,7 +498,7 @@ function buildAccountMetas(
         accountAddress = signer.address;
       } else if (typeof paramAddr === "string") {
         accountAddress = kitAddress(paramAddr);
-        if (isSigner && accountAddress !== signer.address) throw new Error(`Signer account '${name}' must match the active signer. Use sol.withSigner() for another signer.`);
+        if (isSigner && accountAddress !== signer.address) throw new Error(`Signer '${name}' must match the active signer. Use sol.withSigner() for another signer.`);
       } else if (kind === "systemProgram") {
         accountAddress = SYSTEM_PROGRAM_ADDRESS;
       } else {
@@ -423,26 +539,6 @@ async function buildInstructionData(
 ): Promise<Uint8Array> {
   if (ixDef.args === undefined || Object.keys(ixDef.args).length === 0) return await anchorDiscriminator(snakeName);
   return await encodeInstruction(snakeName, ixDef.args, params);
-}
-
-async function sendInstructions(
-  instructions: readonly Instruction[],
-  rpc: KitRpc,
-  _rpcSubscriptions: KitRpcSubscriptions,
-  signer: TransactionSigner,
-): Promise<string> {
-  const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
-  const message = appendTransactionMessageInstructions(
-    instructions,
-    setTransactionMessageLifetimeUsingBlockhash(
-      latestBlockhash,
-      setTransactionMessageFeePayerSigner(signer, createTransactionMessage({ version: 0 })),
-    ),
-  );
-  const transaction = await signTransactionMessageWithSigners(message);
-  const signature = getSignatureFromTransaction(transaction);
-  await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
-  return signature;
 }
 
 async function deriveAta(owner: Address, mint: Address): Promise<Address> {
