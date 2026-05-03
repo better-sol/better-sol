@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@font-face {
+  font-family: "Satoshi";
+  src:
+    url("./assets/fonts/Satoshi-Variable.woff2") format("woff2"),
+    url("./assets/fonts/Satoshi-Variable.woff") format("woff");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Gambarino";
+  src:
+    url("./assets/fonts/Gambarino-Regular.woff2") format("woff2"),
+    url("./assets/fonts/Gambarino-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Satoshi", system-ui, sans-serif;
+  --font-serif: "Gambarino", "Satoshi", system-ui, sans-serif;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-serif -tracking-wide;
+  }
+
+  p,
+  input,
+  textarea,
+  select,
+  button {
+    @apply -tracking-wider;
+  }
+}
+
+@layer components {
+  .inner {
+    @apply mx-auto w-9/10 max-w-300;
+  }
+}
