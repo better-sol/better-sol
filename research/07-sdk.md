@@ -203,28 +203,25 @@ import { dynamicWallet } from 'better-sol/wallets/dynamic'
 
 These are **not wallet libraries**. They are 20-50 line shape adapters that convert each library's real API into better-sol's internal signer format. Each subpath has that wallet library as an optional peer dependency, so core `better-sol` stays wallet-free.
 
-The generic fallback still exists:
+The generic pass-through still exists for callers who already have a Kit-compatible signer:
 
 ```typescript
 import { walletSigner } from 'better-sol'
 
-const wallet = walletSigner({
-  publicKey: address,
-  signTransaction: (tx) => provider.signTransaction(tx),
-})
+const userSol = await sol.withSigner(walletSigner(myKitSigner))
+// walletSigner is a no-op convenience — it returns the Kit TransactionSigner unchanged
 ```
 
-But for popular libraries, first-class adapters make the DX better.
+For wallets that expose a generic `{ publicKey, signTransaction }` interface (Phantom, Backpack, Solflare, or any wallet not covered by a dedicated adapter), use `walletAdapter()` from `better-sol/wallets/wallet-adapter` — it accepts the same shape.
 
 ---
 
 ### Reown AppKit — React
 
-Real Reown Solana usage exposes:
-- `useAppKitAccount()` → `{ address, isConnected }`
+Real Reown Solana usage (verified against `@reown/appkit`):
+- `useAppKitAccount()` → `{ address: string, isConnected: boolean }`
 - `useAppKitProvider<Provider>('solana')` → `{ walletProvider }`
-- `walletProvider.signTransaction(transaction)`
-- `walletProvider.sendTransaction(transaction, connection)`
+- `walletProvider.signTransaction<T extends AnyTransaction>(tx: T): Promise<T>` where `AnyTransaction = Transaction | VersionedTransaction`
 
 ```tsx
 // lib/sol.ts
@@ -239,7 +236,7 @@ export const sol = await betterSol({ cluster: 'mainnet-beta', programs: { counte
 import { sol } from './lib/sol'
 import { reownWallet } from 'better-sol/wallets/reown'
 import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react'
-import type { Provider } from '@reown/appkit-adapter-solana/react'
+import type { Provider } from '@reown/appkit-adapter-solana'
 
 export function CounterButton({ counterAddr }: { counterAddr: string }) {
   const { open } = useAppKit()
@@ -259,10 +256,6 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
   return <button onClick={handleIncrement}>Increment</button>
 }
 ```
-
-No `useEffect`. No global connect/disconnect. The wallet is scoped to the click handler.
-
-**Compatibility:** Reown support should be implemented as a small adapter that converts the provider shape into a Kit `TransactionSigner`. The core SDK remains Kit-only; legacy transaction objects should not leak into the public better-sol API.
 
 ---
 
@@ -303,15 +296,15 @@ This follows the actual Solana Wallet Adapter pattern: provider at app root, `us
 
 ### Privy — React Solana
 
-Real Privy Solana usage exposes:
-- `useWallets()` from `@privy-io/react-auth/solana`
-- `useSignTransaction()` or `useSignAndSendTransaction()`
-- `signTransaction({ transaction, wallet })`
+Real Privy Solana usage (verified against `@privy-io/react-auth@3.23.1`):
+- `useWallets()` → `{ wallets: ConnectedStandardSolanaWallet[] }`
+- `useSignTransaction()` → `{ signTransaction({ transaction: Uint8Array, wallet }): Promise<{ signedTransaction: Uint8Array }> }`
+- `useSignAndSendTransaction()` → sends and signs in one call
 
 ```tsx
 import { sol } from './lib/sol'
 import { privyWallet } from 'better-sol/wallets/privy'
-import { useWallets, useSignTransaction } from '@privy-io/react-auth/solana'
+import { useWallets, useSignTransaction } from '@privy-io/react-auth'
 
 export function CounterButton({ counterAddr }: { counterAddr: string }) {
   const { wallets } = useWallets()
@@ -329,7 +322,7 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
 }
 ```
 
-Privy is especially compatible because its Solana docs already show signing `@solana/kit`-encoded `Uint8Array` transactions. The adapter can stay very small.
+Privy accepts raw `Uint8Array` transaction bytes and returns `{ signedTransaction: Uint8Array }`. The adapter handles deserialization internally — no web3.js needed at the call site.
 
 ---
 
@@ -367,19 +360,25 @@ Dynamic is compatible, but its signer is async (`primaryWallet.getSigner()`), so
 
 ### Direct Phantom Provider
 
+For wallets that implement the standard `signTransaction` interface (Phantom, Backpack, Solflare):
+
 ```typescript
 import { sol } from './lib/sol'
-import { walletSigner } from 'better-sol'
+import { walletAdapter } from 'better-sol/wallets/wallet-adapter'
 
 const provider = window.phantom?.solana
+if (!provider) throw new Error('Phantom not installed')
 await provider.connect()
 
-const userSol = await sol.withSigner(walletSigner({
-  publicKey: provider.publicKey.toString(),
+const userSol = await sol.withSigner(walletAdapter({
+  publicKey: provider.publicKey,
   signTransaction: (tx) => provider.signTransaction(tx),
 }))
 
 await userSol.counter.increment({ counter: addr, amount: 1n })
+```
+
+The `walletAdapter()` function accepts any object with `{ publicKey: { toBase58() }, signTransaction }` — matching Wallet Adapter, Phantom, Backpack, and Solflare directly.
 ```
 
 ---
