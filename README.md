@@ -10,8 +10,11 @@ npx @better-sol/cli create counter
 
 # Edit programs/counter.ts with your logic
 
-# Generate Rust + deploy to devnet
-npx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
+# Generate Rust for local review
+npx @better-sol/cli deploy --dry-run
+
+# Compile and deploy to devnet
+npx @better-sol/cli deploy --api-key <key>
 
 # Use the typed SDK client-side
 npm install better-sol

@@ -6,10 +6,13 @@ Parse your `better-sol/program` TypeScript definitions and generate clean, warni
 
 ```bash
 # Create a new program
-bunx @better-sol/cli create counter
+npx @better-sol/cli create counter
 
-# Generate Rust + deploy to devnet
-bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
+# Generate Rust locally (dry run)
+npx @better-sol/cli deploy --dry-run
+
+# Compile and deploy (src defaults to programs/**/*.ts, cluster defaults to devnet)
+npx @better-sol/cli deploy --api-key <key>
 ```
 
 ---
@@ -77,7 +80,17 @@ bunx @better-sol/cli create counter --force
 ### `deploy` — Generate Rust, compile, and deploy
 
 ```bash
-bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
+# Dry run — generate Rust for local review (no compile)
+npx @better-sol/cli deploy --dry-run
+
+# Compile + deploy (src defaults to programs/**/*.ts, cluster defaults to devnet)
+npx @better-sol/cli deploy --api-key <key>
+
+# Target a specific program
+npx @better-sol/cli deploy --program counter
+
+# Custom source glob and cluster
+npx @better-sol/cli deploy --src "src/programs/*.ts" --cluster mainnet-beta
 ```
 
 The deploy command:
@@ -91,7 +104,6 @@ The deploy command:
 | `--src` | (from config) | Glob pattern for program sources |
 | `--program` | all | Target a specific program by name |
 | `--cluster` | devnet | `devnet`, `testnet`, `mainnet-beta`, `localnet` |
-| `--keypair` | (from config) | Payer keypair path |
 | `--output` | `generated/` | Directory for generated Rust files |
 | `--dry-run` | `false` | Generate Rust only — no compile or deploy |
 | `--verify` | `false` | Write Rust files for verified builds |
@@ -158,7 +170,7 @@ The config file is optional — all options can be passed as CLI flags or enviro
 2. Edit programs/<name>.ts
    └── define accounts, instructions, constraints, errors, events
 
-3. bunx @better-sol/cli deploy --src "programs/*.ts"
+3. bunx @better-sol/cli deploy --dry-run  # or just npx @better-sol/cli deploy --api-key <key>
    └── parses AST → generates Rust → compiles → deploys
 
 4. Use better-sol SDK client-side

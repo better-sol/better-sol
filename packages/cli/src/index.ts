@@ -33,7 +33,6 @@ cli
   .option("--src <glob>", "program source glob")
   .option("--program <name>", "target a specific program by name")
   .option("--cluster <cluster>", "devnet, testnet, mainnet-beta, or localnet")
-  .option("--keypair <path>", "payer keypair path")
   .option("--verify", "write generated Rust for verified builds", false)
   .option("--dry-run", "generate and validate without compiling or deploying", false)
   .option("--output <dir>", "generated Rust output directory")

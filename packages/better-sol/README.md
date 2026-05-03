@@ -14,8 +14,12 @@ npx @better-sol/cli create counter
 
 # Edit programs/counter.ts with your logic
 
-# Generate Rust + compile + deploy
-npx @better-sol/cli deploy --cluster devnet --keypair ./keypair.json
+# Generate Rust locally (dry run — no compile)
+npx @better-sol/cli deploy --dry-run
+# → generated/counter/src/lib.rs + Cargo.toml + idl.json
+
+# Compile and deploy to devnet
+npx @better-sol/cli deploy --api-key <key>
 ```
 
 ---

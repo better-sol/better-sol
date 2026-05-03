@@ -11,7 +11,6 @@ export type DeployOptions = {
   readonly src: string | undefined;
   readonly program: string | undefined;
   readonly cluster: Cluster | undefined;
-  readonly keypair: string | undefined;
   readonly verify: boolean;
   readonly dryRun: boolean;
   readonly output: string | undefined;
