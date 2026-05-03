@@ -19,7 +19,6 @@ export async function loadConfig(): Promise<CliConfig> {
   const defaults: CliConfig = {
     programs: "programs/**/*.ts",
     cluster: "devnet",
-    keypair: null,
     out: "generated",
   };
 
@@ -36,7 +35,6 @@ export async function loadConfig(): Promise<CliConfig> {
   return {
     programs: typeof module.default.programs === "string" ? module.default.programs : defaults.programs,
     cluster: isClusterValue(module.default.cluster) ? module.default.cluster : defaults.cluster,
-    keypair: typeof module.default.keypair === "string" ? module.default.keypair : defaults.keypair,
     out: typeof module.default.out === "string" ? module.default.out : defaults.out,
   };
 }
@@ -45,7 +43,6 @@ type ConfigModule = {
   readonly default: Partial<{
     readonly programs: string;
     readonly cluster: Cluster;
-    readonly keypair: string;
     readonly out: string;
   }>;
 };

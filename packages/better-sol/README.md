@@ -18,8 +18,11 @@ npx @better-sol/cli create counter
 npx @better-sol/cli deploy --dry-run
 # → generated/counter/src/lib.rs + Cargo.toml + idl.json
 
-# Compile and deploy to devnet
-npx @better-sol/cli deploy --api-key <key>
+# Save your API key (one time)
+npx @better-sol/cli login
+
+# Compile and deploy
+npx @better-sol/cli deploy
 ```
 
 ---

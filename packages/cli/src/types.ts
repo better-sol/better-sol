@@ -3,7 +3,6 @@ export type Cluster = "devnet" | "testnet" | "mainnet-beta" | "localnet";
 export type CliConfig = {
   readonly programs: string;
   readonly cluster: Cluster;
-  readonly keypair: string | null;
   readonly out: string;
 };
 
@@ -14,8 +13,6 @@ export type DeployOptions = {
   readonly verify: boolean;
   readonly dryRun: boolean;
   readonly output: string | undefined;
-  readonly compilerUrl: string | undefined;
-  readonly apiKey: string | undefined;
 };
 
 export type CreateOptions = {
@@ -30,9 +27,7 @@ export type VerifyOptions = {
 };
 
 export type GenerateDbOptions = {
-  readonly orm: string | undefined;
   readonly dialect: string | undefined;
   readonly out: string | undefined;
   readonly src: string | undefined;
-  readonly merge: boolean;
 };

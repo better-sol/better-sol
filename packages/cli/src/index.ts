@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { create } from "./commands/create";
 import { deploy } from "./commands/deploy";
 import { generateDb } from "./commands/generate";
+import { login } from "./commands/login";
 import { verify } from "./commands/verify";
 import { defineConfig } from "./config";
 import type { CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
@@ -28,6 +29,11 @@ cli
   .action((name: string | undefined, options: CreateOptions) => run(() => create(name, options)));
 
 cli
+  .command("login")
+  .description("Save your compiler API key")
+  .action(() => run(() => login()));
+
+cli
   .command("deploy")
   .description("Generate Rust, compile, and deploy programs")
   .option("--src <glob>", "program source glob")
@@ -36,8 +42,6 @@ cli
   .option("--verify", "write generated Rust for verified builds", false)
   .option("--dry-run", "generate and validate without compiling or deploying", false)
   .option("--output <dir>", "generated Rust output directory")
-  .option("--compiler-url <url>", "compiler API base URL")
-  .option("--api-key <key>", "compiler API key")
   .action((options: DeployOptions) => run(() => deploy(options)));
 
 const generate = cli.command("generate").description("Generate derived artifacts");
@@ -45,11 +49,9 @@ const generate = cli.command("generate").description("Generate derived artifacts
 generate
   .command("db")
   .description("Generate a database schema from account definitions")
-  .option("--orm <orm>", "ORM target", "drizzle")
   .option("--dialect <dialect>", "postgres, mysql, or sqlite", "postgres")
   .option("--out <path>", "output file", "src/db/better-sol.ts")
   .option("--src <glob>", "program source glob")
-  .option("--merge", "merge into existing schema file", false)
   .action((options: GenerateDbOptions) => run(() => generateDb(options)));
 
 cli

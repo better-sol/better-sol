@@ -11,8 +11,11 @@ npx @better-sol/cli create counter
 # Generate Rust locally (dry run)
 npx @better-sol/cli deploy --dry-run
 
-# Compile and deploy (src defaults to programs/**/*.ts, cluster defaults to devnet)
-npx @better-sol/cli deploy --api-key <key>
+# Save your API key (one time)
+npx @better-sol/cli login
+
+# Compile and deploy
+npx @better-sol/cli deploy
 ```
 
 ---
@@ -59,17 +62,17 @@ bun add -D @better-sol/cli
 ### `create` — Scaffold a new program
 
 ```bash
-bunx @better-sol/cli create <name>
+npx @better-sol/cli create <name>
 ```
 
 Creates `programs/<name>.ts` with a working counter program and generates a `.better-sol/<name>.json` keypair.
 
 ```bash
 # Custom directory
-bunx @better-sol/cli create counter --dir src/programs
+npx @better-sol/cli create counter --dir src/programs
 
 # Overwrite existing file
-bunx @better-sol/cli create counter --force
+npx @better-sol/cli create counter --force
 ```
 
 | Flag | Default | Description |
@@ -77,14 +80,29 @@ bunx @better-sol/cli create counter --force
 | `--dir` | `programs` | Output directory |
 | `--force` | `false` | Overwrite existing files |
 
+### `login` — Save your API key
+
+```bash
+npx @better-sol/cli login
+```
+
+Prompts for your compiler API key and saves it to `~/.better-sol/auth.json`. After logging in, `deploy` works without any flags:
+
+```bash
+npx @better-sol/cli login   # one-time setup
+npx @better-sol/cli deploy  # just works
+```
+
+You can also set the `BETTER_SOL_COMPILER_API_KEY` environment variable or pass `--api-key` to `deploy`.
+
 ### `deploy` — Generate Rust, compile, and deploy
 
 ```bash
 # Dry run — generate Rust for local review (no compile)
 npx @better-sol/cli deploy --dry-run
 
-# Compile + deploy (src defaults to programs/**/*.ts, cluster defaults to devnet)
-npx @better-sol/cli deploy --api-key <key>
+# Compile + deploy (requires `login` first)
+npx @better-sol/cli deploy
 
 # Target a specific program
 npx @better-sol/cli deploy --program counter
@@ -96,7 +114,7 @@ npx @better-sol/cli deploy --src "src/programs/*.ts" --cluster mainnet-beta
 The deploy command:
 1. Discovers all `program()` definitions in the source glob
 2. Generates Anchor Rust (`lib.rs` + `Cargo.toml` + IDL)
-3. Sends generated code to a cloud compiler API
+3. Sends generated code to the cloud compiler
 4. Records compilation artifacts and prepares deployment
 
 | Flag | Default | Description |
@@ -107,24 +125,20 @@ The deploy command:
 | `--output` | `generated/` | Directory for generated Rust files |
 | `--dry-run` | `false` | Generate Rust only — no compile or deploy |
 | `--verify` | `false` | Write Rust files for verified builds |
-| `--compiler-url` | `http://localhost:8080` | Compiler API URL (or `BETTER_SOL_COMPILER_URL`) |
-| `--api-key` | — | Compiler API key (or `BETTER_SOL_COMPILER_API_KEY`) |
 
 ### `generate db` — Generate database schema
 
 ```bash
-bunx @better-sol/cli generate db --out src/db/schema.ts
+npx @better-sol/cli generate db
 ```
 
 Generates a Drizzle ORM schema from your account definitions:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--orm` | `drizzle` | ORM target |
 | `--dialect` | `postgres` | `postgres`, `mysql`, or `sqlite` |
 | `--out` | `src/db/better-sol.ts` | Output file |
 | `--src` | (from config) | Glob pattern for program sources |
-| `--merge` | `false` | Merge into existing schema (reserved) |
 
 ### `verify` — Verified builds
 
@@ -152,28 +166,29 @@ import { defineConfig } from "@better-sol/cli";
 export default defineConfig({
   programs: "programs/**/*.ts",
   output: "generated",
-  keypair: "./keypair.json",
-  compilerUrl: "https://compiler.better-sol.dev",
 });
 ```
 
-The config file is optional — all options can be passed as CLI flags or environment variables.
+The config file is optional — defaults are used when it doesn't exist.
 
 ---
 
 ## Workflow
 
 ```
-1. bunx @better-sol/cli create <name>
-   └── scaffolds <name>.ts + keypair
+1. npx @better-sol/cli create <name>
+   └── scaffolds <name>.ts + keypair in .better-sol/
 
 2. Edit programs/<name>.ts
    └── define accounts, instructions, constraints, errors, events
 
-3. bunx @better-sol/cli deploy --dry-run  # or just npx @better-sol/cli deploy --api-key <key>
+3. npx @better-sol/cli login
+   └── saves API key to ~/.better-sol/auth.json (one-time)
+
+4. npx @better-sol/cli deploy
    └── parses AST → generates Rust → compiles → deploys
 
-4. Use better-sol SDK client-side
+5. Use better-sol SDK client-side
    └── import the definition, call typed methods
 ```
 

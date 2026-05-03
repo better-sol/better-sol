@@ -1,5 +1,7 @@
 import type { IrProgram } from "../ir/types";
 
+const COMPILER_URL = "https://api.better-sol.dev";
+
 type CompileRequest = {
   readonly name: string;
   readonly program_id: string;
@@ -24,8 +26,7 @@ type CompileResponse = {
 };
 
 export async function compileProgram(params: {
-  readonly compilerUrl: string;
-  readonly apiKey: string | undefined;
+  readonly apiKey: string;
   readonly program: IrProgram;
   readonly libRs: string;
   readonly cargoToml: string;
@@ -42,12 +43,11 @@ export async function compileProgram(params: {
     idl: params.idl,
   };
 
-  const baseUrl = params.compilerUrl.replace(/\/$/, "");
-  const response = await fetch(`${baseUrl}/v1/compile`, {
+  const response = await fetch(`${COMPILER_URL}/v1/compile`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(params.apiKey === undefined ? {} : { "x-api-key": params.apiKey }),
+      "x-api-key": params.apiKey,
     },
     body: JSON.stringify(request),
   });

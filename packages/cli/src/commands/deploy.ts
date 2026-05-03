@@ -1,5 +1,6 @@
-import { intro, log, outro, spinner } from "@clack/prompts";
 import { join } from "node:path";
+import { intro, log, outro, spinner } from "@clack/prompts";
+import { getStoredApiKey } from "../auth";
 import { loadConfig, parseCluster } from "../config";
 import { ensureDirectory } from "../path";
 import type { DeployOptions } from "../types";
@@ -10,19 +11,16 @@ import { generateAnchorProject } from "../generator/rust";
 export async function deploy(options: DeployOptions): Promise<void> {
   intro("better-sol deploy");
 
+  const apiKey = await getStoredApiKey();
+  if (!options.dryRun && !apiKey) {
+    throw new Error("No API key found. Run `better-sol login` first.");
+  }
+
   const config = await loadConfig();
   const cluster = parseCluster(options.cluster, config.cluster);
   const src = options.src ?? config.programs;
-  const programFilter = options.program;
   const out = options.output ?? config.out;
   const outDir = out.startsWith("/") ? out : join(process.cwd(), out);
-  const compilerUrl = options.compilerUrl ?? process.env.BETTER_SOL_COMPILER_URL ?? "http://localhost:8080";
-  const apiKey = options.apiKey ?? process.env.BETTER_SOL_COMPILER_API_KEY;
-
-  if (!options.dryRun && !apiKey) {
-    log.warn("No API key provided. Set BETTER_SOL_COMPILER_API_KEY or pass --api-key.");
-    log.info("Obtain an API key through the Better Sol website or by running the compiler API with COMPILER_SHARED_SECRET for local development.");
-  }
 
   const s = spinner();
   s.start(`Discovering programs from ${src}`);
@@ -32,13 +30,13 @@ export async function deploy(options: DeployOptions): Promise<void> {
     throw new Error(`No program() definitions found in ${src}`);
   }
 
-  const matched = programFilter !== undefined
-    ? programs.filter((p) => p.name === programFilter)
+  const matched = options.program !== undefined
+    ? programs.filter((p) => p.name === options.program)
     : programs;
-  if (programFilter !== undefined && matched.length === 0) {
+  if (options.program !== undefined && matched.length === 0) {
     s.stop("Program not found");
     const available = programs.map((p) => `  ${p.name}`).join("\n");
-    throw new Error(`No program named '${programFilter}' found in ${src}.\nAvailable programs:\n${available}`);
+    throw new Error(`No program named '${options.program}' found in ${src}.\nAvailable programs:\n${available}`);
   }
 
   const projects = matched.map((program) => generateAnchorProject(program));
@@ -62,10 +60,9 @@ export async function deploy(options: DeployOptions): Promise<void> {
     return;
   }
 
-  s.message(`Compiling via ${compilerUrl}`);
+  s.message(`Compiling`);
   const compileResults = await Promise.all(projects.map((project) => compileProgram({
-    compilerUrl,
-    apiKey,
+    apiKey: apiKey!,
     program: project.program,
     libRs: project.libRs,
     cargoToml: project.cargoToml,
