@@ -1,1 +1,13 @@
 node_modules
+
+dist
+packages/*/dist
+
+# Rust build output
+apps/*/target
+
+# Compiler API local data
+apps/*/data
+
+# Program keypairs (private, never commit)
+.better-sol/

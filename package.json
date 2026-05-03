@@ -1,0 +1,23 @@
+{
+  "name": "better-sol-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "clean": "bun run --workspaces clean",
+    "check": "bun run --workspaces check",
+    "build": "bun run --workspaces build",
+    "test": "bun run --workspaces test",
+    "lint": "bun run --workspaces lint",
+    "lint:fix": "bun run --workspaces lint:fix",
+    "format": "bun run --workspaces format",
+    "format:check": "bun run --workspaces format:check",
+    "compiler:check": "cd apps/compiler-api && cargo check",
+    "compiler:run": "cd apps/compiler-api && cargo run"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxlint": "^1.62.0",
+    "typescript": "^6"
+  }
+}
