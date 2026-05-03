@@ -1,98 +1,101 @@
 # better-sol monorepo
 
-**TypeScript-first Solana development.** Write one TypeScript program definition. Get an on-chain Anchor Rust program, a typed client SDK, and a database schema.
+**One TypeScript program definition → on-chain Anchor Rust + typed client SDK + DB schema.**
+
+Stop maintaining separate Anchor Rust programs and hand-written TypeScript clients. Write your Solana program once in TypeScript. Derive everything else from it.
+
+```bash
+# Create a program
+bunx @better-sol/cli create counter
+
+# Edit programs/counter.ts with your logic
+
+# Generate Rust + deploy to devnet
+bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
+
+# Use the typed SDK client-side
+bun add better-sol
+```
 
 ---
 
 ## Packages
 
-| Package | Description |
-|---|---|
-| [`better-sol`](packages/better-sol) | Runtime SDK: program definition DSL, typed client, wallet adapters, token helpers, `fromIdl()` |
-| [`@better-sol/cli`](packages/cli) | CLI: TypeScript → Anchor Rust transpiler, cloud compiler, deploy, database schema generation |
-| `apps/compiler-api` | Rust + Axum cloud compiler API (internal, optional) |
+| Package | Description | Install |
+|---|---|---|
+| [`better-sol`](packages/better-sol) | Runtime SDK: program definition DSL, typed client, wallet adapters, token helpers, `fromIdl()` | `bun add better-sol` |
+| [`@better-sol/cli`](packages/cli) | CLI: TypeScript → Anchor Rust transpiler, cloud compiler, deploy, DB schema generation | `bun add -D @better-sol/cli` |
+| `apps/compiler-api` | Rust + Axum cloud compiler API (internal, optional) | — |
 
-The two-package split keeps the runtime library lean — no transpiler code ships to browser bundles.
+The runtime library and CLI are published as separate npm packages so the runtime stays lean — no transpiler code ships to browser bundles.
 
 ---
 
-## Quick Start
+## Architecture
 
-```bash
-# Install
-bun add better-sol
-bun add -D @better-sol/cli
-
-# Define a program in TypeScript
-cat > programs/counter.ts << 'EOF'
-import { account, p, program, pubkey, u64 } from "better-sol/program";
-const Counter = account({ count: u64, authority: pubkey })
-  .derive((seed) => ["counter", seed.authority]);
-export const counter = program(
-  { name: "counter", address: "CoUnTeR11111111111111111111111111111111111", accounts: { Counter } },
-  ix => ({
-    increment: ix({
-      accounts: { counter: p.mut(Counter), authority: p.signer() },
-      args: { amount: u64 },
-      run: () => {},
-    }),
-  }),
-);
-EOF
-
-# Generate Rust and check
-bunx @better-sol/cli deploy --src "programs/*.ts" --dry-run
-
-# Deploy
-bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
+```
+programs/counter.ts (TypeScript definition)
+         │
+         ├── ▶ better-sol (runtime) — typed client SDK
+         │                    instruction calls, PDA derivation,
+         │                    account fetching, token operations
+         │
+         ├── ▶ @better-sol/cli — generates Anchor Rust + IDL
+         │                    parses TS AST → generates lib.rs
+         │                    → compiles → deploys
+         │
+         └── ▶ @better-sol/cli generate db — Drizzle ORM schema
 ```
 
 ---
 
-## Development Commands
+## Development
 
 ```bash
-bun install             # Install all dependencies
-bun run check           # Type-check all packages
-bun run build           # Build all packages
-bun run test            # Run all tests
-bun run lint            # Lint all packages
-bun run format:check    # Format check (oxlint)
-bun run compiler:check  # Rust compiler API check (requires cargo)
+git clone <repo>
+cd better-sol
+bun install              # Install dependencies
+bun run check            # Type-check all packages
+bun run build            # Build all packages
+bun run test             # Run all tests (104 total)
+bun run lint             # Lint (oxlint)
+bun run format:check     # Format check
 ```
 
-## Workspace Layout
+### Workspace layout
 
 ```
 ├── packages/
-│   ├── better-sol/          # Runtime library (published to npm)
-│   │   ├── src/             # Source files
+│   ├── better-sol/          # Runtime library
+│   │   ├── src/
 │   │   │   ├── client.ts    # betterSol() client factory
-│   │   │   ├── program.ts   # program(), account(), p.* DSL
+│   │   │   ├── program.ts   # Program DSL (program, account, p.*)
 │   │   │   ├── coder.ts     # Borsh encoder/decoder
-│   │   │   ├── idl.ts       # fromIdl() Anchor IDL importer
+│   │   │   ├── idl.ts       # fromIdl() — Anchor IDL import
 │   │   │   └── wallets/     # Wallet adapter subpaths
-│   │   └── test/            # SDK test suite
-│   └── cli/                 # CLI tool (published as @better-sol/cli)
+│   │   └── test/            # 54 tests
+│   └── cli/                 # CLI tool
 │       ├── src/
-│       │   ├── parser/      # TypeScript AST parser (ts-morph)
+│       │   ├── parser/      # ts-morph AST parser
 │       │   ├── generator/   # Rust code generator
-│       │   ├── commands/    # CLI commands (create, deploy, generate, verify)
-│       │   └── ir/          # Intermediate representation types
+│       │   ├── commands/    # CLI commands
+│       │   └── ir/          # Intermediate representation
 │       └── test/
-│           └── fixtures/    # End-to-end program fixtures
+│           └── fixtures/    # End-to-end program test fixtures
 └── apps/
-    └── compiler-api/        # Rust cloud compiler API
+    └── compiler-api/        # Rust cloud compiler API (optional)
 ```
 
-## Tools
+### Tools
 
-- **Bun** — Runtime, package manager, bundler, test runner
-- **TypeScript 6** — Source language
-- **Oxlint** — Linting and auto-fix
-- **ts-morph** — TypeScript AST parsing (CLI only)
-- **Anchor 1.0.1** — Rust framework target
-- **@solana/kit** — Official Solana JavaScript SDK
+| Tool | Purpose |
+|---|---|
+| [Bun](https://bun.sh) | Runtime, package manager, bundler, test runner |
+| TypeScript 6 | Source language |
+| [Oxlint](https://oxc.rs) | Linting |
+| [ts-morph](https://ts-morph.com) | TypeScript AST parsing (CLI only) |
+| Anchor 1.0.1 | Rust framework target |
+| [@solana/kit](https://github.com/solana-foundation/solana-web3.js) | Official Solana JS SDK |
 
 ## License
 

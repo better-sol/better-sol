@@ -1,8 +1,14 @@
 # @better-sol/cli
 
-**CLI for better-sol.** Parses TypeScript program definitions, generates Anchor/Rust on-chain code, and deploys to Solana.
+**TypeScript → Anchor Rust transpiler + cloud compiler + deploy tool.**
+
+Parse your `better-sol/program` TypeScript definitions and generate clean, warning-free Anchor Rust that compiles and deploys to Solana.
 
 ```bash
+# Create a new program
+bunx @better-sol/cli create counter
+
+# Generate Rust + deploy to devnet
 bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
 ```
 
@@ -10,14 +16,14 @@ bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./k
 
 ## Why
 
-The `better-sol` runtime library lets you define Solana programs in TypeScript. This CLI takes those definitions and:
+You've defined a Solana program in TypeScript with `better-sol/program`. Now you need to run it on-chain. This CLI:
 
-1. Parses the TypeScript AST to extract program structure
-2. Generates idiomatic Anchor Rust code (`lib.rs`, `Cargo.toml`, IDL)
-3. Compiles via a cloud compiler API (or locally with Rust installed)
-4. Deploys the compiled program to Solana
+1. **Parses** your TypeScript — extracts account schemas, instruction definitions, constraints, seeds, errors, events, and body logic
+2. **Generates** idiomatic Anchor Rust — `lib.rs`, `Cargo.toml`, `idl.json` — all warning-free under `cargo check`
+3. **Compiles** via a cloud API — no local Rust toolchain needed
+4. **Deploys** the compiled binary to Solana
 
-The generated Rust is warning-free, follows Anchor conventions, and passes `cargo check` out of the box.
+The CLI uses `ts-morph` for AST parsing. It analyzes the syntax tree directly — no runtime TypeScript execution.
 
 ---
 
@@ -27,86 +33,92 @@ The generated Rust is warning-free, follows Anchor conventions, and passes `carg
 bun add -D @better-sol/cli
 ```
 
-Or use directly without installing:
-
-```bash
-bunx @better-sol/cli --help
-```
-
-**Prerequisites:** [bun](https://bun.sh) runtime.
+Prerequisites: [bun](https://bun.sh) runtime.
 
 ---
 
 ## Commands
 
-### `deploy` — Generate, compile, and deploy
-
-```bash
-better-sol deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
-```
-
-Options:
-
-| Flag | Default | Description |
-|---|---|---|
-| `--src` | (from config) | Glob pattern for program source files |
-| `--program` | all programs | Target a specific program by name |
-| `--cluster` | devnet | `devnet`, `testnet`, `mainnet-beta`, or `localnet` |
-| `--keypair` | (from config) | Path to payer keypair file |
-| `--output` | `generated/` | Directory for generated Rust |
-| `--dry-run` | `false` | Generate and validate without compiling or deploying |
-| `--verify` | `false` | Write generated Rust for verified builds |
-| `--compiler-url` | — | Compiler API base URL (for cloud compilation) |
-| `--api-key` | — | Compiler API key |
-
 ### `create` — Scaffold a new program
 
 ```bash
-better-sol create my-program --dir programs
+bunx @better-sol/cli create <name>
 ```
 
-Options:
+Creates `programs/<name>.ts` with a working counter program and generates a `.better-sol/<name>.json` keypair.
+
+```bash
+# Custom directory
+bunx @better-sol/cli create counter --dir src/programs
+
+# Overwrite existing file
+bunx @better-sol/cli create counter --force
+```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--dir` | `programs` | Directory to create the program in |
+| `--dir` | `programs` | Output directory |
 | `--force` | `false` | Overwrite existing files |
+
+### `deploy` — Generate Rust, compile, and deploy
+
+```bash
+bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
+```
+
+The deploy command:
+1. Discovers all `program()` definitions in the source glob
+2. Generates Anchor Rust (`lib.rs` + `Cargo.toml` + IDL)
+3. Sends generated code to a cloud compiler API
+4. Records compilation artifacts and prepares deployment
+
+| Flag | Default | Description |
+|---|---|---|
+| `--src` | (from config) | Glob pattern for program sources |
+| `--program` | all | Target a specific program by name |
+| `--cluster` | devnet | `devnet`, `testnet`, `mainnet-beta`, `localnet` |
+| `--keypair` | (from config) | Payer keypair path |
+| `--output` | `generated/` | Directory for generated Rust files |
+| `--dry-run` | `false` | Generate Rust only — no compile or deploy |
+| `--verify` | `false` | Write Rust files for verified builds |
+| `--compiler-url` | `http://localhost:8080` | Compiler API URL (or `BETTER_SOL_COMPILER_URL`) |
+| `--api-key` | — | Compiler API key (or `BETTER_SOL_COMPILER_API_KEY`) |
 
 ### `generate db` — Generate database schema
 
 ```bash
-better-sol generate db --out src/db/schema.ts
+bunx @better-sol/cli generate db --out src/db/schema.ts
 ```
 
-Generates a Drizzle ORM schema from account definitions:
+Generates a Drizzle ORM schema from your account definitions:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--orm` | `drizzle` | ORM target (currently only Drizzle) |
+| `--orm` | `drizzle` | ORM target |
 | `--dialect` | `postgres` | `postgres`, `mysql`, or `sqlite` |
-| `--out` | `src/db/better-sol.ts` | Output file path |
-| `--src` | (from config) | Glob pattern for program source files |
+| `--out` | `src/db/better-sol.ts` | Output file |
+| `--src` | (from config) | Glob pattern for program sources |
 | `--merge` | `false` | Merge into existing schema (reserved) |
 
 ### `verify` — Verified builds
 
 ```bash
-better-sol verify my-program --program-id <address>
+bunx @better-sol/cli verify my-program --program-id <address>
 ```
 
 Submits a deployed program for OtterSec verified-builds:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--program-id` | — | Program ID to verify |
+| `--program-id` | — | On-chain program ID |
 | `--lib-name` | program name | Rust library name |
-| `--mount-path` | `generated/<name>` | Subdirectory with Cargo.toml |
+| `--mount-path` | `generated/<name>` | Subdirectory with `Cargo.toml` |
 
 ---
 
 ## Configuration
 
-Create a `better-sol.config.ts` file in your project root:
+Create `better-sol.config.ts` in your project root:
 
 ```ts
 import { defineConfig } from "@better-sol/cli";
@@ -119,58 +131,78 @@ export default defineConfig({
 });
 ```
 
----
-
-## How It Works
-
-The CLI uses `ts-morph` to parse the TypeScript AST of your program definitions. It does not execute the TypeScript — it analyzes the syntax tree directly. This means:
-
-- No runtime TypeScript execution needed
-- Works with TypeScript 6
-- Extracts exact type, seed, account, and constraint information
-- Provides precise diagnostics for unsupported patterns
-
-The parser understands the full `better-sol/program` DSL: `account()`, `.derive()`, `.zeroCopy()`, `struct()`, `ix()` configs, the `p.*` constraint API, inline errors/events, CPI calls, and sysvar access.
+The config file is optional — all options can be passed as CLI flags or environment variables.
 
 ---
 
-## Generated Rust
+## Workflow
 
-The generated Anchor Rust includes:
+```
+1. bunx @better-sol/cli create <name>
+   └── scaffolds <name>.ts + keypair
 
-- `declare_id!()` with the program address
-- Account structs with `#[account]` or `#[account(zero_copy)]`
-- Zero-copy structs with padding, alignment, and field ordering
-- Error enums with `#[msg()]` attributes
-- Event structs with `#[event]`
-- A `#[program]` module with all instructions
-- `#[derive(Accounts)]` structs for each instruction with seeds, bump, and constraints
-- `Cargo.toml` with correct Anchor and anchor-spl dependencies
+2. Edit programs/<name>.ts
+   └── define accounts, instructions, constraints, errors, events
+
+3. bunx @better-sol/cli deploy --src "programs/*.ts"
+   └── parses AST → generates Rust → compiles → deploys
+
+4. Use better-sol SDK client-side
+   └── import the definition, call typed methods
+```
+
+---
+
+## How the Transpiler Works
+
+The CLI uses `ts-morph` to parse TypeScript AST directly — it never executes the source code.
+
+The parser understands:
+
+- `program()`, `account()`, `.derive()`, `.zeroCopy()`, `struct()` declarations
+- `ix()` configs with `accounts`, `args`, and `run` callbacks
+- The `p.create()`, `p.mut()`, `p.close()`, `p.signer()` constraint API
+- Inline errors/events in `program()` config
+- CPI calls (`token.transfer()`, `token.mintTo()`)
+- Sysvar access (`sol.timestamp()`)
+- `ctx.require()`, `ctx.emit()`, `ctx.log()`
+- All type tokens (`u8`, `u64`, `pubkey`, `bool`, `string`, etc.)
+- Account field assignments, arithmetic, control flow
+
+Unsupported patterns get clear diagnostics — 18 failure fixtures covering while loops, destructuring, await, function calls, etc.
+
+The generator produces Anchor 1.0.1 compatible Rust with:
+- `#[program]` module with all instructions
+- `#[derive(Accounts)]` structs with seeds, bump, payer, space constraints
+- `#[account]` / `#[account(zero_copy)]` structs
+- `#[error_code]` enum with `#[msg()]` attributes
+- `#[event]` structs
+- Proper `anchor-spl` imports for Token / Token-2022
+- Cargo.toml with pinned dependencies
 - Complete IDL JSON
 
-All generated code is warning-free under `cargo check` with no `#[allow()]` attributes needed.
+All generated Rust passes `cargo check` with zero warnings and no `#[allow()]` attributes.
 
 ---
 
 ## Current Limitations
 
-- `for` loop variable and `u32` bound type mismatches in generated Rust
-- `struct_zc` inside Borsh accounts only valid inside `.zeroCopy()`
-- PDA-signed token CPI requires authority PDA from the program
+- `for` loop variables and `u32` bounds can create type mismatches in generated Rust
+- `struct_zc` inside Borsh accounts is only valid inside `.zeroCopy()` accounts
+- PDA-signed token CPI requires the authority to be a PDA from the program or a signer
 - Database generation supports Drizzle ORM only (Postgres, MySQL, SQLite)
+- On-chain deployment adapter is not yet wired — compilation and IDL persistence are end-to-end
 
 ---
 
 ## Development
 
 ```bash
-bun --filter @better-sol/cli check
-bun --filter @better-sol/cli build
-bun --filter @better-sol/cli test
-bun --filter @better-sol/cli lint
+bun --filter @better-sol/cli check       # Type-check
+bun --filter @better-sol/cli build       # Build CLI bundle
+bun --filter @better-sol/cli test        # Run tests (50 tests)
+bun --filter @better-sol/cli lint        # Lint
 ```
-
----
 
 ## License
 
