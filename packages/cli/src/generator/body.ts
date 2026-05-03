@@ -1143,17 +1143,12 @@ function formatSeedType(type: IrType): string {
 function parseBodyStatements(body: string): readonly Statement[] {
   const trimmed = body.trim();
   if (trimmed.length === 0) return [];
-  const normalized = normalizeBody(trimmed);
   const project = new Project({ useInMemoryFileSystem: true });
-  const sourceFile = project.createSourceFile("body.ts", `const __run = () => ${normalized};`);
+  const sourceFile = project.createSourceFile("body.ts", `const __run = () => ${trimmed};`);
   const declaration = sourceFile.getVariableDeclarationOrThrow("__run");
   const initializer = declaration.getInitializer();
   if (initializer === undefined || !Node.isArrowFunction(initializer)) return [];
   const arrowBody = initializer.getBody();
   if (Node.isBlock(arrowBody)) return arrowBody.getStatements();
   return [];
-}
-
-function normalizeBody(body: string): string {
-  return body;
 }

@@ -1,5 +1,5 @@
-import type { Address, SignatureDictionary, Transaction, TransactionSigner } from "@solana/kit";
-import { VersionedMessage, VersionedTransaction } from "@solana/web3.js";
+import type { Address, TransactionSigner } from "@solana/kit";
+import { createSignTransactions } from "./sign-utils";
 
 type WalletAdapterLike = {
   readonly publicKey: { toBase58(): string };
@@ -15,23 +15,8 @@ export function walletAdapter(wallet: WalletAdapterLike): TransactionSigner {
       "Install @solana/wallet-adapter-react and ensure the wallet is connected.",
     );
   }
-
   return {
     address,
-    signTransactions: async (transactions: readonly Transaction[]): Promise<readonly SignatureDictionary[]> => {
-      return Promise.all(
-        transactions.map(async (tx) => {
-          const messageBytes = new Uint8Array(tx.messageBytes);
-          const message = VersionedMessage.deserialize(messageBytes);
-          const unsignedTx = new VersionedTransaction(message);
-          const signedTx = await signTransaction(unsignedTx);
-          const firstSig = signedTx.signatures[0];
-          const sigBytes = firstSig !== undefined && firstSig !== null
-            ? new Uint8Array(firstSig)
-            : new Uint8Array(64);
-          return { [address]: sigBytes } as SignatureDictionary;
-        }),
-      );
-    },
+    signTransactions: createSignTransactions(address, signTransaction),
   };
 }

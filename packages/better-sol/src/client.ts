@@ -20,8 +20,8 @@ import {
   type Instruction,
   type InstructionWithSigners,
   type TransactionSigner,
+  flattenInstructionPlan,
 } from "@solana/kit";
-import { flattenInstructionPlan } from "@solana/kit";
 import { getTransferSolInstruction, SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import {
   fetchMaybeMint,
