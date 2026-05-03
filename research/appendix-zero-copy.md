@@ -646,7 +646,7 @@ msg!("data: {}", ctx.accounts.bar.load()?.data);
 ### Proposed TypeScript syntax:
 
 ```typescript
-import { program, account, ix, u64, u8, u16, u32, pubkey, bool, bytes, p } from 'better-sol/program'
+import { program, account, u64, u8, u16, u32, pubkey, bool, bytes, p } from 'better-sol/program'
 
 // Zero-copy account — new API
 const Orderbook = account({
@@ -660,7 +660,7 @@ const Orderbook = account({
   askCount: u32,
   bump: u8,
 }).zeroCopy()                // <-- NEW: marks this as zero_copy
-  .seeds('orderbook', '{authority}')
+  .derive((seed) => ["orderbook", seed.authority])
 ```
 
 **Alternative: typed fixed arrays**
@@ -695,36 +695,35 @@ const Orderbook = account({
 #### TypeScript Input:
 
 ```typescript
-import { program, account, ix, u64, u32, u16, u8, pubkey, bool, bytes, p } from 'better-sol/program'
+import { program, account, array, u64, u32, u16, u8, pubkey, bool, bytes, p } from 'better-sol/program'
 
 const Orderbook = account({
   authority: pubkey,          // 32 bytes
   coinLotSize: u64,           // 8 bytes
   pcLotSize: u64,             // 8 bytes
   feeBps: u16,                // 2 bytes
-  bids: u64.array(128),       // 1024 bytes
-  asks: u64.array(128),       // 1024 bytes
+  bids: array(u64, 128),      // 1024 bytes
+  asks: array(u64, 128),      // 1024 bytes
   bidCount: u32,              // 4 bytes
   askCount: u32,              // 4 bytes
   isActive: bool,             // TypeScript bool → Rust u8 (zero-copy)
   bump: u8,                   // 1 byte
-}).zeroCopy()
-  .seeds('orderbook', '{authority}')
+}).derive((seed) => ['orderbook', seed.authority]).zeroCopy()
 
-const errors = defineErrors({
-  Unauthorized: 'Not the authority',
-  InvalidOrder: 'Invalid order',
-  OrderbookFull: 'Orderbook is full',
-})
-
-export const orderbook_program = program({
-  name: 'orderbook',
-  address: 'OrDeRbOoK1111111111111111111111111111111111',
-  errors,
-  instructions: {
+export const orderbook_program = program(
+  {
+    name: 'orderbook',
+    address: 'OrDeRbOoK1111111111111111111111111111111111',
+    errors: {
+      Unauthorized: 'Not the authority',
+      InvalidOrder: 'Invalid order',
+      OrderbookFull: 'Orderbook is full',
+    },
+  },
+  ix => ({
     initialize: ix({
       accounts: {
-        orderbook: p.init(Orderbook),
+        orderbook: p.create(Orderbook),
         authority: p.signer(),
       },
       args: { coinLotSize: u64, pcLotSize: u64, feeBps: u16 },
@@ -769,8 +768,8 @@ export const orderbook_program = program({
         orderbook.feeBps = newFeeBps
       },
     }),
-  },
-})
+  }),
+)
 ```
 
 #### Generated Anchor Rust:

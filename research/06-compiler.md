@@ -6,7 +6,7 @@
 Developer writes:        programs/counter.ts
                          ↓
 npx @better-sol/cli deploy:     1. Parse TypeScript AST
-                         2. Extract program(), account(), ix() definitions
+                         2. Extract program(), account(), and callback-scoped ix() definitions
                          3. Generate Anchor Rust source code
                          4. POST Rust to cloud compiler
                          5. Server runs: cargo build-sbf → .so file
@@ -40,7 +40,7 @@ can interact with programs built with our library.
 
 The IDL is stored:
 - **On-chain** via Anchor's `declare_id` + metadata account (standard Anchor approach)
-- **On our cloud** at `https://better-sol.fun/idl/{programId}/latest` for easy access
+- **On our cloud** at `https://better-sol.fun/idl/{program_id}/latest` for easy access
 
 What the IDL contains (that our TS computes at runtime instead):
 
@@ -49,9 +49,9 @@ What the IDL contains (that our TS computes at runtime instead):
 | Instruction discriminators | Identify which instruction in binary | `sha256("global:name")[0..8]` computed from `ix()` names |
 | Account discriminators | Identify which account type in binary | `sha256("account:Name")[0..8]` computed from `account()` names |
 | Field byte offsets + sizes | Serialize/deserialize binary data | Computed from field order + type sizes (u64=8, pubkey=32, bool=1) |
-| PDA seed definitions | Derive deterministic addresses | `.seeds('counter', '{authority}')` |
-| Error codes (numeric) | Map error code → name | `defineErrors()` names → assigned 6000, 6001... |
-| Account constraints | Which accounts sign, writable, relations | `p.init()`, `p.mut()`, `p.signer()` |
+| PDA seed definitions | Derive deterministic addresses | `.derive((seed) => ["counter", seed.authority])` |
+| Error codes (numeric) | Map error code → name | `program.errors` names → assigned 6000, 6001... |
+| Account constraints | Which accounts sign, writable, relations | `p.create()`, `p.mut()`, `p.signer()` |
 
 All deterministic. Same inputs → same IDL. We generate it from the TS definition
 at deploy time, not as a separate step.
@@ -69,17 +69,27 @@ Content-Type: application/json
 
 {
   "name": "counter",
-  "programId": "CoUnTeR1111111111111111111111111111111111111",
-  "source": "/* generated Anchor Rust */",
-  "version": "1.0.0"
+  "program_id": "CoUnTeR1111111111111111111111111111111111111",
+  "version": "0.1.0",
+  "lib_rs": "/* generated Anchor Rust */",
+  "cargo_toml": null,
+  "idl": null
 }
 
 → Response (200):
 {
-  "bytecode": "<base64-encoded .so file>",
-  "bytecodeHash": "sha256:...",
-  "sizeBytes": 12345,
-  "compileTimeMs": 3200
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "counter",
+  "program_id": "CoUnTeR1111111111111111111111111111111111111",
+  "source_hash": "sha256:...",
+  "bytecode_hash": null,
+  "bytecode": null,
+  "size_bytes": null,
+  "compile_time_ms": 2,
+  "logs": "Build execution disabled...",
+  "idl_url": "/v1/idl/CoUnTeR.../latest",
+  "artifact_url": "/v1/artifacts/550e8400-...",
+  "source_url": "/v1/artifacts/550e8400-.../source"
 }
 ```
 
@@ -211,9 +221,44 @@ npx @better-sol/cli verify --program-id CouNTeR...
 
 What `verify` does:
 1. Reads the current Git remote + commit hash from the local repo
-2. Calls `POST https://verify.osec.io/verify` with repo URL, commit hash, and lib name
-3. OtterSec clones the repo, builds the Rust in Docker, compares hashes
-4. If match → ✅ verified (appears in Solana Explorer, SolanaFM, SolScan)
+2. Validates the program ID is a valid base58 Solana address (32-44 characters)
+3. Calls `POST https://verify.osec.io/verify` with the repository URL, program ID, commit hash, lib name
+   (the Rust crate name), and mount path (defaults to `generated/<name>`)
+4. On success → shows status URL and build logs URL for monitoring
+5. On failure → shows the API error with actionable guidance
+
+### Required parameters
+
+| Parameter | Source | Description |
+|-----------|--------|-------------|
+| `program_id` | CLI argument or `--program-id` | The on-chain Solana program address |
+| `repository` | `git remote.origin.url` | URL of the public repository containing the generated Rust |
+| `commit_hash` | `git rev-parse HEAD` | Git commit hash of the deployed version |
+| `lib_name` | Program name or `--lib-name` | Rust crate name (matches the Cargo.toml `[package] name`) |
+| `mount_path` | `--mount-path` (default: `generated/<name>`) | Subdirectory where Cargo.toml lives |
+
+### Prerequisites
+
+1. The generated Rust code must be committed to a **public** Git repository and **pushed** to a remote named `origin`
+2. The program must already be **deployed on mainnet**
+3. The `--verify` flag must have been used during deploy so generated Rust exists in `generated/`
+
+### Error handling
+
+| HTTP Status | Cause | User action |
+|-------------|-------|-------------|
+| 400 | Invalid program ID or repository URL | Verify the program ID is a valid mainnet address and the URL is accessible |
+| 429 | Rate limited (1 req/30s per IP) | Wait before retrying |
+| Connection failure | OtterSec API unreachable | Check network connectivity and retry |
+  <repository>
+```
+
+Additional options:
+
+| Flag | Description |
+|------|-------------|
+| `--lib-name <name>` | Rust library name (defaults to program name) |
+| `--mount-path <path>` | Subdirectory where Cargo.toml lives (defaults to `generated/<name>`) |
 
 ### Why not auto-commit?
 
@@ -239,12 +284,8 @@ For production programs (mainnet), verification is expected. Making it this easy
 npx @better-sol/cli deploy --cluster devnet
 ```
 
-**Mode 2: Local compilation (for developers who have Rust)**
-```bash
-npx @better-sol/cli deploy --cluster devnet --local
-```
-
-The `deploy` command detects whether the local toolchain is available and falls back to the cloud.
+The `deploy` command sends generated Rust to the cloud compiler service.
+To inspect generated Rust before compilation, use `--dry-run` or `--verify`.
 
 ---
 
@@ -252,25 +293,27 @@ The `deploy` command detects whether the local toolchain is available and falls 
 
 From this TypeScript:
 ```typescript
-const Counter = account({ count: u64, authority: pubkey }).seeds('counter', '{authority}')
+const Counter = account({ count: u64, authority: pubkey }).derive((seed) => ["counter", seed.authority])
 
-const errors = defineErrors({ Unauthorized: 'Not authorized' })
-
-const events = defineEvents({ Incremented: { newCount: u64 } })
-
-export const counter = program({
-  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, events, instructions: {
-  increment: ix({
-    accounts: { counter: p.mut(Counter), authority: p.signer() },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      counter.count += amount
-      ctx.emit('Incremented', { newCount: counter.count })
-    },
-  }),
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR11111111111111111111111111111111111',
+    errors: { Unauthorized: 'Not authorized' },
+    events: { Incremented: { newCount: u64 } },
   },
-})
+  ix => ({
+    increment: ix({
+      accounts: { counter: p.mut(Counter), authority: p.signer() },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        counter.count += amount
+        ctx.emit('Incremented', { newCount: counter.count })
+      },
+    }),
+  }),
+)
 ```
 
 The transpiler generates:
@@ -305,13 +348,13 @@ See `examples/amm-generated-rust.rs` for a full 633-line example.
 | Boolean logic (&&, \|\|, !) | ✅ Full | |
 | Account field read/write | ✅ Full | Assignment and compound (+=, -=) |
 | ctx.require() | ✅ Full | Maps to `require!()` with error enum |
-| ctx.emit() | ✅ Full | Maps to `emit!()` with event struct |
+| ctx.emit() | ✅ Full | Maps to `emit!()` with event struct (Rust output) |
 | ctx.log() | ✅ Full | Maps to `msg!()` with format string |
 | CPI: token.transfer | ✅ Full | Both user-signed and PDA-signed |
 | CPI: token.mintTo | ✅ Full | PDA-signed authority |
 | CPI: token.burn | ✅ Full | |
 | Sysvars (sol.timestamp) | ✅ Full | Maps to `Clock::get()?.unix_timestamp` |
-| Escape hatch (rust\`...\`) | ✅ Full | Emitted verbatim into Rust function |
+| Escape hatch (rust\`...\`) | 📋 Planned | Not yet implemented — for edge cases the transpiler can't handle |
 | **Overall** | **83%** | 75 operations tested across 16 program types |
 
 See `04-transpiler.md` for the full coverage matrix.
@@ -417,7 +460,6 @@ npx @better-sol/cli create escrow --seeds owner  # With custom PDA seeds
 
 # Push — compile and deploy (keypair auto-generated if missing)
 npx @better-sol/cli deploy                     # Parse → Rust → cloud compile → deploy
-npx @better-sol/cli deploy --local             # Compile locally (if you have Rust installed)
 npx @better-sol/cli deploy --dry-run           # Show generated Rust without compiling
 npx @better-sol/cli deploy --cluster devnet    # Target cluster (default: devnet)
 npx @better-sol/cli deploy --program counter   # Push a specific program
@@ -430,7 +472,6 @@ npx @better-sol/cli verify --program-id CouNTeR...
 Everything else is unnecessary:
 - `deploy` → `solana program deploy` already exists (not our job)
 - `generate` → `--dry-run` flag handles this
-- `compile` → `--local` flag handles this
 - `client` → contradicts our value prop (the TS definition IS the client, nothing to generate)
 - `diff` → programs are upgradeable, just re-deploy
 - `inspect` → `solana program show` already exists
@@ -452,44 +493,45 @@ This creates:
 
 ```typescript
 // programs/counter.ts
-import { program, account, ix, defineErrors, u64, pubkey, p } from 'better-sol/program'
+import { program, account, u64, pubkey, p } from 'better-sol/program'
 
 const Counter = account({
   count: u64,
   authority: pubkey,
-}).seeds('counter', '{authority}')
+}).derive((seed) => ["counter", seed.authority])
 
-const errors = defineErrors({
-  Unauthorized: 'Not the authority',
-})
-
-export const counter = program({
-  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
-  initialize: ix({
-    accounts: {
-      counter: p.init(Counter),
-      authority: p.signer(),
-    },
-    args: { initialValue: u64 },
-    run: ({ counter, authority }, { initialValue }) => {
-      counter.count = initialValue
-      counter.authority = authority
-    },
-  }),
-
-  increment: ix({
-    accounts: {
-      counter: p.mut(Counter),
-      authority: p.signer(),
-    },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      counter.count += amount
-    },
-  }),
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR11111111111111111111111111111111111',
+    errors: { Unauthorized: 'Not the authority' },
   },
-})
+  ix => ({
+    initialize: ix({
+      accounts: {
+        counter: p.create(Counter),
+        authority: p.signer(),
+      },
+      args: { initialValue: u64 },
+      run: ({ counter, authority }, { initialValue }) => {
+        counter.count = initialValue
+        counter.authority = authority
+      },
+    }),
+
+    increment: ix({
+      accounts: {
+        counter: p.mut(Counter),
+        authority: p.signer(),
+      },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        counter.count += amount
+      },
+    }),
+  }),
+)
 ```
 
 The developer edits this file — adding accounts, instructions, errors, events — 
@@ -501,11 +543,11 @@ You don't have to use `create`. If you prefer to start from scratch:
 
 ```typescript
 // programs/counter.ts — written from scratch
-import { program, account, ix, u64, pubkey, p } from 'better-sol/program'
+import { program, account, u64, pubkey, p } from 'better-sol/program'
 
 // ... your code ...
 
-export const counter = program({ name: 'counter', address: 'CouNTeR...', ... })
+export const counter = program({ name: 'counter', address: 'CouNTeR...' }, ix => ({ ... }))
 ```
 
 `create` is a convenience. It gives you a working starting point with the right

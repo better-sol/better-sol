@@ -83,7 +83,7 @@ NOT Pod-compatible (zero-copy escape hatch required):
 - `bytes` — use fixed `array(u8, N)` instead
 - `vec(T)` — use fixed `array(T, N)` instead
 - `option(T)` — use a sentinel value instead
-- Nested structs — use `struct_zc({...})` (zero-copy sub-struct, `#[zero_copy]` in Rust)
+- Nested structs — use `struct({...})` (zero-copy sub-struct, `#[zero_copy]` in Rust)
 
 ---
 
@@ -99,7 +99,7 @@ const Pool = account({
   feeBps: u64,
   isActive: bool,
   bump: u8,
-}).seeds('pool', '{tokenAMint}', '{tokenBMint}')
+}).derive((seed) => ["pool", seed.tokenAMint, seed.tokenBMint])
 ```
 
 Generated Rust:
@@ -127,10 +127,10 @@ const OrderBook = account({
   askCount: u32,
   bids: array(Order, 1000),
   asks: array(Order, 1000),
-}).seeds('orderbook', '{market}').zeroCopy()
+}).derive((seed) => ["orderbook", seed.market]).zeroCopy()
 
 // Sub-struct for array elements
-const Order = struct_zc({
+const Order = struct({
   trader: pubkey,
   price: u64,
   quantity: u64,
@@ -221,7 +221,7 @@ Zero-copy accounts (Pod):
 
 | Expression | Anchor Rust | Zero-Copy Variant | Description |
 |---|---|---|---|
-| `p.init(Account)` | `init, payer, space, seeds` | `init, payer, space, seeds` + `AccountLoader` | Create new PDA |
+| `p.create(Account)` | `init, payer, space, seeds` | `init, payer, space, seeds` + `AccountLoader` | Create new PDA |
 | `p.mut(Account)` | `mut, seeds` | `mut, seeds` + `AccountLoader` | Writable existing PDA |
 | `Account` (bare) | `seeds` (read-only) | `seeds` + `AccountLoader` | Read-only PDA |
 | `pubkey` (bare type) | `AccountInfo<'info>` (unchecked) | same | Unchecked account — address only, no data |
@@ -335,11 +335,13 @@ pub fn process_orders(ctx: Context<ProcessOrders>) -> Result<()> {
 
 ---
 
-## CPI Templates — Complete Catalog
+## CPI Templates — Capability Matrix
 
 ### Token CPI (works with both Token and Token-2022)
 
-The `token.*` functions work with BOTH programs. The transpiler detects whether the instruction has `p.tokenProgram()` or `p.token2022Program()` and generates the correct Anchor Rust imports.
+Implementation status: the reliable transpiler path currently supports the core token CPI subset used by the validated examples: `token.transfer`, `token.transferChecked`, `token.mintTo`, and `token.burn`. The larger catalog below remains the design target and should not be exposed from `better-sol/program` until the transpiler and generated Rust are validated for each operation.
+
+The supported `token.*` functions work with BOTH programs. The transpiler detects whether the instruction has `p.tokenProgram()` or `p.token2022Program()` and generates the correct Anchor Rust imports.
 
 When `p.tokenProgram()` is used:
 ```rust
@@ -367,13 +369,15 @@ The transpiler auto-selects the correct module based on the instruction's `p.tok
 | 2 | `token.transferChecked({from, to, authority, mint, amount, decimals})` | `token_2022::transfer_checked(cpi_ctx, amount, decimals)?` | Required for Token-2022 with fees |
 | 3 | `token.mintTo({mint, to, authority, amount})` | `token::mint_to(cpi_ctx, amount)?` | Mint tokens |
 | 4 | `token.burn({from, mint, authority, amount})` | `token::burn(cpi_ctx, amount)?` | Burn tokens |
-| 5 | `token.approve({account, delegate, authority, amount})` | `token::approve(cpi_ctx, amount)?` | Approve delegate |
-| 6 | `token.freeze({account, mint, authority})` | `token::freeze_account(cpi_ctx)?` | Freeze account |
-| 7 | `token.thaw({account, mint, authority})` | `token::thaw_account(cpi_ctx)?` | Thaw account |
-| 8 | `token.closeAccount({account, destination, authority})` | `token::close_account(cpi_ctx)?` | Close token account |
-| 9 | `token.setAuthority({account, authority, type, newAuthority})` | `token::set_authority(cpi_ctx, ...)` | Change authority |
+| 5 | `token.approve({account, delegate, authority, amount})` | `token::approve(cpi_ctx, amount)?` | Planned |
+| 6 | `token.freeze({account, mint, authority})` | `token::freeze_account(cpi_ctx)?` | Planned |
+| 7 | `token.thaw({account, mint, authority})` | `token::thaw_account(cpi_ctx)?` | Planned |
+| 8 | `token.closeAccount({account, destination, authority})` | `token::close_account(cpi_ctx)?` | Planned |
+| 9 | `token.setAuthority({account, authority, type, newAuthority})` | `token::set_authority(cpi_ctx, ...)` | Planned |
 
 ### Token-2022 Extension CPI
+
+Implementation status: extension-specific CPI helpers are planned and intentionally not part of the current stubs. Token-2022 examples use the supported `token.transferChecked(...)` path with `p.token2022Program()`.
 
 | # | TypeScript | Anchor Rust | Notes |
 |---|---|---|---|
@@ -392,12 +396,16 @@ The transpiler auto-selects the correct module based on the instruction's `p.tok
 
 ### System CPI
 
+Implementation status: system CPI helpers are planned and intentionally not part of the current stubs.
+
 | # | TypeScript | Anchor Rust |
 |---|---|---|
 | 22 | `system.transfer({from, to, amount})` | `system_program::transfer(cpi_ctx, amount)?` |
 | 23 | `system.createAccount({from, to, space, owner})` | `system_program::create_account(cpi_ctx, space)?` |
 
 ### ATA CPI
+
+Implementation status: ATA CPI helpers are planned and intentionally not part of the current stubs.
 
 | # | TypeScript | Anchor Rust |
 |---|---|---|
@@ -435,7 +443,7 @@ token::transfer(
 )?;
 ```
 
-The seeds are extracted from the account's `.seeds()` definition. The bump comes from `ctx.bumps.pool_name`.
+The seeds are extracted from the account's `.derive((seed) => [...])` definition. The bump comes from `ctx.bumps.pool_name`.
 
 ---
 
@@ -455,7 +463,7 @@ run: () => {}                       // nothing needed
 | Inside `run:` | Type | Description |
 |---|---|---|
 | `pool` (from `p.mut(Pool)`) | `Pool & { key: string }` | Typed account fields + `.key` for address |
-| `pool` (from `p.init(Pool)`) | `Pool & { key: string }` | Same — writable new account |
+| `pool` (from `p.create(Pool)`) | `Pool & { key: string }` | Same — writable new account |
 | `Config` (bare, read-only) | `Readonly<Config> & { key: string }` | Read-only account |
 | `admin` (from `p.signer()`) | `string` | Signer's public key |
 | `mint` (from `p.mint()`) | `{ key: string, supply: bigint, decimals: number, ... }` | Mint fields + `.key` |
@@ -530,13 +538,10 @@ sol.timestamp(): bigint     // Clock::get()?.unix_timestamp — auto-injected, c
 sol.slot(): bigint           // Clock::get()?.slot
 sol.epoch(): bigint          // Clock::get()?.epoch
 
-// Crypto
-crypto.sha256(data: Uint8Array): Uint8Array
-crypto.keccak256(data: Uint8Array): Uint8Array
-
-// Escape hatch
-rust`raw Rust code here`
 ```
+
+> **Note:** Advanced helpers (`crypto.sha256`, `rust` escape-hatch blocks) are planned
+> but not yet implemented. The current transpiler covers the patterns listed above.
 
 ### NOT Available (Parse-Time Blocked)
 
@@ -714,7 +719,7 @@ token_2022_extensions::initialize_transfer_fee_config(
 
 ```typescript
 import {
-  program, account, ix, defineErrors, defineEvents,
+  program, account,
   u64, u8, bool, pubkey,
   p, token, token2022, sol, ata,
 } from 'better-sol/program'
@@ -724,7 +729,7 @@ const Config = account({
   feeBps: u64,
   totalPools: u64,
   bump: u8,
-}).seeds('config')
+}).derive(() => ["config"])
 
 const Pool = account({
   tokenAMint: pubkey,
@@ -736,32 +741,30 @@ const Pool = account({
   feeBps: u64,
   isActive: bool,
   bump: u8,
-}).seeds('pool', '{tokenAMint}', '{tokenBMint}')
+}).derive((seed) => ["pool", seed.tokenAMint, seed.tokenBMint])
 
-const errors = defineErrors({
-  Unauthorized: 'Not authorized',
-  InvalidAmount: 'Amount must be > 0',
-  SlippageExceeded: 'Output below minimum',
-  PoolInactive: 'Pool is not active',
-  InvalidMint: 'Mint mismatch',
-})
-
-const events = defineEvents({
-  Swap: { amountIn: u64, amountOut: u64, fee: u64, direction: u8 },
-  LiquidityAdded: { amountA: u64, amountB: u64, lpTokens: u64 },
-})
-
-export const t22Amm = program({
-  name: 't22_amm',
+export const t22Amm = program(
+  {
+    name: 't22_amm',
   address: 'T22AMM11111111111111111111111111111111111111',
-  errors,
-  events,
-  instructions: {
+  errors: {
+    Unauthorized: 'Not authorized',
+    InvalidAmount: 'Amount must be > 0',
+    SlippageExceeded: 'Output below minimum',
+    PoolInactive: 'Pool is not active',
+    InvalidMint: 'Mint mismatch',
+  },
+  events: {
+    Swap: { amountIn: u64, amountOut: u64, fee: u64, direction: u8 },
+    LiquidityAdded: { amountA: u64, amountB: u64, lpTokens: u64 },
+  },
+  },
+  ix => ({
 
     createPool: ix({
       accounts: {
         config: p.mut(Config),
-        pool: p.init(Pool),
+        pool: p.create(Pool),
         tokenAMint: p.mint(),
         tokenBMint: p.mint(),
         lpMint: p.mint(),
@@ -842,8 +845,8 @@ export const t22Amm = program({
         ctx.emit('Swap', { amountIn, amountOut, fee, direction })
       },
     }),
-  },
-})
+  }),
+)
 ```
 
 ---
@@ -852,13 +855,13 @@ export const t22Amm = program({
 
 ```typescript
 import {
-  program, account, struct_zc, ix, defineErrors,
+  program, account, struct_zc,
   u64, u32, i64, pubkey, bool, array,
   p, token, sol,
 } from 'better-sol/program'
 
 // Zero-copy sub-struct for array elements
-const Order = struct_zc({
+const Order = struct({
   trader: pubkey,
   price: u64,
   quantity: u64,
@@ -878,7 +881,7 @@ const OrderBook = account({
   bump: u8,
   bids: array(Order, 256),
   asks: array(Order, 256),
-}).seeds('orderbook', '{market}').zeroCopy()
+}).derive((seed) => ["orderbook", seed.market]).zeroCopy()
 
 const FillRecord = account({
   orderBook: pubkey,
@@ -887,26 +890,26 @@ const FillRecord = account({
   price: u64,
   quantity: u64,
   timestamp: i64,
-}).seeds('fill', '{orderBook}', '{trader}', '{timestamp}')
+}).derive((seed) => ["fill", seed.orderBook, seed.trader, seed.timestamp])
 
-const errors = defineErrors({
-  Unauthorized: 'Not authorized',
-  OrderbookFull: 'No space for more orders',
-  InvalidPrice: 'Price must be > 0',
-  InvalidQuantity: 'Quantity must be > 0',
-  NoOrders: 'No orders to process',
-  InvalidOrder: 'Order not found or already filled',
-})
-
-export const orderbook = program({
-  name: 'orderbook',
+export const orderbook = program(
+  {
+    name: 'orderbook',
   address: '0rdrB00k11111111111111111111111111111111111',
-  errors,
-  instructions: {
+  errors: {
+    Unauthorized: 'Not authorized',
+    OrderbookFull: 'No space for more orders',
+    InvalidPrice: 'Price must be > 0',
+    InvalidQuantity: 'Quantity must be > 0',
+    NoOrders: 'No orders to process',
+    InvalidOrder: 'Order not found or already filled',
+  },
+  },
+  ix => ({
 
     initialize: ix({
       accounts: {
-        book: p.init(OrderBook),
+        book: p.create(OrderBook),
         market: pubkey,          // ← bare pubkey: unchecked AccountInfo, address only
         admin: p.signer(),
       },
@@ -1001,8 +1004,8 @@ export const orderbook = program({
         book.isActive = false  // → 0u8 in zero-copy Rust
       },
     }),
-  },
-})
+  }),
+)
 ```
 
 ---
@@ -1092,7 +1095,7 @@ export const orderbook = program({
 ```typescript
 import { betterSol } from 'better-sol'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'https://api.mainnet-beta.solana.com',
   payer: './keypair.json',
   programs: { amm, orderbook },
@@ -1139,7 +1142,7 @@ await walletSol.amm.swap({ pool, ..., amountIn, minOut })
 // ── Account fetching ──
 const pool = await amm.accounts.Pool.fetch(poolAddr)       // typed
 const pools = await amm.accounts.Pool.fetchAll()            // typed[]
-const derived = amm.accounts.Pool.derive({ tokenAMint, tokenBMint })
+const derived = await sol.amm.accounts.Pool.derive({ tokenAMint, tokenBMint })
 
 // ── Event listening ──
 amm.on('Swap', (event) => {
@@ -1176,8 +1179,8 @@ test('AMM swap works', async () => {
   const mintB = await sol.token.createMint({ decimals: 6, authority: payer })
 
   // Setup pool
-  const configAddr = amm.accounts.Config.derive()
-  const poolAddr = amm.accounts.Pool.derive({ tokenAMint: mintA, tokenBMint: mintB })
+  const configAddr = await sol.amm.accounts.Config.derive({})
+  const poolAddr = await sol.amm.accounts.Pool.derive({ tokenAMint: mintA, tokenBMint: mintB })
 
   await expectIx(
     sol.amm.createPool({ config: configAddr, pool: poolAddr, tokenAMint: mintA, tokenBMint: mintB, feeBps: 30n })
@@ -1414,9 +1417,9 @@ Everything else is committed. Generated schemas are type contracts, not build ar
 | Command | Generates | Git |
 |---------|-----------|-----|
 | `create <name>` | `programs/<name>.ts` + `.better-sol/<name>.json` | ✅ `.ts` · ❌ `.json` |
-| `deploy [--cluster]` | Nothing local (cloud compiles + deploys) | — |
+| `deploy [--cluster] [--program]` | Nothing local (cloud compiles + deploys) | — |
 | `deploy --verify` | `generated/<name>/src/**` (Rust) | ✅ commit |
-| `verify <name>` | Nothing (submits to OtterSec) | — |
+| `verify <program-id>` | Submits to OtterSec verified-builds API for remote verification | — |
 | `generate db --orm drizzle` | `src/db/better-sol.ts` | ✅ commit |
 
 ### CI/CD (GitHub Actions)

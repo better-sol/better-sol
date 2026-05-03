@@ -2,6 +2,8 @@
 
 The client SDK. Programs as plugins, like Better Auth. Zero code generation.
 
+> **Implementation status (May 2026):** The client SDK is now implemented: async `betterSol()` factory, typed instruction methods, async PDA derivation via `sol.program.accounts.AccountName.derive()`, account fetching via `.fetch()`, Kit-backed core operations (`getBalance`, `transfer`, `sol.token.*`), and Borsh encoding/decoding from TypeToken runtime objects. The `program()` function now accepts an optional `accounts` config to register account definitions for the client. Implemented now: Kit-backed `sol.withSigner()` for Kit `TransactionSigner`s and `sol.token.*`. Not yet implemented: framework-specific wallet adapter subpaths, multi-step transactions, `fromIdl()`, testing SDK.
+
 ---
 
 
@@ -25,9 +27,9 @@ No transpiler code ships to the browser. Projects using only the client never pu
 ## 1. Hello World — 4 Lines
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 
-const sol = betterSol({ cluster: 'devnet' })
+const sol = await betterSol({ cluster: 'devnet' })
 
 const balance = await sol.getBalance('GdG9JHTSWBChvf6dfBATEYCZbDwKtcC6tJEpqoyuVfqV')
 // → 2500000000n
@@ -41,11 +43,11 @@ Just import and call a function.
 ## 2. Send SOL
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
 })
 const sender = sol.payer
 
@@ -63,11 +65,11 @@ No blockhash. No fee payer setup. No `pipe()`.
 ## 3. Token Operations
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
 })
 const payer = sol.payer
 
@@ -97,18 +99,18 @@ await sol.token.transfer({
 ## 4. Use an On-Chain Program (via IDL)
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'  // Same file as the program definition
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
   programs: { counter },
 })
 
 // address is in the program definition
 
-const counterAddr = counter.accounts.Counter.derive({ authority: sol.payer })
+const counterAddr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
 
 // Execute an instruction — method appears automatically
 await sol.counter.increment({
@@ -118,7 +120,7 @@ await sol.counter.increment({
 })
 
 // Read account — auto-decoded, fully typed
-const account = await counter.accounts.Counter.fetch(counterAddr)
+const account = await sol.counter.accounts.Counter.fetch(counterAddr)
 console.log(account.count) // → 52n
 ```
 
@@ -156,10 +158,10 @@ better-sol does NOT include wallet connection. It gives you a shared Solana clie
 
 ```typescript
 // lib/sol.ts — created ONCE, imported anywhere
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'
 
-export const sol = betterSol({
+export const sol = await betterSol({
   cluster: 'mainnet-beta',
   programs: { counter },
 })
@@ -169,20 +171,20 @@ Then, when you have a wallet:
 
 ```typescript
 // One call creates a wallet-scoped client
-const userSol = sol.withSigner(wallet)
+const userSol = await sol.withSigner(kitTransactionSigner)
 
 // All p.signer() accounts auto-fill from that wallet
 await userSol.counter.increment({ counter: addr, amount: 1n })
 ```
 
-No global mutable wallet state. No React `useEffect`. No `sol.connect()` lifecycle to synchronize. The base `sol` is static; `sol.withSigner(wallet)` creates a scoped client for the current user/action.
+No global mutable wallet state. No React `useEffect`. No `sol.connect()` lifecycle to synchronize. The base `sol` is static; `sol.withSigner(kitTransactionSigner)` creates a scoped client for the current user/action.
 
 **Mental model:**
 
 | Object | Lifetime | Contains |
 |---|---|---|
 | `sol` | App lifetime | Cluster, RPC, programs, IDLs |
-| `userSol = sol.withSigner(wallet)` | Request / render / handler | Same client + current wallet signer |
+| `userSol = await sol.withSigner(kitTransactionSigner)` | Request / render / handler | Same client + current Kit signer |
 
 This is the cleanest fit for React, server components, multi-user apps, and concurrent requests.
 
@@ -226,10 +228,10 @@ Real Reown Solana usage exposes:
 
 ```tsx
 // lib/sol.ts
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'
 
-export const sol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
+export const sol = await betterSol({ cluster: 'mainnet-beta', programs: { counter } })
 ```
 
 ```tsx
@@ -250,7 +252,7 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
       return
     }
 
-    const userSol = sol.withSigner(reownWallet({ address, walletProvider }))
+    const userSol = await sol.withSigner(reownWallet({ address, walletProvider }))
     await userSol.counter.increment({ counter: counterAddr, amount: 1n })
   }
 
@@ -260,7 +262,7 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
 
 No `useEffect`. No global connect/disconnect. The wallet is scoped to the click handler.
 
-**Compatibility:** Reown AppKit's Solana provider accepts `@solana/web3.js` `Transaction | VersionedTransaction` (`AnyTransaction`). The transaction-first API should return a `VersionedTransaction` for Reown. `reownWallet()` is still useful for the one-step `withSigner` convenience path, but the most Solana-native integration is `transaction(..., { format: 'web3' })` + `walletProvider.sendTransaction(tx, connection)`.
+**Compatibility:** Reown support should be implemented as a small adapter that converts the provider shape into a Kit `TransactionSigner`. The core SDK remains Kit-only; legacy transaction objects should not leak into the public better-sol API.
 
 ---
 
@@ -282,7 +284,7 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
   const handleIncrement = async () => {
     if (!wallet.publicKey || !wallet.signTransaction) return
 
-    const userSol = sol.withSigner(walletAdapter(wallet))
+    const userSol = await sol.withSigner(walletAdapter(wallet))
     await userSol.counter.increment({ counter: counterAddr, amount: 1n })
   }
 
@@ -319,7 +321,7 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
   const handleIncrement = async () => {
     if (!wallet) return
 
-    const userSol = sol.withSigner(privyWallet({ wallet, signTransaction }))
+    const userSol = await sol.withSigner(privyWallet({ wallet, signTransaction }))
     await userSol.counter.increment({ counter: counterAddr, amount: 1n })
   }
 
@@ -351,7 +353,7 @@ export function CounterButton({ counterAddr }: { counterAddr: string }) {
   const handleIncrement = async () => {
     if (!primaryWallet || !isSolanaWallet(primaryWallet)) return
 
-    const userSol = sol.withSigner(dynamicWallet(primaryWallet))
+    const userSol = await sol.withSigner(dynamicWallet(primaryWallet))
     await userSol.counter.increment({ counter: counterAddr, amount: 1n })
   }
 
@@ -372,7 +374,7 @@ import { walletSigner } from 'better-sol'
 const provider = window.phantom?.solana
 await provider.connect()
 
-const userSol = sol.withSigner(walletSigner({
+const userSol = await sol.withSigner(walletSigner({
   publicKey: provider.publicKey.toString(),
   signTransaction: (tx) => provider.signTransaction(tx),
 }))
@@ -397,10 +399,10 @@ await userSol.counter.increment({ counter: addr, amount: 1n })
 ```typescript
 // lib/sol.server.ts — backend only, never bundled to browser
 import 'server-only'
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { alerts } from '../programs/alerts'
 
-export const sol = betterSol({
+export const sol = await betterSol({
   cluster: 'mainnet-beta',
   payer: process.env.ALERT_BOT_KEYPAIR!,
   programs: { alerts },
@@ -435,7 +437,7 @@ The developer experience is strong because the worker code does not deal with bl
 
 **Who signs?** The connected user wallet.
 
-**Why `sol.withSigner(wallet)` fits:**
+**Why `sol.withSigner(kitTransactionSigner)` fits:**
 - The base `sol` client is shared and importable anywhere.
 - Each user action scopes the wallet to that call.
 - No global mutable signer, so concurrent users and React renders are safe.
@@ -443,10 +445,10 @@ The developer experience is strong because the worker code does not deal with bl
 
 ```typescript
 // lib/sol.ts — browser-safe singleton
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { social } from '../programs/social'
 
-export const sol = betterSol({
+export const sol = await betterSol({
   cluster: 'mainnet-beta',
   programs: { social },
 })
@@ -470,7 +472,7 @@ export function PostButton({ content }: { content: string }) {
       return
     }
 
-    const userSol = sol.withSigner(reownWallet({ address, walletProvider }))
+    const userSol = await sol.withSigner(reownWallet({ address, walletProvider }))
 
     await userSol.social.createPost({
       content,
@@ -489,7 +491,7 @@ import { reownWallet } from 'better-sol/wallets/reown'
 
 export function TipButton({ creator, amount, wallet }) {
   const tip = async () => {
-    await sol.withSigner(wallet).social.tipCreator({
+    await (await sol.withSigner(kitTransactionSigner)).social.tipCreator({
       creator,
       amount,
     })
@@ -512,224 +514,103 @@ await adminSol.social.updateConfig(...)
 await adminSol.amm.collectProtocolFees(...)
 
 // User-owned work: scoped wallet
-await sol.withSigner(userWallet).social.createPost(...)
-await sol.withSigner(userWallet).social.tipCreator(...)
-await sol.withSigner(userWallet).amm.swapAForB(...)
+await (await sol.withSigner(userKitSigner)).social.createPost(...)
+await (await sol.withSigner(userKitSigner)).social.tipCreator(...)
+await (await sol.withSigner(userKitSigner)).amm.swapAForB(...)
 ```
 
-`sol.withSigner(wallet)` returns a scoped clone. It does not mutate the base singleton, so it is safe for concurrent users, React render cycles, tests, and server requests.
+`sol.withSigner(kitTransactionSigner)` returns a scoped clone. It does not mutate the base singleton, so it is safe for concurrent users, React render cycles, tests, and server requests.
 
 ---
 
-### The Final API
+### Current Kit-Based Browser API
+
+The SDK backbone is `@solana/kit`. The official browser/server signer shape is a Kit `TransactionSigner`.
 
 ```typescript
-const sol = betterSol({ cluster, programs })
+const sol = await betterSol({ cluster, programs })
 
-// 1. Solana-native wallet workflow: build tx, wallet signs/sends
-const tx = await sol.counter.increment.transaction({
-  counter: addr,
-  authority: walletAddress,
-  amount: 1n,
+const userSol = await sol.withSigner(kitTransactionSigner)
+await userSol.counter.increment({ counter: addr, amount: 1n })
+
+const adminSol = await betterSol({
+  cluster,
+  payer: keypairFile('./keypair.json'),
+  programs,
 })
-await wallet.sendTransaction(tx, connection)
-
-// 2. Ergonomic shortcut: scoped signer auto-fills the single signer account
-await sol.withSigner(wallet).counter.increment({ counter: addr, amount: 1n })
-
-// 3. Build only, no wallet
-const prepared = await sol.counter.increment.prepare({ counter: addr, authority: walletAddress, amount: 1n })
-
-// 4. Server signer
-const adminSol = betterSol({ cluster, payer: './keypair.json', programs })
 ```
 
-The key DX decision: **transaction-first for compatibility, `withSigner` for convenience.** This matches how Solana wallet libraries actually work while still offering a high-level SDK path.
+The key DX decision after the Kit migration: **`withSigner()` is Kit-native and accepts a `TransactionSigner`.** Framework-specific wallet adapters should convert Reown, Wallet Adapter, Privy, Dynamic, or Phantom shapes into a Kit-compatible signer at the boundary.
 
-### Is This Actually the Solana-Native Workflow?
+No legacy `@solana/web3.js` transaction type is part of the core SDK API. If a wallet library still exposes legacy transaction objects, the adapter may convert internally, but the public better-sol backbone remains Kit-only.
 
-After checking real Solana wallet libraries, the answer is:
+**Current hierarchy:**
 
-- **Server keypair client** is common and Solana-native.
-- **Transaction-first browser flow** is the common Solana wallet workflow.
-- **`sol.withSigner(...)` is our convenience layer**, useful but should not be the only or primary path.
-
-Real Solana libraries usually expect the app to build a transaction and hand it to the wallet:
-
-| Library | Actual verified API shape |
-|---|---|
-| Solana Wallet Adapter | `useWallet()` returns `publicKey`, `sendTransaction(transaction, connection)`, `signTransaction(transaction)` |
-| Reown AppKit Solana | `walletProvider.signTransaction(transaction)`, `walletProvider.sendTransaction(transaction, connection)` |
-| Privy Solana | `useSignTransaction().signTransaction({ transaction: Uint8Array, wallet })`, `useSignAndSendTransaction().signAndSendTransaction({ transaction: Uint8Array, wallet })` |
-| Dynamic Solana | `primaryWallet.getSigner()` then signer has `signTransaction(transaction)` / `signAndSendTransaction(transaction)` |
-
-So the SDK should expose **transaction-first APIs** as the compatibility layer:
-
-```typescript
-// Build transaction, let the wallet library sign/send it
-const tx = await sol.social.createPost.transaction({
-  author: walletAddress,
-  content: 'gm',
-})
-
-await wallet.sendTransaction(tx, connection)
-```
-
-And keep `withSigner` as ergonomic sugar:
-
-```typescript
-await sol.withSigner(wallet).social.createPost({ content: 'gm' })
-```
-
-**Final hierarchy:**
-
-| API | Use case |
-|---|---|
-| `.instruction(args)` | Compose manually with other Solana instructions |
-| `.transaction(args, options?)` | Standard wallet-library workflow |
-| `.prepare(args)` | Advanced custom signing / multi-sig / hardware wallets |
-| `sol.withSigner(wallet).method(args)` | Ergonomic one-step send when an adapter exists |
-| `payer` in `betterSol()` | Backend automation / admin / cranks |
-
-**Transaction formats:**
-
-| `format` | Return type | Used by |
+| API | Status | Use case |
 |---|---|---|
-| `'web3'` | `VersionedTransaction` from `@solana/web3.js` | Wallet Adapter, Reown, Dynamic |
-| `'bytes'` | `Uint8Array` encoded transaction | Privy Solana hooks |
-| `'kit'` | `@solana/kit` transaction message / compiled transaction | Kit-native flows |
+| `sol.program.method(args)` | ✅ Implemented | Sign and send with the active Kit signer |
+| `sol.withSigner(signer).program.method(args)` | ✅ Implemented | Scoped browser/user signer |
+| `payer` in `betterSol()` | ✅ Implemented | Backend automation / admin / cranks |
+| Framework wallet adapter subpaths | 📋 Planned | Convert popular wallet libraries to Kit signers |
+| `.transaction(args)` / `.prepare(args)` | 📋 Planned | Build-only flows, multisig, hardware wallets |
 
-```typescript
-const web3Tx = await sol.social.createPost.transaction(args, { format: 'web3' })
-const bytes = await sol.social.createPost.transaction(args, { format: 'bytes' })
-const kitTx = await sol.social.createPost.transaction(args, { format: 'kit' })
-```
-
-This is implementable because `@solana/web3.js` exposes `VersionedTransaction.deserialize(serializedTransaction: Uint8Array)` and `VersionedTransaction.serialize(): Uint8Array`, while Privy accepts `Uint8Array` directly.
-
-**Guardrail:** auto-fill only happens in the `withSigner` convenience layer when an instruction has exactly one omitted `p.signer()` account. Transaction-first APIs require signer addresses explicitly.
+**Guardrail:** signer auto-fill only uses the active signer for `p.signer()` accounts. If an explicit signer account is supplied, it must match the active signer. Use `sol.withSigner()` for a different signer.
 
 ---
 
-### Verified Transaction-First Wallet Examples
+### Planned Framework Wallet Adapter Examples
+
+These examples are the intended adapter direction. The adapter packages are not implemented yet; they should produce Kit `TransactionSigner` objects.
 
 #### Wallet Adapter
 
-Verified type shape: `useWallet()` exposes `publicKey`, `sendTransaction(transaction, connection)`, and optional `signTransaction(transaction)`.
-
 ```tsx
 import { sol } from './lib/sol'
-import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { walletAdapter } from 'better-sol/wallets/wallet-adapter'
+import { useWallet } from '@solana/wallet-adapter-react'
 
 export function PostButton({ content }: { content: string }) {
-  const { connection } = useConnection()
-  const { publicKey, sendTransaction } = useWallet()
+  const wallet = useWallet()
 
   const post = async () => {
-    if (!publicKey) return
+    if (!wallet.publicKey || !wallet.signTransaction) return
 
-    const tx = await sol.social.createPost.transaction({
-      author: publicKey.toBase58(),
-      content,
-    }, { format: 'web3' })
-
-    await sendTransaction(tx, connection)
+    const userSol = await sol.withSigner(walletAdapter(wallet))
+    await userSol.social.createPost({ content })
   }
 
-  return <><WalletMultiButton /><button onClick={post}>Post</button></>
+  return <button onClick={post}>Post</button>
 }
 ```
 
 #### Reown AppKit
 
-Verified type shape: Solana provider exposes `signTransaction<T extends AnyTransaction>(transaction: T): Promise<T>` and `sendTransaction(transaction, connection, options?): Promise<string>`.
-
 ```tsx
 import { sol } from './lib/sol'
-import { useAppKit, useAppKitAccount, useAppKitConnection, useAppKitProvider } from '@reown/appkit/react'
-import type { Provider } from '@reown/appkit-adapter-solana/react'
+import { reownWallet } from 'better-sol/wallets/reown'
 
-export function PostButton({ content }: { content: string }) {
-  const { open } = useAppKit()
-  const { address, isConnected } = useAppKitAccount()
-  const { connection } = useAppKitConnection()
-  const { walletProvider } = useAppKitProvider<Provider>('solana')
-
-  const post = async () => {
-    if (!isConnected || !address || !walletProvider || !connection) {
-      open()
-      return
-    }
-
-    const tx = await sol.social.createPost.transaction({
-      author: address,
-      content,
-    }, { format: 'web3' })
-
-    await walletProvider.sendTransaction(tx, connection)
-  }
-
-  return <button onClick={post}>Post</button>
-}
+const userSol = await sol.withSigner(reownWallet({ address, walletProvider }))
+await userSol.counter.increment({ counter: counterAddr, amount: 1n })
 ```
 
 #### Privy
 
-Verified type shape: `useSignAndSendTransaction().signAndSendTransaction({ transaction: Uint8Array, wallet })` returns `{ signature: Uint8Array }`.
-
 ```tsx
 import { sol } from './lib/sol'
-import { useWallets, useSignAndSendTransaction } from '@privy-io/react-auth/solana'
+import { privyWallet } from 'better-sol/wallets/privy'
 
-export function PostButton({ content }: { content: string }) {
-  const { wallets } = useWallets()
-  const { signAndSendTransaction } = useSignAndSendTransaction()
-  const wallet = wallets[0]
-
-  const post = async () => {
-    if (!wallet) return
-
-    const tx = await sol.social.createPost.transaction({
-      author: wallet.address,
-      content,
-    }, { format: 'bytes' })
-
-    await signAndSendTransaction({ transaction: tx, wallet })
-  }
-
-  return <button onClick={post}>Post</button>
-}
+const userSol = await sol.withSigner(privyWallet({ wallet, signTransaction }))
+await userSol.counter.increment({ counter: counterAddr, amount: 1n })
 ```
 
 #### Dynamic
 
-Verified type shape: Solana wallets expose `primaryWallet.getSigner()`; the signer supports `signTransaction(transaction)` and `signAndSendTransaction(transaction)` for `Transaction | VersionedTransaction`.
-
 ```tsx
 import { sol } from './lib/sol'
-import { useDynamicContext } from '@dynamic-labs/sdk-react-core'
-import { isSolanaWallet } from '@dynamic-labs/solana'
+import { dynamicWallet } from 'better-sol/wallets/dynamic'
 
-export function PostButton({ content }: { content: string }) {
-  const { primaryWallet } = useDynamicContext()
-
-  const post = async () => {
-    if (!primaryWallet || !isSolanaWallet(primaryWallet)) return
-
-    const signer = await primaryWallet.getSigner()
-    if (!signer) return
-
-    const tx = await sol.social.createPost.transaction({
-      author: primaryWallet.address,
-      content,
-    }, { format: 'web3' })
-
-    await signer.signAndSendTransaction(tx)
-  }
-
-  return <button onClick={post}>Post</button>
-}
+const userSol = await sol.withSigner(dynamicWallet(primaryWallet))
+await userSol.counter.increment({ counter: counterAddr, amount: 1n })
 ```
 
 ---
@@ -793,9 +674,9 @@ Your test runner. Your files. Your structure.
 ## What `better-sol` Ships
 
 ```
-better-sol                    # betterSol(), createTestSol(), sol.transfer(), sol.token.*
-better-sol/program            # program(), account(), ix(), p, token (CPI), sol (sysvars)
-better-sol/testing            # createTestSol() with LiteSVM
+better-sol                    # async betterSol(), sol.transfer(), sol.token.*, sol.withSigner()
+better-sol/program            # program(), account(), callback-scoped ix, p, token (CPI), sol (sysvars)
+better-sol/testing            # planned createTestSol() with LiteSVM
 ```
 
 ---
@@ -817,7 +698,7 @@ Most developers will only use `better-sol`.
 
 ```typescript
 import {
-  program, account, ix, defineErrors,
+  program, account,
   u64, bool, pubkey,
   p,
 } from 'better-sol/program'
@@ -827,66 +708,100 @@ const Counter = account({
   count: u64,
   authority: pubkey,
   isActive: bool,
-}).seeds('counter', '{authority}')
+}).derive((seed) => ["counter", seed.authority])
 
-// Define errors (type-safe registry)
-const errors = defineErrors({
-  Unauthorized: 'Not the authority',
-  NotActive: 'Counter is not active',
-  BelowZero: 'Count would go below zero',
-})
-
-// Define the program — flat instruction map
-export const counter = program({
-  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
-
-  initialize: ix({
-    accounts: {
-      counter: p.init(Counter),
-      authority: p.signer(),
+// Define the program with a scoped instruction factory
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR11111111111111111111111111111111111',
+    errors: {
+      Unauthorized: 'Not the authority',
+      NotActive: 'Counter is not active',
+      BelowZero: 'Count would go below zero',
     },
-    args: { initialValue: u64 },
-    run: ({ counter, authority }, { initialValue }) => {
-      counter.count = initialValue
-      counter.authority = authority
-      counter.isActive = true
-    },
+  },
+  ix => ({
+    initialize: ix({
+      accounts: {
+        counter: p.create(Counter),
+        authority: p.signer(),
+      },
+      args: { initialValue: u64 },
+      run: ({ counter, authority }, { initialValue }) => {
+        counter.count = initialValue
+        counter.authority = authority
+        counter.isActive = true
+      },
+    }),
+
+    increment: ix({
+      accounts: {
+        counter: p.mut(Counter),
+        authority: p.signer(),
+      },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        ctx.require(counter.isActive, 'NotActive')
+        counter.count += amount
+      },
+    }),
+
+    close: ix({
+      accounts: {
+        counter: p.close(Counter, 'authority'),
+        authority: p.signer(),
+      },
+      run: () => {},
+    }),
   }),
-
-  increment: ix({
-    accounts: {
-      counter: p.mut(Counter),
-      authority: p.signer(),
-    },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      ctx.require(counter.isActive, 'NotActive')
-      counter.count += amount
-    },
-  }),
-
-  close: ix({
-    accounts: {
-      counter: p.close(Counter, 'authority'),
-      authority: p.signer(),
-    },
-    run: () => {
-      // Account closed automatically by p.close()
-    },
-  }),
-})
+)
 ```
 
-`program()` returns a typed namespace. At runtime, this object gives you:
-- PDA derivation: `counter.accounts.Counter.derive({ authority })`
+The full `program()` runtime target is a typed namespace. At runtime, this object should give you:
+- PDA derivation: `await sol.counter.accounts.Counter.derive({ authority })`
 - Account size: automatic from field definitions
 - Account decoder: used by `betterSol` to deserialize on-chain data
 - Instruction builders: used by `betterSol` to serialize instruction data
 - IDL export: `counter.idl` — auto-generated Anchor IDL for Codama/Anchor/IDL Space compatibility
-- Type-safe require: `ctx.require(cond, 'Error')` — autocomplete, compile-time checked
+- Type-safe require/emit in handlers through the scoped builder pattern below
 
-**All of this works without any build step.**
+**Implementation status:** the `better-sol/program` package implements type tokens, `account()`, `.derive()`, `.zeroCopy()`, `struct()`, callback-scoped `ix`, `program(config, ix => instructions)` with inline errors/events, `p.*` constraints, token CPI stubs, and `sol.timestamp()`. The client SDK (`betterSol()`) is implemented on `@solana/kit`: typed instruction methods, async PDA derivation via `sol.program.accounts.Name.derive()`, account fetching via `.fetch()`, token helpers via `sol.token.*`, scoped signers via `sol.withSigner()`, and Borsh encoding/decoding from TypeToken runtime objects. The `program()` config accepts an optional `accounts` field to register account definitions for the client. Signer configuration uses `keypairFile()`, `secretKey()`, `generateSigner()`, or a Kit `TransactionSigner`. Not yet implemented: framework-specific wallet adapter subpaths, `fromIdl()`, testing SDK.
+
+**All source-definition typing works without any build step.**
+
+### Error/event validation
+
+The transpiler validates `ctx.require(cond, 'ErrorName')` and `ctx.emit('EventName', payload)` at build time. Errors and events are defined inline:
+
+```typescript
+import { program, account, u64, pubkey, p } from 'better-sol/program'
+
+const Counter = account({ count: u64, authority: pubkey })
+
+export const counter = program(
+  {
+    name: 'counter',
+    address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',
+    errors: { Unauthorized: 'Not the authority' },
+    events: { Incremented: { amount: u64, authority: pubkey } },
+  },
+  ix => ({
+    increment: ix({
+      accounts: { counter: p.mut(Counter), authority: p.signer() },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        counter.count += amount
+        ctx.emit('Incremented', { amount, authority })
+      },
+    }),
+  }),
+)
+```
+
+The CLI parser extracts errors/events from the `program()` config directly. Callback-scoped `ix(...)` is the single instruction definition shape.
 
 ---
 
@@ -933,17 +848,17 @@ The `program()` definition works as a client regardless — even without compila
 The two packages compose naturally:
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'  // Same file as the program definition
 
 // Programs are plugins — like Better Auth
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
   programs: { counter },
 })
 
-const counterAddr = counter.accounts.Counter.derive({ authority: sol.payer })
+const counterAddr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
 
 // Execute — methods appear on client automatically
 await sol.counter.initialize({
@@ -959,7 +874,7 @@ await sol.counter.increment({
 })
 
 // Fetch — auto-decoded, fully typed
-const account = await counter.accounts.Counter.fetch(counterAddr)
+const account = await sol.counter.accounts.Counter.fetch(counterAddr)
 console.log(account.count) // → 10n
 ```
 
@@ -968,9 +883,9 @@ console.log(account.count) // → 10n
 ## 11. Full Example: Token + Escrow
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import {
-  program, account, ix, defineErrors,
+  program, account,
   u64, u8, pubkey,
   p, token, emit,
 } from 'better-sol/program'
@@ -985,43 +900,46 @@ const Escrow = account({
   takerAmount: u64,
   escrowId: u64,
   bump: u8,
-}).seeds('escrow', '{maker}', '{escrowId}')
+}).derive((seed) => ["escrow", seed.maker, seed.escrowId])
 
-const errors = defineErrors({
-  Unauthorized: 'Only the maker can refund',
-  InvalidMint: 'Mint mismatch',
-})
-
-const escrow = program({
-  name: 'escrow', address: 'EsCr0w11111111111111111111111111111111111', errors, instructions: {
-  make: ix({
-    accounts: {
-      escrow: p.init(Escrow),
-      maker: p.signer(),
+const escrow = program(
+  {
+    name: 'escrow',
+    address: 'EsCr0w11111111111111111111111111111111111',
+    errors: {
+      Unauthorized: 'Only the maker can refund',
+      InvalidMint: 'Mint mismatch',
     },
-    args: { escrowId: u64, makerAmount: u64, takerAmount: u64 },
-    run: ({ escrow, maker }, { escrowId, makerAmount, takerAmount }) => {
-      escrow.maker = maker
-      escrow.makerAmount = makerAmount
-      escrow.takerAmount = takerAmount
-      escrow.escrowId = escrowId
-    },
-  }),
-  take: ix({ /* ... */ }),
-  refund: ix({ /* ... */ }),
   },
-})
+  ix => ({
+    make: ix({
+      accounts: {
+        escrow: p.create(Escrow),
+        maker: p.signer(),
+      },
+      args: { escrowId: u64, makerAmount: u64, takerAmount: u64 },
+      run: ({ escrow, maker }, { escrowId, makerAmount, takerAmount }) => {
+        escrow.maker = maker
+        escrow.makerAmount = makerAmount
+        escrow.takerAmount = takerAmount
+        escrow.escrowId = escrowId
+      },
+    }),
+    take: ix({ /* ... */ }),
+    refund: ix({ /* ... */ }),
+  }),
+)
 
 // ── Client Usage ──
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
   programs: { escrow },
 })
 
 // Create escrow: I offer 1 SOL for 100 USDC
-const escrowAddr = escrow.accounts.Escrow.derive({ maker: sol.payer, escrowId: 1n })
+const escrowAddr = await sol.escrow.accounts.Escrow.derive({ maker: sol.payer, escrowId: 1n })
 
 await sol.escrow.make({
   escrow: escrowAddr,
@@ -1043,11 +961,11 @@ console.log(`Offering ${escrowAccount.makerAmount} for ${escrowAccount.takerAmou
 ### `better-sol` — The Runtime Library
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
   programs: { counter, amm },  // Programs as plugins — like Better Auth
 })
 
@@ -1070,7 +988,7 @@ const data = await counter.accounts.Counter.fetch(addr)
 
 // Wallet (browser — scoped wallet session)
 // import { sol } from './lib/sol'
-// const userSol = sol.withSigner(wallet)
+// const userSol = await sol.withSigner(kitTransactionSigner)
 // await userSol.counter.increment({ counter: addr, amount: 1n })  // signer auto-fills authority
 
 // Underlying access
@@ -1080,11 +998,11 @@ sol.rpcSubscriptions     // full @solana/kit subscriptions
 
 ### `better-sol/program` — The Program Builder (subpath export)
 
-Part of the `better-sol` package. Import it when defining on-chain programs.
+Part of the `better-sol` package. Import it when defining on-chain programs. The current implementation is intentionally a source-definition library first; richer runtime client helpers listed below remain part of the SDK implementation.
 
 ```typescript
 import {
-  program, account, ix, defineErrors,
+  program, account,
   u64, bool, pubkey,
   p, token, sol,
 } from 'better-sol/program'
@@ -1093,28 +1011,29 @@ const Counter = account({
   count: u64,
   authority: pubkey,
   isActive: bool,
-}).seeds('counter', '{authority}')
+}).derive((seed) => ["counter", seed.authority])
 
-const errors = defineErrors({
-  Unauthorized: 'Not the authority',
-})
-
-const myProgram = program({
-  name: 'my-program', address: 'MyPr0g11111111111111111111111111111111111', errors, instructions: {
-  myInstruction: ix({
-    accounts: { counter: p.mut(Counter), authority: p.signer() },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      counter.count += amount
-    },
-  }),
+const myProgram = program(
+  {
+    name: 'my-program',
+    address: 'MyPr0g11111111111111111111111111111111111',
+    errors: { Unauthorized: 'Not the authority' },
   },
-})
+  ix => ({
+    myInstruction: ix({
+      accounts: { counter: p.mut(Counter), authority: p.signer() },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        counter.count += amount
+      },
+    }),
+  }),
+)
 
 // What you get at runtime (no build step):
 myProgram.idl                                        // Anchor IDL for ecosystem compatibility (Codama, Anchor TS, etc.)
-myProgram.accounts.Counter.derive({ authority })      // PDA derivation
+await sol.myProgram.accounts.Counter.derive({ authority })      // PDA derivation
 myProgram.accounts.Counter.fetch(addr)                // Typed account fetch
 
 // Optional: generate Rust + deploy to chain (separate CLI package)
@@ -1169,7 +1088,7 @@ The CLI is intentionally separate so:
 
 ```typescript
 // BAD — feels like configuration, not discovery
-const sol = betterSol({ cluster: 'devnet', programs: { counter } })
+const sol = await betterSol({ cluster: 'devnet', programs: { counter } })
 // Why register separately if you already passed programs?
 ```
 
@@ -1203,25 +1122,29 @@ Methods appear on the client object because the plugins define them.
 ```typescript
 // ── Server side: define your program ──
 // programs/counter.ts
-import { program, account, ix, defineErrors, u64, bool, pubkey, p } from 'better-sol/program'
+import { program, account, u64, bool, pubkey, p } from 'better-sol/program'
 
-const Counter = account({ count: u64, authority: pubkey, isActive: bool }).seeds('counter', '{authority}')
-const errors = defineErrors({ Unauthorized: 'Not the authority', NotActive: 'Counter not active' })
-
-export const counter = program({
-  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
-  // ix() instructions...
-})
+const Counter = account({ count: u64, authority: pubkey, isActive: bool }).derive((seed) => ['counter', seed.authority])
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR11111111111111111111111111111111111',
+    errors: { Unauthorized: 'Not the authority', NotActive: 'Counter not active' },
+  },
+  ix => ({
+    increment: ix({ /* ... */ }),
+  }),
+)
 ```
 
 ```typescript
 // ── Client side: just import and use ──
 
 // OPTION A: Your own program (defined with better-sol)
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
   programs: { counter },  // ← like Better Auth plugins
 })
@@ -1229,14 +1152,14 @@ const sol = betterSol({
 // Methods appear automatically:
 await sol.counter.increment({ counter: addr, authority: payer, amount: 10n })
 await counter.accounts.Counter.fetch(addr)  // → typed account data
-counter.accounts.Counter.derive({ authority: payer })  // → PDA address
+await sol.counter.accounts.Counter.derive({ authority: payer })  // → PDA address
 
 // OPTION B: From on-chain program (no local program definition)
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
 })
 
 await sol.token.createMint({ decimals: 9, authority: payer })
@@ -1254,13 +1177,13 @@ No `registerProgram()`. The program IS the plugin.
 ### Full API Shape
 
 ```typescript
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
   rpcUrl: 'https://api.devnet.solana.com', // optional, inferred from cluster
-  payer: './keypair.json',                  // optional, can be set later
+  payer: keypairFile('./keypair.json'),                  // optional, can be set later
   programs: {
     counter,                                 // your custom program
   },
@@ -1278,7 +1201,7 @@ await sol.counter.initialize({ counter: addr, authority: payer, initialValue: 42
 await sol.counter.increment({ counter: addr, authority: payer, amount: 10n })
 await sol.counter.close({ counter: addr, authority: payer })
 await counter.accounts.Counter.fetch(addr)             // → CounterAccount | null
-counter.accounts.Counter.derive({ authority: payer })  // → PDA address
+await sol.counter.accounts.Counter.derive({ authority: payer })  // → PDA address
 
 // token program — built-in, same API shape
 await sol.token.createMint({ decimals: 9, authority: payer })
@@ -1295,7 +1218,7 @@ await sol.steps([
 
 // ── Wallet (browser — scoped wallet session) ──
 // import { sol } from './lib/sol'
-// const userSol = sol.withSigner(wallet)
+// const userSol = await sol.withSigner(kitTransactionSigner)
 // await userSol.counter.increment({ counter: addr, amount: 1n })  // signer auto-fills
 
 // ── Testing ──
@@ -1313,11 +1236,11 @@ The `program()` function returns an object that serves dual purpose:
 
 ```typescript
 // The program object has everything the client needs:
-const counter = program({ name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: { /* ix() calls */ } })
+const counter = program({ name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors }, ix => ({ /* ix() calls */ }))
 
 // For the client:
 counter.name                                    // 'counter' → becomes sol.counter
-counter.accounts.Counter.derive({ authority })  // PDA derivation
+await sol.counter.accounts.Counter.derive({ authority })  // PDA derivation
 counter.accounts.Counter.decode(data)           // Account deserialization
 counter.accounts.Counter.size                   // Space calculation
 counter.instructions.increment.build(args)      // Instruction serialization
@@ -1332,15 +1255,15 @@ When you pass a program to `betterSol({ programs: { counter } })`, the client:
 1. Reads the program's accounts → creates `sol.counter.increment()`, etc.
 2. Reads the instruction schemas → knows how to serialize args, deserialize accounts
 3. Uses the address from the program definition → PDAs derive correctly, transactions route to the right program
-4. Account operations stay on the program object: `counter.accounts.Counter.derive()`, `counter.accounts.Counter.fetch()`
+4. Client account operations live on the bound client namespace: `sol.counter.accounts.Counter.derive()`, `sol.counter.accounts.Counter.fetch()`
 
 The address comes from `program({ name: 'counter', address: 'CouNTeR...', ... })` — it's right there in the
 source code. No resolution, no environment variables, no hidden files.
 
 Same address on every cluster:
 ```typescript
-const devnetSol = betterSol({ cluster: 'devnet', programs: { counter } })
-const mainnetSol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
+const devnetSol = await betterSol({ cluster: 'devnet', programs: { counter } })
+const mainnetSol = await betterSol({ cluster: 'mainnet-beta', programs: { counter } })
 // Same program address! PDA derivations are identical.
 ```
 
@@ -1363,39 +1286,42 @@ npx @better-sol/cli create counter
 # 2. Edit the generated file to add your logic
 # (or skip `create` and write from scratch)
 ```
-import { program, account, ix, defineErrors, u64, bool, pubkey, p } from 'better-sol/program'
+import { program, account, u64, bool, pubkey, p } from 'better-sol/program'
 
-const Counter = account({ count: u64, authority: pubkey, isActive: bool }).seeds('counter', '{authority}')
-const errors = defineErrors({ Unauthorized: 'Not the authority', NotActive: 'Counter not active' })
-
-export const counter = program({
-  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
-  initialize: ix({
-    accounts: {
-      counter: p.init(Counter),
-      authority: p.signer(),
-    },
-    args: { initialValue: u64 },
-    run: ({ counter, authority }, { initialValue }) => {
-      counter.count = initialValue
-      counter.authority = authority
-      counter.isActive = true
-    },
-  }),
-  increment: ix({
-    accounts: {
-      counter: p.mut(Counter),
-      authority: p.signer(),
-    },
-    args: { amount: u64 },
-    run: ({ counter, authority }, { amount }, ctx) => {
-      ctx.require(authority === counter.authority, 'Unauthorized')
-      ctx.require(counter.isActive, 'NotActive')
-      counter.count += amount
-    },
-  }),
+const Counter = account({ count: u64, authority: pubkey, isActive: bool }).derive((seed) => ['counter', seed.authority])
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR11111111111111111111111111111111111',
+    errors: { Unauthorized: 'Not the authority', NotActive: 'Counter not active' },
   },
-})
+  ix => ({
+    initialize: ix({
+      accounts: {
+        counter: p.create(Counter),
+        authority: p.signer(),
+      },
+      args: { initialValue: u64 },
+      run: ({ counter, authority }, { initialValue }) => {
+        counter.count = initialValue
+        counter.authority = authority
+        counter.isActive = true
+      },
+    }),
+    increment: ix({
+      accounts: {
+        counter: p.mut(Counter),
+        authority: p.signer(),
+      },
+      args: { amount: u64 },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, 'Unauthorized')
+        ctx.require(counter.isActive, 'NotActive')
+        counter.count += amount
+      },
+    }),
+  }),
+)
 EOF
 
 # 2. Push to devnet (compile + deploy)
@@ -1416,16 +1342,16 @@ npx @better-sol/cli verify --program-id CoUnTeR...
 
 # 3. Use the sol
 cat > app.ts << 'EOF'
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 import { counter } from './programs/counter'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
   programs: { counter },
 })
 
-const addr = counter.accounts.Counter.derive({ authority: sol.payer })
+const addr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
 await sol.counter.initialize({ counter: addr, authority: sol.payer, initialValue: 42n })
 const data = await counter.accounts.Counter.fetch(addr)
 console.log(data.count) // → 42n
@@ -1456,11 +1382,11 @@ npx @better-sol/cli deploy --cluster devnet
 ```typescript
 // No local program definition needed
 // Use the built-in token, system, and ATA program clients
-import { betterSol } from 'better-sol'
+import { betterSol, keypairFile } from 'better-sol'
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'mainnet-beta',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
 })
 
 // sol.token is always available — no registration needed
@@ -1474,13 +1400,18 @@ It was put there by `create`. You never type it manually.
 
 ```typescript
 // Definition — address included (generated by `create`)
-export const counter = program({
-  name: 'counter', address: 'CouNTeR11111111111111111111111111111111111', errors, instructions: {
-  increment: ix({ ... }),
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR11111111111111111111111111111111111',
+    errors,
   },
-})
+  ix => ({
+    increment: ix({ ... }),
+  }),
+)
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
   programs: { counter },  // address from program definition
 })
@@ -1491,9 +1422,9 @@ It was put there by `create`. You never type it manually.
 
 Same address across all clusters:
 ```typescript
-const devnetSol = betterSol({ cluster: 'devnet', programs: { counter } })
+const devnetSol = await betterSol({ cluster: 'devnet', programs: { counter } })
 
-const mainnetSol = betterSol({ cluster: 'mainnet-beta', programs: { counter } })
+const mainnetSol = await betterSol({ cluster: 'mainnet-beta', programs: { counter } })
 
 // Same program address on both! PDA derivations are identical.
 ```
@@ -1515,7 +1446,7 @@ COUNTER_KEYPAIR=<base64> npx @better-sol/cli deploy --cluster mainnet-beta
 - It's just there
 
 **For PDA derivation:** the program object carries the address.
-`counter.accounts.Counter.derive({ authority })` uses the address from the definition.
+`await sol.counter.accounts.Counter.derive({ authority })` uses the address from the definition.
 
 ---
 
@@ -1530,7 +1461,7 @@ import { mangoIdl } from '@mango/idl'
 
 const mango = fromIdl(mangoIdl)
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'mainnet-beta',
   programs: { mango },
 })
@@ -1550,9 +1481,9 @@ import { mangoIdl } from '@mango/idl'            // someone else's IDL
 
 const mango = fromIdl(mangoIdl)
 
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'mainnet-beta',
-  payer: './keypair.json',
+  payer: keypairFile('./keypair.json'),
   programs: {
     counter,    // ← defined with our program builder
     mango,      // ← imported from IDL

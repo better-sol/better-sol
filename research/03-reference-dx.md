@@ -269,7 +269,7 @@ e2e/               → End-to-end tests
 
 | Pattern | Paykit | Our Equivalent |
 |---|---|---|
-| Define schema in TS | `feature()`, `plan()` | `account()`, `defineErrors()`, `defineEvents()` |
+| Define schema in TS | `feature()`, `plan()` | `account()`, `program()` |
 | Single definition, many outputs | DB + Stripe sync + runtime API | Rust gen + cloud compile + client SDK |
 | `deploy` workflow | `paykitjs push` (migrate + sync) | `better-sol deploy` (parse + compile + deploy) |
 | Provider abstraction | `PaymentProvider` interface | Standard CPI interfaces (token.*, system.*) |

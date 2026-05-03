@@ -165,7 +165,7 @@ There's one more keypair you need: **your wallet**. This pays for:
 - Deploy fees (uploading program code costs SOL)
 
 ```typescript
-const sol = betterSol({
+const sol = await betterSol({
   cluster: 'devnet',
   payer: './keypair.json',  // your wallet keypair
   programs: { counter },
@@ -322,7 +322,7 @@ might use `seeds = ["counter", authority_pubkey]`. This means:
 const Counter = account({
   count: u64,
   authority: pubkey,
-}).seeds('counter', '{authority}')
+}).derive((seed) => ["counter", seed.authority])
 
 // Derive the address:
 const addr = Counter.derive({ authority: payer })

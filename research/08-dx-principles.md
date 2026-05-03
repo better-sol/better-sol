@@ -113,13 +113,13 @@ p.mint().mut()          // read-only mint → writable mint
 This is correct. Keep it. But consider whether more chaining would help:
 ```typescript
 // Current: separate args
-p.init(Counter)
+p.create(Counter)
 
 // Could we do this?
 p.use(Counter).init()  // ← reads left to right: "use Counter, initialize it"
 ```
 
-**Verdict:** The current `p.init(Counter)` is simpler. Don't over-engineer.
+**Verdict:** The current `p.create(Counter)` is simpler. Don't over-engineer.
 Method chaining is only valuable when there's a meaningful transformation chain.
 For us, `p.mint().mut()` is the only real chain — and it's already there.
 
@@ -160,8 +160,7 @@ const result = await db.user.findMany()  // result is User[] automatically
 ```
 
 **Apply to better-sol:** Our type system already infers everything from the
-program definition. `ctx.require(cond, 'ErrorName')` autocompletes from
-`defineErrors()`. `ctx.emit('EventName', data)` validates the shape.
+program definition. The transpiler validates `ctx.require(cond, 'ErrorName')` and `ctx.emit('EventName', data)` at build time, catching unknown errors/events and missing/extra event payload fields.
 No manual types anywhere. Good.
 
 ### P6. Error Messages Are Documentation
@@ -232,19 +231,19 @@ looking at docs.
 
 ```typescript
 // ✅ Factory function (our approach)
-export const counter = program({ name: 'counter', address: 'addr', errors, instructions: { ... } })
+export const counter = program({ name: 'counter', address: 'addr', errors }, ix => ({ ... }))
 
 // ❌ Class-based
 class CounterProgram extends Program {
   constructor() { super('counter', 'addr') }
-  defineErrors() { return { ... } }
+  // Inline errors/events in program() call — no separate define* wrappers needed
   defineInstructions() { return { ... } }
 }
 ```
 
 Our approach is correct. Factory functions compose naturally:
 ```typescript
-const sol = betterSol({ programs: { counter, amm } })
+const sol = await betterSol({ programs: { counter, amm } })
 ```
 
 ### P10. Debugging Is Part of DX
@@ -275,12 +274,12 @@ From Solana developer complaints:
 | Principle | Our Implementation | Score |
 |---|---|---|
 | P1. Progressive disclosure | Counter = 20 lines, AMM = 320 lines | ✅ |
-| P2. Single import test | `import { program, account, ix, p } from 'better-sol/program'` | ✅ |
-| P4. Options over builders | `betterSol({ ... })`, `ix({ ... })`, `account({ ... })` | ✅ |
-| P5. Types invisible | `ctx.require(cond, 'Error')` autocompletes | ✅ |
-| P7. No code generation | Same file = client | ✅ |
+| P2. Single import test | `import { program, account, p } from 'better-sol/program'` | ✅ |
+| P4. Options over builders | `program(config, ix => ({ ... }))`, `account({ ... })` | ✅ |
+| P5. Types invisible | Inline `errors` and `events` flow into callback-scoped `ix` | ✅ |
+| P7. No code generation | Same file can become client source | ✅ |
 | P8. 30-second rule | Counter example is readable in 10 seconds | ✅ |
-| P9. Factory functions | `program()`, `account()`, `ix()`, `betterSol()` | ✅ |
+| P9. Factory functions | `program()`, `account()`, callback-scoped `ix` | ✅ |
 
 ### What Could Be Improved
 
@@ -336,96 +335,43 @@ run: ({ counter, authority }, ctx) => {
 
 This is a nice-to-have. Not critical for v1.
 
-#### Issue 2: `program()` Has Four Arguments
+#### Issue 2: `program()` Should Have One Obvious Shape
 
-**Current:**
+**Decision:** `program(config, ix => instructions)` is the only program shape.
+
 ```typescript
-export const counter = program({ name: 'counter', address: 'CouNTeR...', errors, instructions: { ... } })
-```
-
-Four positional arguments. Developer has to remember:
-1. name (string)
-2. address (string)
-3. config (errors, events)
-4. instructions
-
-Could we merge name and address? No — the address is a specific pubkey.
-Could we merge config and instructions? Not cleanly — they're different concerns.
-
-**Alternative — named parameters:**
-```typescript
-export const counter = program({
-  name: 'counter',
-  address: 'CouNTeR...',
-  errors,
-  instructions: {
-    increment: ix({ ... }),
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR...',
+    errors,
+    events,
   },
-})
+  ix => ({
+    increment: ix({ ... }),
+  }),
+)
 ```
 
-This is more readable but more verbose. The Zod pattern is positional
-(`z.object({})`, `z.string()`). The Better Auth pattern is named
-(`betterAuth({ database, plugins })`).
-
-For something with 4 args, named is better. But our 4-arg pattern is already
-established across all docs. Changing it now would be costly.
-
-**Decision:** Changed to named params. `program({ name, address, errors, instructions })`
-is self-documenting — the developer sees what each part is without counting positional args.
+The first argument is plain metadata. The second argument is a scoped factory.
+This keeps error/event types flowing into `ctx.require()` and `ctx.emit()` without exposing a top-level `ix`, builder object, or compatibility overload.
 The cost is 3 extra lines per program, but the clarity is worth it.
 
-#### Issue 3: The `.seeds()` Pattern Uses String Templates
+#### Issue 3: PDA Seeds Must Be TypeScript-Native
 
-**Current:**
+**Decision:** PDA definitions use an autocompletable callback.
+
 ```typescript
 const Counter = account({ count: u64, authority: pubkey })
-  .seeds('counter', '{authority}')
+  .derive((seed) => ['counter', seed.authority])
 ```
 
-The `'{authority}'` string references a field by name in quotes. This is:
-- **Not type-safe** — you could typo `'{authortiy}'` and it would fail at runtime
-- **Unusual** — most libraries don't use string interpolation in quotes
-- **Inconsistent** — the account fields use plain identifiers (`authority: pubkey`)
-  but seeds reference them with braces
+This keeps the user-facing SDK simple while avoiding string-template field references.
+The `seed` object only exposes fields that can become valid PDA seed bytes: pubkeys and integers.
+A typo such as `seed.authortiy` fails before transpilation, and non-seedable fields such as `string`, `bytes`, `bool`, `vec`, or `option` do not appear in autocomplete.
 
-**Better approach — use the field variable directly:**
-```typescript
-const Counter = account({ count: u64, authority: pubkey })
-  .seeds('counter', p.authority)
-```
-
-But `p.authority` doesn't exist yet at definition time — `p` is for instruction
-constraints, not account field references.
-
-**Alternative — use a callback:**
-```typescript
-const Counter = account({ count: u64, authority: pubkey })
-  .seeds('counter', (fields) => [fields.authority])
-```
-
-This IS type-safe. But it's more verbose and complex for the common case.
-
-**Alternative — seeds as part of the account definition:**
-```typescript
-const Counter = account({
-  count: u64,
-  authority: pubkey.seeds('counter'),  // ← field IS the seed
-})
-```
-
-This is more elegant — the field that seeds the PDA is marked directly.
-Problem: a PDA can have multiple seed components, some of which are
-fields and some of which are constants. Like `'pool', '{tokenAMint}', '{tokenBMint}'`.
-
-**Verdict:** The current `'{field}'` pattern is a pragmatic choice. The string
-template syntax is immediately understandable: "the PDA seeds are 'counter'
-followed by the authority field." The type system CAN validate these at
-compile time by checking that every `{name}` references a real field.
-
-This is a v2 improvement. Document it as a known limitation:
-"Seed field names are checked at compile time. A typo like `'{authortiy}'`
-will produce a type error."
+Literal seed components stay plain strings. Field seed components stay plain property access.
+The transpiler still owns the Rust-specific details: `.as_ref()`, `.to_le_bytes()`, account source resolution, instruction argument seeds, bump constraints, and signer seed arrays.
 
 #### Issue 4: Token Operations Split Across Contexts
 
@@ -534,13 +480,38 @@ better-sol Development:
 ## 6. Action Items
 
 ### Done ✅
-- [x] **Named params for `program()`** — `program({ name, address, errors, instructions })`
+- [x] **Single `program()` shape** — `program(config, ix => instructions)`
 - [x] **Flexible run handler** — omit parameters you don't need (accounts, args, ctx)
-- [x] **Seed field type safety** — compile-time check that `'{fieldName}'` references a real pubkey field
+- [x] **PDA field type safety** — `seed.fieldName` only exposes pubkey and integer account fields
 - [x] **Deploy CI/CD safety** — non-interactive, clear errors with suggested fixes
 - [x] **Error message catalog** — every error (parse, type, deploy, client) names the issue and suggests the fix
 
+### Implementation Audit Update
+
+The first `better-sol/program` stub pass confirms the Elysia/Drizzle lessons but adds one TypeScript-specific correction: error/event registries need to flow into `ix()` before instruction bodies are typed. Strict `ctx` typing therefore uses an Elysia-like scoped factory:
+
+```typescript
+export const counter = program(
+  {
+    name: 'counter',
+    address: 'CouNTeR...',
+    errors: { Unauthorized: 'Not the authority' },
+  },
+  ix => ({
+    increment: ix({ /* ctx.require/ctx.emit typed from config */ }),
+  }),
+)
+```
+
+The single `program()` entry point keeps error/event definitions inline. TypeScript validates `ctx.require()` and `ctx.emit()` before transpilation, and the transpiler repeats validation for build diagnostics.
+
+The implementation also tightens two compile-time safety gates beyond the original notes:
+- `.derive((seed) => ['literal', seed.field])` accepts only pubkey or integer seed fields, matching the Rust generator's `.as_ref()` / `.to_le_bytes()` output.
+- `.zeroCopy()` recursively rejects non-Pod array contents such as `array(string, 4)` while allowing nested `struct_zc` and fixed arrays.
+
 ### Still To Do
 - [ ] **IntelliSense audit** — verify every `.` press shows helpful autocomplete in VS Code
-- [ ] **Unified token operation signatures** — align on-chain `token.transfer()` with off-chain `sol.token.transfer()` parameter names
-- [ ] **Visual debugger / instruction explorer** — like Prisma Studio for Solana accounts
+- [ ] **Unified token operation signatures** — align on-chain `token.transfer()` with future off-chain `sol.token.transfer()` parameter names
+- [ ] **Runtime client SDK** — `betterSol()`, `program.accounts.*.derive`, `fetch`, typed instruction methods
+- [ ] **Wallet adapter subpath exports** — Reown, Wallet Adapter, Privy, Dynamic, generic
+- [ ] **Testing framework** — `createTestSol()` with LiteSVM integration
