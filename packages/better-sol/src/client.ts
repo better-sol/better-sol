@@ -81,6 +81,10 @@ type SignedTransaction = Awaited<ReturnType<typeof signTransactionMessageWithSig
 
 type KitRpc = ReturnType<typeof createSolanaRpc>;
 type KitRpcSubscriptions = ReturnType<typeof createSolanaRpcSubscriptions>;
+type StepChain<TOutputs extends readonly unknown[], TPrevious extends readonly unknown[] = readonly []> =
+  TOutputs extends readonly [infer TNext, ...infer TRest]
+    ? readonly [(...previous: TPrevious) => Promise<TNext>, ...StepChain<TRest, readonly [...TPrevious, TNext]>]
+    : readonly [];
 
 export type SolSigner =
   | TransactionSigner
@@ -199,15 +203,15 @@ export type TokenClient = {
   getBalance(params: { readonly owner: Address; readonly mint: Address }): Promise<bigint>;
 };
 
-export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, never>> = {
-  readonly payer: Address;
+export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, never>, THasSigner extends boolean = boolean> = {
+  readonly payer: THasSigner extends true ? Address : Address | null;
   readonly rpc: KitRpc;
   readonly rpcSubscriptions: KitRpcSubscriptions;
   readonly token: TokenClient;
   readonly token2022: TokenClient;
-  withSigner(signer: SolSigner): Promise<BetterSolClient<TPrograms>>;
+  withSigner(signer: SolSigner): Promise<BetterSolClient<TPrograms, true>>;
   send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string>;
-  steps(steps: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]>;
+  steps<const TOutputs extends readonly unknown[]>(steps: StepChain<TOutputs>): Promise<TOutputs>;
   getBalance(address: Address): Promise<bigint>;
   transfer(params: { readonly to: Address; readonly amount: bigint; readonly from?: Address }): Promise<string>;
 } & {
@@ -249,8 +253,14 @@ class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readonly stri
 }
 
 export async function betterSol<const TPrograms extends ProgramInputs = Record<string, never>>(
+  config: BetterSolConfig<TPrograms> & { readonly payer: SolSigner },
+): Promise<BetterSolClient<TPrograms, true>>;
+export async function betterSol<const TPrograms extends ProgramInputs = Record<string, never>>(
   config: BetterSolConfig<TPrograms>,
-): Promise<BetterSolClient<TPrograms>> {
+): Promise<BetterSolClient<TPrograms, false>>;
+export async function betterSol<const TPrograms extends ProgramInputs = Record<string, never>>(
+  config: BetterSolConfig<TPrograms>,
+): Promise<BetterSolClient<TPrograms, boolean>> {
   const cluster = config.cluster ?? "devnet";
   const rpcUrl = config.rpcUrl ?? CLUSTER_URLS[cluster];
   const rpcSubscriptionsUrl = config.rpcSubscriptionsUrl ?? (config.rpcUrl === undefined ? CLUSTER_WS_URLS[cluster] : undefined);
@@ -262,53 +272,55 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
   const simulate = config.simulate ?? false;
   const rpc = createSolanaRpc(rpcUrl);
   const rpcSubscriptions = createSolanaRpcSubscriptions(rpcSubscriptionsUrl);
-  const signer = await resolveSigner(config.payer);
+  const signer = config.payer === undefined ? undefined : await resolveSigner(config.payer);
   const programs = config.programs ?? {} as TPrograms;
   return buildClient({ config, programs, rpc, rpcSubscriptions, signer, commitment, confirmationRetries, confirmationInterval, rpcRetries, simulate });
 }
 
-function buildClient<const TPrograms extends ProgramInputs>(params: {
+function buildClient<const TPrograms extends ProgramInputs, THasSigner extends boolean = boolean>(params: {
   readonly config: BetterSolConfig<TPrograms>;
   readonly programs: TPrograms;
   readonly rpc: KitRpc;
   readonly rpcSubscriptions: KitRpcSubscriptions;
-  readonly signer: TransactionSigner;
+  readonly signer: TransactionSigner | undefined;
   readonly commitment: "processed" | "confirmed" | "finalized";
   readonly confirmationRetries: number;
   readonly confirmationInterval: number;
   readonly rpcRetries: number;
   readonly simulate: boolean;
-}): BetterSolClient<TPrograms> {
+}): BetterSolClient<TPrograms, THasSigner> {
   const sendFn = (tx: SignedTransaction): Promise<string> =>
     sendAndConfirm(tx, params.rpc, params.commitment, params.confirmationRetries, params.confirmationInterval, params.rpcRetries, params.simulate);
   const client: Record<string, unknown> = {
-    payer: params.signer.address,
+    payer: params.signer?.address ?? null,
     rpc: params.rpc,
     rpcSubscriptions: params.rpcSubscriptions,
     token: buildTokenClient(params.rpc, params.rpcSubscriptions, params.signer, params.commitment, sendFn, params.rpcRetries, TOKEN_PROGRAM_ADDRESS),
     token2022: buildTokenClient(params.rpc, params.rpcSubscriptions, params.signer, params.commitment, sendFn, params.rpcRetries, TOKEN_2022_PROGRAM_ADDRESS as Address),
-    withSigner: async (signerInput: SolSigner): Promise<BetterSolClient<TPrograms>> => {
+    withSigner: async (signerInput: SolSigner): Promise<BetterSolClient<TPrograms, true>> => {
       const nextSigner = await resolveSigner(signerInput);
-      return buildClient({ ...params, signer: nextSigner });
+      return buildClient<TPrograms, true>({ ...params, signer: nextSigner });
     },
     getBalance: async (addressValue: Address): Promise<bigint> => {
       const { value } = await params.rpc.getBalance(kitAddress(addressValue), { commitment: params.commitment }).send();
       return value;
     },
     transfer: async (transferParams: { readonly to: Address; readonly amount: bigint; readonly from?: Address }): Promise<string> => {
-      const sourceAddress = transferParams.from ?? params.signer.address;
-      if (kitAddress(sourceAddress) !== params.signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
+      const signer = requireSigner(params.signer);
+      const sourceAddress = transferParams.from ?? signer.address;
+      if (kitAddress(sourceAddress) !== signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
       const ix = getTransferSolInstruction({
-        source: params.signer,
+        source: signer,
         destination: kitAddress(transferParams.to),
         amount: transferParams.amount,
       });
-      const signedTx = await buildAndSignTransaction([ix], params.rpc, params.signer, params.commitment, params.rpcRetries);
+      const signedTx = await buildAndSignTransaction([ix], params.rpc, signer, params.commitment, params.rpcRetries);
       return await sendFn(signedTx);
     },
     send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<string> => {
+      const signer = requireSigner(params.signer);
       const resolved = await Promise.all(instructions);
-      const signedTx = await buildAndSignTransaction(resolved, params.rpc, params.signer, params.commitment, params.rpcRetries);
+      const signedTx = await buildAndSignTransaction(resolved, params.rpc, signer, params.commitment, params.rpcRetries);
       return await sendFn(signedTx);
     },
     steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {
@@ -332,13 +344,13 @@ function buildClient<const TPrograms extends ProgramInputs>(params: {
     );
   }
 
-  return client as unknown as BetterSolClient<TPrograms>;
+  return client as unknown as BetterSolClient<TPrograms, THasSigner>;
 }
 
 function buildProgramClient(
   program: AnyProgram,
   rpc: KitRpc,
-  signer: TransactionSigner,
+  signer: TransactionSigner | undefined,
   commitment: "processed" | "confirmed" | "finalized",
   sendFn: (tx: SignedTransaction) => Promise<string>,
   rpcRetries: number,
@@ -351,18 +363,21 @@ function buildProgramClient(
     const programId = program.address;
 
     const sendAndConfirmFn = async (params: Record<string, unknown>): Promise<string> => {
-      const ix = await buildInstruction(def, params, programId, snakeName, signer);
-      const signedTx = await buildAndSignTransaction([ix], rpc, signer, commitment, rpcRetries);
+      const activeSigner = requireSigner(signer);
+      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner);
+      const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, rpcRetries);
       return await sendFn(signedTx);
     };
 
     const instructionFn = async (params: Record<string, unknown>): Promise<Instruction & InstructionWithSigners> => {
-      return await buildInstruction(def, params, programId, snakeName, signer);
+      const activeSigner = requireSigner(signer);
+      return await buildInstruction(def, params, programId, snakeName, activeSigner);
     };
 
     const transactionFn = async (params: Record<string, unknown>): Promise<SignedTransaction> => {
-      const ix = await buildInstruction(def, params, programId, snakeName, signer);
-      return await buildAndSignTransaction([ix], rpc, signer, commitment, rpcRetries);
+      const activeSigner = requireSigner(signer);
+      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner);
+      return await buildAndSignTransaction([ix], rpc, activeSigner, commitment, rpcRetries);
     };
 
     const method = sendAndConfirmFn as unknown as Record<string, unknown>;
@@ -389,7 +404,7 @@ function buildProgramClient(
 function buildTokenClient(
   rpc: KitRpc,
   rpcSubscriptions: KitRpcSubscriptions,
-  signer: TransactionSigner,
+  signer: TransactionSigner | undefined,
   commitment: "processed" | "confirmed" | "finalized",
   sendFn: (tx: SignedTransaction) => Promise<string>,
   rpcRetries: number,
@@ -402,50 +417,54 @@ function buildTokenClient(
   return {
     getATA: async (params) => await deriveAtaAddr(params.owner, params.mint),
     createMint: async (params) => {
+      const activeSigner = requireSigner(signer);
       const mint = await createGeneratedSigner();
       const plan = getCreateMintInstructionPlan({
-        payer: signer,
+        payer: activeSigner,
         newMint: mint,
         decimals: params.decimals,
-        mintAuthority: kitAddress(params.authority ?? signer.address),
+        mintAuthority: kitAddress(params.authority ?? activeSigner.address),
         freezeAuthority: params.freezeAuthority === undefined ? null : params.freezeAuthority === null ? null : kitAddress(params.freezeAuthority),
-      });
+      }, { tokenProgram: kitAddress(tokenProgramAddress) });
       const instructions = flattenInstructionPlan(plan).flatMap((leaf) => leaf.kind === "single" ? [leaf.instruction] : []);
-      const signedTx = await buildAndSignTransaction(instructions, rpc, signer, commitment, rpcRetries);
+      const signedTx = await buildAndSignTransaction(instructions, rpc, activeSigner, commitment, rpcRetries);
       const sig = await sendFn(signedTx);
       return { mint: mint.address, mintSigner: mint, signature: sig };
     },
     mintTo: async (params) => {
+      const activeSigner = requireSigner(signer);
       const mint = kitAddress(params.mint);
       const owner = kitAddress(params.destination);
       const ata = kitAddress(await deriveAtaAddr(params.destination, params.mint));
       const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
-      const createAtaIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: signer, owner, mint });
-      const mintIx = getMintToCheckedInstruction({ mint, token: ata, mintAuthority: signer, amount: params.amount, decimals }, { programAddress: kitAddress(tokenProgramAddress) });
-      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, signer, commitment, rpcRetries);
+      const createAtaIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: activeSigner, owner, mint, tokenProgram: kitAddress(tokenProgramAddress) });
+      const mintIx = getMintToCheckedInstruction({ mint, token: ata, mintAuthority: activeSigner, amount: params.amount, decimals }, { programAddress: kitAddress(tokenProgramAddress) });
+      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, activeSigner, commitment, rpcRetries);
       return await sendFn(signedTx);
     },
     transfer: async (params) => {
+      const activeSigner = requireSigner(signer);
       const mint = kitAddress(params.mint);
-      const sourceOwner = params.from ?? signer.address;
-      if (sourceOwner !== signer.address) throw new Error("Token transfer source must match the active signer. Use sol.withSigner() for another owner.");
+      const sourceOwner = params.from ?? activeSigner.address;
+      if (sourceOwner !== activeSigner.address) throw new Error("Token transfer source must match the active signer. Use sol.withSigner() for another owner.");
       const source = kitAddress(await deriveAtaAddr(sourceOwner, params.mint));
       const destination = kitAddress(await deriveAtaAddr(params.to, params.mint));
       const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
       const createDestinationIx = await getCreateAssociatedTokenIdempotentInstructionAsync({
-        payer: signer,
+        payer: activeSigner,
         owner: kitAddress(params.to),
         mint,
+        tokenProgram: kitAddress(tokenProgramAddress),
       });
       const transferIx = getTransferCheckedInstruction({
         source,
         mint,
         destination,
-        authority: signer,
+        authority: activeSigner,
         amount: params.amount,
         decimals,
       }, { programAddress: kitAddress(tokenProgramAddress) });
-      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, signer, commitment, rpcRetries);
+      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, activeSigner, commitment, rpcRetries);
       return await sendFn(signedTx);
     },
     getBalance: async (params) => {
@@ -541,11 +560,9 @@ function buildAccountMetas(
   signer: TransactionSigner,
 ): readonly (AccountMeta | AccountSignerMeta)[] {
   const accountMetas: (AccountMeta | AccountSignerMeta)[] = [];
-  const argKeys = ixDef.args !== undefined ? new Set(Object.keys(ixDef.args)) : new Set<string>();
 
   let omittedSignerCount = 0;
   for (const [name, input] of Object.entries(ixDef.accounts)) {
-    if (argKeys.has(name)) continue;
     if (input instanceof AccountConstraint && input.constraintKind === "signer" && params[name] === undefined) {
       omittedSignerCount++;
     }
@@ -555,8 +572,6 @@ function buildAccountMetas(
   }
 
   for (const [name, input] of Object.entries(ixDef.accounts)) {
-    if (argKeys.has(name)) continue;
-
     let isSigner = false;
     let isWritable = false;
     let accountAddress: KitAddress;
@@ -564,7 +579,7 @@ function buildAccountMetas(
     if (input instanceof AccountConstraint) {
       const kind = input.constraintKind;
       isSigner = kind === "signer";
-      isWritable = kind === "init" || kind === "mut" || kind === "close" || input.mutable;
+      isWritable = kind === "init" || kind === "close" || input.mutable;
       const paramAddr = params[name];
 
       if (isSigner && paramAddr === undefined) {
@@ -614,9 +629,10 @@ async function buildInstructionData(
   return await encodeInstruction(snakeName, ixDef.args, params);
 }
 
-async function fetchMintDecimals(rpc: KitRpc, mint: Address, _tokenProgramAddress: Address): Promise<number> {
+async function fetchMintDecimals(rpc: KitRpc, mint: Address, tokenProgramAddress: Address): Promise<number> {
   const mintAccount = await fetchMaybeMint(rpc, kitAddress(mint));
   if (!mintAccount.exists) throw new Error(`Mint not found: ${mint}`);
+  if (mintAccount.programAddress !== kitAddress(tokenProgramAddress)) throw new Error(`Mint ${mint} is not owned by token program ${tokenProgramAddress}`);
   return mintAccount.data.decimals;
 }
 
@@ -640,8 +656,13 @@ function encodeU64Seed(value: bigint): Uint8Array {
   return buf;
 }
 
+function requireSigner(signer: TransactionSigner | undefined): TransactionSigner {
+  if (signer !== undefined) return signer;
+  throw new Error("No signer configured. Pass payer: keypairFile('./keypair.json') or payer: secretKey(bytes) to betterSol(), or call sol.withSigner(walletAdapter(wallet)) in browser flows.");
+}
+
 async function resolveSigner(signer: SolSigner | undefined): Promise<TransactionSigner> {
-  if (signer === undefined) throw new Error("No payer configured. Pass payer: keypairFile('./keypair.json') or payer: secretKey(bytes) to betterSol().");
+  if (signer === undefined) throw new Error("No signer configured. Pass keypairFile('./keypair.json'), secretKey(bytes), or a Kit TransactionSigner.");
   if (isTransactionSignerInput(signer)) return signer;
   if (signer.type === "secretKey") return await createKeyPairSignerFromBytes(signer.value, false);
   if (signer.type === "file") return await loadKeypairFile(signer.path);

@@ -40,7 +40,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts src/program.ts --outdir dist --target bun && bun build src/wallets/index.ts src/wallets/wallet-adapter.ts src/wallets/reown.ts src/wallets/privy.ts src/wallets/dynamic.ts --outdir dist --target bun --external @solana/wallet-adapter-react --external @solana/wallet-adapter-base --external @privy-io/react-auth --external @dynamic-labs/sdk-react-core --external @dynamic-labs/solana --external @reown/appkit --external @reown/appkit-adapter-solana",
+    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts src/program.ts --outdir dist --target bun && bun build src/wallets/index.ts src/wallets/wallet-adapter.ts src/wallets/reown.ts src/wallets/privy.ts src/wallets/dynamic.ts --outdir dist/wallets --target bun --external @solana/wallet-adapter-react --external @solana/wallet-adapter-base --external @privy-io/react-auth --external @dynamic-labs/sdk-react-core --external @dynamic-labs/solana --external @reown/appkit --external @reown/appkit-adapter-solana",
     "check": "tsc --noEmit",
     "test": "bun test",
     "lint": "oxlint .",

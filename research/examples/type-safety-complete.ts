@@ -35,7 +35,7 @@ const Order = struct({
 const Book = account({
   market: pubkey,
   orders: array(Order, 8),
-  isActive: bool,
+  isActive: u8,
 }).derive((seed) => ['book', seed.market]).zeroCopy()
 
 export const counterProgram = program(
@@ -116,7 +116,7 @@ export const orderbookProgram = program(
       },
       args: { price: u64, quantity: u64, side: u8 },
       run: ({ book, maker, makerToken, vaultToken }, { quantity }, ctx) => {
-        ctx.require(book.isActive, 'Closed')
+        ctx.require(book.isActive === 1, 'Closed')
         ctx.require(quantity > 0n, 'InvalidQuantity')
         token.transfer({
           from: makerToken,

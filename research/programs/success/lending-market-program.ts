@@ -60,7 +60,7 @@ const LiquidationRecord = account({
   seizedCollateral: u64,
   timestamp: i64,
   closed: bool,
-}).derive((seed) => ["liquidation", seed.borrower, seed.reserve]);
+}).derive((seed) => ["liquidation", seed.liquidator, seed.reserve]);
 
 ;
 

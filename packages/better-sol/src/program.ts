@@ -93,7 +93,7 @@ export function array<TInner extends TypeToken<unknown, TypeKind>, const TSize e
 }
 
 type NumericKind = "u8" | "u16" | "u32" | "u64" | "u128" | "i8" | "i16" | "i32" | "i64" | "i128";
-type ZeroCopyPrimitiveKind = NumericKind | "f32" | "f64" | "bool" | "pubkey";
+type ZeroCopyPrimitiveKind = NumericKind | "f32" | "f64" | "pubkey";
 type SeedableKind = NumericKind | "pubkey";
 type ZeroCopyToken<TToken> =
   TToken extends TypeToken<unknown, infer TKind> ? TKind extends ZeroCopyPrimitiveKind | "struct_zc_ref" ? TToken :
@@ -127,7 +127,9 @@ function createPdaSeedBuilder<TFields extends FieldSchema>(): PdaSeedBuilder<TFi
 }
 
 function normalizePdaSeed(seed: string | PdaSeedField<string>): string {
-  return typeof seed === "string" ? seed : `{${seed.name}}`;
+  if (typeof seed !== "string") return `{${seed.name}}`;
+  if (/^\{[A-Za-z_$][\w$]*\}$/.test(seed)) throw new Error(`Dynamic PDA seed template '${seed}' is not supported. Store the value as an account field and reference it with seed.${seed.slice(1, -1)}.`);
+  return seed;
 }
 
 type NormalizeSeed<T> = T extends PdaSeedField<infer K> ? `{${K}}` : T extends string ? T : never;
@@ -274,9 +276,18 @@ function makeIx(): IxOverloads<ErrorMessages, EventSchema> {
   const fn = function ix<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined>(
     config: IxConfigWithoutArgs<TAccounts, ErrorMessages, EventSchema> | IxConfigWithArgs<TAccounts, TArgs & ArgsSchema, ErrorMessages, EventSchema>,
   ): InstructionDefinition<TAccounts, TArgs | undefined> {
-    return new InstructionDefinition(config.accounts, "args" in config ? config.args : undefined, config.run);
+    const args = "args" in config ? config.args : undefined;
+    assertDistinctAccountAndArgNames(config.accounts, args);
+    return new InstructionDefinition(config.accounts, args, config.run);
   };
   return fn as unknown as IxOverloads<ErrorMessages, EventSchema>;
+}
+
+function assertDistinctAccountAndArgNames(accounts: AccountInputs, args: ArgsSchema | undefined): void {
+  if (args === undefined) return;
+  for (const name of Object.keys(accounts)) {
+    if (name in args) throw new Error(`Instruction account '${name}' conflicts with an instruction arg of the same name. Rename one of them.`);
+  }
 }
 
 type Instructions = Readonly<Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>>;

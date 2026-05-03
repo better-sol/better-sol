@@ -333,33 +333,31 @@ function hasToken2022Cpi(ix: IrInstruction): boolean {
 
 function formatSeedsForAttr(
   account: IrAccount,
-  accounts: readonly IrAccount[],
+  _accounts: readonly IrAccount[],
   ixAccounts: readonly IrInstructionAccount[],
   ixArgs: readonly IrInstructionArg[],
   currentAccountName: string,
 ): string | undefined {
   if (account.seeds.length === 0) return undefined;
+  const currentIxAccount = ixAccounts.find((candidate) => candidate.name === currentAccountName);
   return account.seeds.map((seed) => {
     if (seed.kind === "literal") return `b"${seed.value}"`;
 
-    const arg = ixArgs.find((candidate) => candidate.name === seed.fieldName);
-    if (arg !== undefined) return formatSeedBytes(toSnake(arg.name), arg.type);
-
-    const ixAccount = ixAccounts.find((candidate) => candidate.name === seed.fieldName);
-    if (ixAccount !== undefined) return `${toSnake(ixAccount.name)}.key().as_ref()`;
-
-    const source = findSeedFieldSource(seed.fieldName, currentAccountName, ixAccounts, accounts);
-    if (source !== undefined) return formatSeedBytes(source.expression, source.field.type);
-
     const field = account.fields.find((candidate) => candidate.name === seed.fieldName);
-    const currentIxAccount = ixAccounts.find((candidate) => candidate.name === currentAccountName);
-    const signer = ixAccounts.find((candidate) => candidate.constraint.kind === "signer");
-    if (field?.type === "pubkey" && currentIxAccount?.constraint.kind === "init" && signer !== undefined) {
-      return `${toSnake(signer.name)}.key().as_ref()`;
-    }
     if (field === undefined) {
-      throw new Error(`Unknown PDA seed field '${seed.fieldName}' for account '${account.name}'. Use .derive((seed) => ['literal', seed.fieldName]) with a pubkey or integer field, instruction arg, or instruction account.`);
+      throw new Error(`Unknown PDA seed field '${seed.fieldName}' for account '${account.name}'. Use .derive((seed) => ['literal', seed.fieldName]) with a pubkey or integer field on the account.`);
     }
+
+    if (currentIxAccount?.constraint.kind === "init") {
+      const arg = ixArgs.find((candidate) => candidate.name === seed.fieldName);
+      if (arg !== undefined) return formatSeedBytes(toSnake(arg.name), arg.type);
+
+      const ixAccount = ixAccounts.find((candidate) => candidate.name === seed.fieldName);
+      if (ixAccount !== undefined) return `${toSnake(ixAccount.name)}.key().as_ref()`;
+
+      throw new Error(`PDA seed field '${seed.fieldName}' for initialized account '${account.name}' must be provided by an instruction arg or account with the same name.`);
+    }
+
     const fieldName = account.zeroCopy
       ? `${toSnake(currentAccountName)}.load()?.${toSnake(seed.fieldName)}`
       : `${toSnake(currentAccountName)}.${toSnake(seed.fieldName)}`;
@@ -380,34 +378,6 @@ function isIntegerType(type: IrType): boolean {
 function formatSeedType(type: IrType): string {
   if (typeof type === "string") return type;
   return type.kind;
-}
-
-function findSeedFieldSource(
-  fieldName: string,
-  currentAccountName: string,
-  ixAccounts: readonly IrInstructionAccount[],
-  accounts: readonly IrAccount[],
-): { readonly expression: string; readonly field: { readonly type: IrType } } | undefined {
-  for (const ixAccount of ixAccounts) {
-    if (ixAccount.name === currentAccountName) continue;
-    const accountDef = resolveAccountDefForConstraint(ixAccount, accounts);
-    const field = accountDef?.fields.find((candidate) => candidate.name === fieldName);
-    if (field === undefined || accountDef === undefined) continue;
-    const accountName = toSnake(ixAccount.name);
-    const expression = accountDef.zeroCopy
-      ? `${accountName}.load()?.${toSnake(fieldName)}`
-      : `${accountName}.${toSnake(fieldName)}`;
-    return { expression, field };
-  }
-  return undefined;
-}
-
-function resolveAccountDefForConstraint(ixAccount: IrInstructionAccount, accounts: readonly IrAccount[]): IrAccount | undefined {
-  const constraint = ixAccount.constraint;
-  const accountName = constraint.kind === "init" || constraint.kind === "mut" || constraint.kind === "close" || constraint.kind === "bare"
-    ? constraint.accountName
-    : ixAccount.name;
-  return findAccountDef(accountName, accounts);
 }
 
 function generateIdl(program: IrProgram): unknown {
@@ -495,9 +465,10 @@ function typeLayout(type: IrType, structs: readonly IrStructZC[], zeroCopy: bool
   }
   if (type.kind === "struct_zc_ref") {
     const struct = structs.find((candidate) => candidate.name === type.name);
-    return struct !== undefined ? structLayout(struct.fields, structs) : { size: 32, align: 8 };
+    if (struct === undefined) throw new Error(`Unknown zero-copy struct '${type.name}'`);
+    return structLayout(struct.fields, structs);
   }
-  return { size: 32, align: 8 };
+  throw new Error(`Unsupported zero-copy type '${type.kind}'`);
 }
 
 function structLayout(fields: readonly { readonly type: IrType }[], structs: readonly IrStructZC[]): { readonly size: number; readonly align: number } {
@@ -512,7 +483,7 @@ function structLayout(fields: readonly { readonly type: IrType }[], structs: rea
 }
 
 function primitiveLayout(type: string, zeroCopy: boolean): { readonly size: number; readonly align: number } {
-  if (type === "bool" && zeroCopy) return { size: 1, align: 1 };
+  if (type === "bool" && zeroCopy) throw new Error("Zero-copy bool fields are not supported. Use u8 for flags.");
   switch (type) {
     case "u8": case "i8": case "bool": return { size: 1, align: 1 };
     case "u16": case "i16": return { size: 2, align: 2 };
@@ -520,7 +491,7 @@ function primitiveLayout(type: string, zeroCopy: boolean): { readonly size: numb
     case "u64": case "i64": case "f64": return { size: 8, align: 8 };
     case "u128": case "i128": return { size: 16, align: 16 };
     case "pubkey": return { size: 32, align: 1 };
-    default: return { size: 32, align: 8 };
+    default: throw new Error(`Unsupported zero-copy primitive '${type}'`);
   }
 }
 
@@ -535,7 +506,7 @@ function rustType(type: IrType, zeroCopy: boolean = false): string {
 }
 
 function primitiveRustType(type: string, zeroCopy: boolean): string {
-  if (type === "bool" && zeroCopy) return "u8";
+  if (type === "bool" && zeroCopy) throw new Error("Zero-copy bool fields are not supported. Use u8 for flags.");
   if (type === "pubkey") return "Pubkey";
   if (type === "string") return "String";
   if (type === "bytes") return "Vec<u8>";

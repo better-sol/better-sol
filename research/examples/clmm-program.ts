@@ -33,7 +33,7 @@ const Tick = struct({
   price: u64,              // 8 bytes — price at this tick
   liquidityNet: i64,       // 8 bytes — net liquidity change when crossing
   feeGrowthOutside: u64,   // 8 bytes — fee growth outside this tick
-  initialized: bool,       // 1 byte → u8 in Rust
+  initialized: u8,       // 1 byte → u8 in Rust
   bump: u8,                // 1 byte — PDA bump
   // Total: 30 bytes + 2 padding → 32 bytes
 })
@@ -285,7 +285,7 @@ export const clmm = program({
       run: ({ pool, trader, tokenInReserve, tokenOutReserve, traderTokenIn, traderTokenOut }, { amountIn, minAmountOut, sqrtPriceLimit }, ctx) => {
         ctx.require(amountIn > 0n, 'ZeroAmount')
         ctx.require(pool.liquidity > 0n, 'PoolNotFound')
-        const fee = (amountIn * pool.feeRate) / 10000n
+        const fee = (amountIn * BigInt(pool.feeRate)) / 10000n
         const netIn = amountIn - fee
         const amountOut = (netIn * pool.liquidity) / pool.sqrtPrice
         ctx.require(amountOut >= minAmountOut, 'SlippageExceeded')
@@ -293,8 +293,8 @@ export const clmm = program({
         ctx.require(sqrtPriceLimit > pool.sqrtPrice, 'SlippageExceeded')
         pool.sqrtPrice = (pool.sqrtPrice * pool.liquidity) / (pool.liquidity + netIn)
         pool.liquidity -= amountOut * pool.sqrtPrice / pool.liquidity
-        pool.feeProtocolTokenA += fee * pool.protocolFeeRate / 10000n
-        const direction = amountIn > 0n ? 1n : 0n
+        pool.feeProtocolTokenA += fee * BigInt(pool.protocolFeeRate) / 10000n
+        const direction = amountIn > 0n ? 1 : 0
         token.transfer({ from: traderTokenIn, to: tokenInReserve, authority: trader, amount: amountIn })
         token.transfer({ from: tokenOutReserve, to: traderTokenOut, authority: pool, amount: amountOut })
         ctx.emit('SwapExecuted', { pool: pool.key, trader, amountIn, amountOut, sqrtPrice: pool.sqrtPrice, fee, direction })
@@ -323,7 +323,7 @@ export const clmm = program({
         ctx.require(amountA > 0n || amountB > 0n, 'ZeroAmount')
         position.tokensOwedA = 0n
         position.tokensOwedB = 0n
-        pool.feeProtocolTokenA += amountA * pool.protocolFeeRate / 10000n
+        pool.feeProtocolTokenA += amountA * BigInt(pool.protocolFeeRate) / 10000n
         token.transfer({ from: tokenAReserve, to: ownerTokenA, authority: pool, amount: amountA })
         token.transfer({ from: tokenBReserve, to: ownerTokenB, authority: pool, amount: amountB })
         ctx.emit('FeesCollected', { owner, pool: pool.key, amountA, amountB })
@@ -334,7 +334,7 @@ export const clmm = program({
     closePosition: ix({
       accounts: {
         pool: p.mut(Pool),
-        position: p.close(Position, owner),
+        position: p.close(Position, "owner"),
         owner: p.signer(),
         tokenAReserve: p.tokenAccount().mut(),
         tokenBReserve: p.tokenAccount().mut(),
@@ -384,7 +384,7 @@ export const clmm = program({
       },
       args: { tickIndex: i32, price: u64, liquidityDelta: i64 },
       run: ({ pool, clock }, { tickIndex, price, liquidityDelta }, ctx) => {
-        ctx.require(tickIndex.abs() <= 443636, 'TickOutOfRange')
+        ctx.require((tickIndex < 0 ? -tickIndex : tickIndex) <= 443636, 'TickOutOfRange')
         ctx.require(pool.tickSpacing > 0, 'InvalidTickSpacing')
         const tickIndexAbs = tickIndex < 0 ? -tickIndex : tickIndex
         const slotIndex = tickIndexAbs % pool.tickSpacing
@@ -395,7 +395,7 @@ export const clmm = program({
         tick.price = price
         tick.liquidityNet = liquidityDelta
         tick.feeGrowthOutside = 0n
-        tick.initialized = true
+        tick.initialized = 1
         if (tickIndex < pool.tickCurrent) {
           pool.liquidity += liquidityDelta
         } else {
@@ -405,7 +405,7 @@ export const clmm = program({
         const obs = pool.observations[0]
         obs.timestamp = clock.unixTimestamp
         obs.sqrtPrice = pool.sqrtPrice
-        obs.cumulativeTick += tickIndex
+        obs.cumulativeTick += BigInt(tickIndex)
       },
     }),
 }))

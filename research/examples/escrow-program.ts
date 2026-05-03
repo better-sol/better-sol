@@ -1,6 +1,6 @@
 import {
   program, account,
-  u64, bool, pubkey,
+  u64, u8, bool, pubkey,
   p, token,
 } from 'better-sol/program'
 

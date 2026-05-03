@@ -73,7 +73,7 @@ export const showcase = program({
 
         token.transfer({ from: tokenAccount, to: vaultTokenAccount, authority, amount })
 
-        const index = vault.depositCount
+        const index = Number(vault.depositCount)
         if (index < 16) {
           vault.history[index] = amount
         }

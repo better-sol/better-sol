@@ -69,6 +69,8 @@ const balance = await sol.getBalance(sol.payer);
 await sol.transfer({ to: "recipient...", amount: 1000n });
 ```
 
+`betterSol({ cluster })` is valid for read-only flows such as balances, PDA derivation, and account fetching. Mutating methods require a configured signer through `payer` or `sol.withSigner(...)`.
+
 Signer accounts declared with `p.signer()` auto-fill from the active signer when omitted.
 
 ## Transaction-Building API
@@ -126,11 +128,11 @@ Each adapter requires its corresponding wallet library as a peer dependency.
 ## Scoped Signers
 
 ```ts
-const userSol = await sol.withSigner(walletSignerFromYourApp);
+const userSol = await sol.withSigner(transactionSignerFromYourApp);
 await userSol.counter.increment({ counter: addr, amount: 1n });
 ```
 
-`withSigner()` accepts a Kit-compatible `TransactionSigner`. Server code can use `keypairFile()`, `secretKey()`, or `generateSigner()`.
+`withSigner()` accepts a Kit-compatible `TransactionSigner`. Server code can use `keypairFile()` or `secretKey()`.
 
 ## Token Operations
 
@@ -147,19 +149,20 @@ await sol.token.transfer({ mint, to: "recipient...", amount: 100n });
 Consume any external Anchor IDL as a typed program:
 
 ```ts
-import { betterSol, fromIdl } from "better-sol";
+import { betterSol, fromIdl, keypairFile } from "better-sol";
 import mangoIdl from "./mango.json";
 
 const mango = fromIdl(mangoIdl);
-const sol = await betterSol({ cluster: "mainnet-beta", programs: { mango } });
+const sol = await betterSol({ cluster: "mainnet-beta", payer: keypairFile("./keypair.json"), programs: { mango } });
 await sol.mango.someInstruction({ ... });
 ```
 
 ## Exports
 
 ```
-better-sol              → betterSol(), keypairFile(), secretKey(), generateSigner(), walletSigner(), fromIdl(), BetterSolClient, BetterSolConfig, Cluster
+better-sol              → betterSol(), keypairFile(), secretKey(), fromIdl(), BetterSolClient, BetterSolConfig, BoundAccount
 better-sol/program      → program(), account(), struct(), p, token, sol, type tokens, type helpers
+better-sol/wallets/*    → walletAdapter(), reownWallet(), privyWallet(), dynamicWallet()
 ```
 
 ## Development

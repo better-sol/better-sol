@@ -125,6 +125,26 @@ describe("AST parser", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     expect(programs[0]!.accounts[0]!.space).toBe(49);
   });
+
+  test("rejects dynamic string PDA seed templates", () => {
+    const source = counterSource.replace('"counter", seed.authority', '"counter", "{authority}"');
+    expect(() => parseProgramsFromFile(source, "counter.ts")).toThrow("Dynamic PDA seed template");
+  });
+
+  test("rejects account and arg name collisions", () => {
+    const source = counterSource.replace("args: { initialValue: u64 }", "args: { counter: u64 }");
+    expect(() => parseProgramsFromFile(source, "counter.ts")).toThrow("both an account and arg named 'counter'");
+  });
+
+  test("rejects zero-copy bool fields", () => {
+    const source = `
+import { program, account, bool, p } from 'better-sol/program'
+const Flags = account({ paused: bool }).zeroCopy()
+export const flags = program({ name: 'flags', address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs' }, ix => ({
+  init: ix({ accounts: { flags: p.create(Flags) }, run: () => {} })
+}))`;
+    expect(() => parseProgramsFromFile(source, "flags.ts")).toThrow("not zero-copy safe");
+  });
 });
 
 describe("Transpiler diagnostics", () => {

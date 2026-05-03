@@ -5,7 +5,7 @@
 //
 // This is what the transpiler produces from the TypeScript
 // orderbook definition. Zero-copy accounts use AccountLoader
-// instead of Account, and bool maps to u8.
+// instead of Account, and boolean flags are explicit u8 fields.
 // ============================================================
 
 use anchor_lang::prelude::*;
@@ -54,7 +54,7 @@ pub struct OrderBook {
     pub best_ask: u64,               // 8
     pub total_bid_volume: u64,       // 8
     pub total_ask_volume: u64,       // 8
-    pub is_active: u8,               // 1 (bool → u8 in zero-copy!)
+    pub is_active: u8,
     pub bump: u8,                    // 1
     // +6 padding for array alignment
     pub bids: [Order; 256],          // 64 * 256 = 16384
@@ -174,7 +174,7 @@ pub mod orderbook {
         book.best_ask = 0;
         book.total_bid_volume = 0;
         book.total_ask_volume = 0;
-        book.is_active = 1u8;  // bool → u8
+        book.is_active = 1u8;
         Ok(())
     }
 
@@ -375,7 +375,7 @@ pub mod orderbook {
     pub fn close(ctx: Context<CloseBook>) -> Result<()> {
         let book = &mut ctx.accounts.book.load_mut()?;
         require!(ctx.accounts.admin.key() == book.market, ErrorCode::Unauthorized);
-        book.is_active = 0u8;  // bool → u8
+        book.is_active = 0u8;
 
         emit!(OrderbookClosed {
             market: book.market,

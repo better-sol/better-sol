@@ -40,7 +40,7 @@ const PerpMarket = account({
   bidCount: u32,
   askCount: u32,
   feeBps: u64,
-  paused: bool,
+  paused: u8,
   bump: u8,
   bids: array(RestingOrder, 64),
   asks: array(RestingOrder, 64),
@@ -207,7 +207,7 @@ export const perpetualsClearing = program({
         market.bidCount = 0;
         market.askCount = 0;
         market.feeBps = feeBps;
-        market.paused = false;
+        market.paused = 0;
         market.bump = 0;
         vaultAuthority.market = market.key;
         vaultAuthority.baseMint = baseMint.key;
@@ -237,7 +237,7 @@ export const perpetualsClearing = program({
         { collateral },
         ctx,
       ) => {
-        ctx.require(!market.paused, "MarketPaused");
+        ctx.require(market.paused === 0, "MarketPaused");
         ctx.require(collateral > 0n, "InvalidAmount");
         ctx.require(
           collateralVault.key === market.collateralVault,
@@ -374,7 +374,7 @@ export const perpetualsClearing = program({
         { side, price, quantity, reduceOnly },
         ctx,
       ) => {
-        ctx.require(!market.paused, "MarketPaused");
+        ctx.require(market.paused === 0, "MarketPaused");
         ctx.require(trader === position.owner, "Unauthorized");
         ctx.require(side <= 1, "InvalidSide");
         ctx.require(price > 0n, "InvalidPrice");
@@ -485,7 +485,7 @@ export const perpetualsClearing = program({
       args: { maxMatches: u64 },
       run: ({ market, fills, authority }, { maxMatches }, ctx) => {
         ctx.require(authority === market.authority, "Unauthorized");
-        ctx.require(!market.paused, "MarketPaused");
+        ctx.require(market.paused === 0, "MarketPaused");
         ctx.require(market.bidCount > 0, "NoCross");
         ctx.require(market.askCount > 0, "NoCross");
         let matches = 0n;

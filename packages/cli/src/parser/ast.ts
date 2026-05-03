@@ -23,8 +23,8 @@ export function parseProgramsFromFile(source: string, filePath: string): readonl
   const project = new Project({ useInMemoryFileSystem: true });
   const sf = project.createSourceFile(filePath, source);
 
-  const rawAccounts = collectAccounts(sf);
   const rawStructZCs = collectStructZCs(sf);
+  const rawAccounts = collectAccounts(sf, rawStructZCs);
   const results: IrProgram[] = [];
 
   for (const decl of sf.getVariableDeclarations()) {
@@ -58,7 +58,7 @@ export function parseProgramsFromFile(source: string, filePath: string): readonl
   return results;
 }
 
-function collectAccounts(sf: TsSourceFile): readonly RawAccount[] {
+function collectAccounts(sf: TsSourceFile, rawStructZCs: readonly IrStructZC[]): readonly RawAccount[] {
   const accounts: RawAccount[] = [];
 
   for (const decl of sf.getVariableDeclarations()) {
@@ -76,6 +76,7 @@ function collectAccounts(sf: TsSourceFile): readonly RawAccount[] {
     if (chainText.includes(".pda(")) throw new Error(".pda() was renamed to .derive(). Use .derive((seed) => ['literal', seed.fieldName]) for typed address derivation.");
     if (chainText.includes(".seeds(")) throw new Error(".seeds() was removed. Use .derive((seed) => ['literal', seed.fieldName]) for typed address derivation.");
     const zeroCopy = chainText.includes(".zeroCopy");
+    if (zeroCopy) validateZeroCopyFields(name, fields, rawStructZCs);
     const seeds = parseSeeds(chainText);
 
     accounts.push({ name, fields, zeroCopy, seeds });
@@ -160,6 +161,7 @@ function parseInstructionDefinitions(instructionsObj: ObjectLiteralExpression, r
     const obj = ixObj as ObjectLiteralExpression;
     const accounts = parseIxAccounts(obj, rawAccounts);
     const args = parseIxArgs(obj);
+    assertDistinctAccountAndArgNames(name, accounts, args);
     const body = extractBody(obj);
     instructions.push({ name, accounts, args, body });
   }
@@ -257,6 +259,13 @@ function parseIxArgs(ixObj: ObjectLiteralExpression): readonly IrInstructionArg[
   return args;
 }
 
+function assertDistinctAccountAndArgNames(ixName: string, accounts: readonly IrInstructionAccount[], args: readonly IrInstructionArg[]): void {
+  const argNames = new Set(args.map((arg) => arg.name));
+  for (const account of accounts) {
+    if (argNames.has(account.name)) throw new Error(`Instruction '${ixName}' has both an account and arg named '${account.name}'. Rename one of them.`);
+  }
+}
+
 function extractBody(ixObj: ObjectLiteralExpression): string {
   const runProp = ixObj.getProperty("run");
   if (runProp === undefined || !isPropAssign(runProp)) return "";
@@ -329,10 +338,15 @@ function parseSeeds(chainText: string): readonly IrSeed[] {
     const singleQuotedLiteral = match[2];
     const doubleQuotedLiteral = match[3];
     if (field !== undefined) seeds.push({ kind: "field", fieldName: field });
-    else if (singleQuotedLiteral !== undefined && singleQuotedLiteral !== "") seeds.push({ kind: "literal", value: singleQuotedLiteral });
-    else if (doubleQuotedLiteral !== undefined && doubleQuotedLiteral !== "") seeds.push({ kind: "literal", value: doubleQuotedLiteral });
+    else if (singleQuotedLiteral !== undefined && singleQuotedLiteral !== "") seeds.push(parseLiteralSeed(singleQuotedLiteral));
+    else if (doubleQuotedLiteral !== undefined && doubleQuotedLiteral !== "") seeds.push(parseLiteralSeed(doubleQuotedLiteral));
   }
   return seeds;
+}
+
+function parseLiteralSeed(value: string): IrSeed {
+  if (/^\{[A-Za-z_$][\w$]*\}$/.test(value)) throw new Error(`Dynamic PDA seed template '${value}' is not supported. Store the value as an account field and reference it with seed.${value.slice(1, -1)}.`);
+  return { kind: "literal", value };
 }
 
 function extractPdaArgs(chainText: string): string | undefined {
@@ -347,6 +361,17 @@ function extractPdaArgs(chainText: string): string | undefined {
     if (depth === 0) return chainText.slice(argsStart, index);
   }
   return undefined;
+}
+
+function validateZeroCopyFields(accountName: string, fields: readonly IrAccountField[], structs: readonly IrStructZC[]): void {
+  for (const field of fields) {
+    try {
+      zeroCopyTypeLayout(field.type, structs);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unsupported zero-copy type";
+      throw new Error(`Account '${accountName}' field '${field.name}' is not zero-copy safe: ${message}`, { cause: error });
+    }
+  }
 }
 
 function computeSpace(raw: RawAccount, structs: readonly IrStructZC[]): IrAccount {
@@ -393,19 +418,23 @@ function zeroCopyTypeLayout(type: IrType, structs: readonly IrStructZC[]): { rea
     const inner = zeroCopyTypeLayout(type.inner, structs);
     return { size: inner.size * type.size, align: inner.align };
   }
-  if (type.kind === "struct_zc_ref") return structLayout(structs.find((candidate) => candidate.name === type.name)?.fields ?? [], structs);
-  return { size: 32, align: 8 };
+  if (type.kind === "struct_zc_ref") {
+    const struct = structs.find((candidate) => candidate.name === type.name);
+    if (struct === undefined) throw new Error(`unknown zero-copy struct '${type.name}'`);
+    return structLayout(struct.fields, structs);
+  }
+  throw new Error(`unsupported type '${type.kind}'`);
 }
 
 function primitiveLayout(type: string): { readonly size: number; readonly align: number } {
   switch (type) {
-    case "u8": case "i8": case "bool": return { size: 1, align: 1 };
+    case "u8": case "i8": return { size: 1, align: 1 };
     case "u16": case "i16": return { size: 2, align: 2 };
     case "u32": case "i32": case "f32": return { size: 4, align: 4 };
     case "u64": case "i64": case "f64": return { size: 8, align: 8 };
     case "u128": case "i128": return { size: 16, align: 16 };
     case "pubkey": return { size: 32, align: 1 };
-    default: return { size: 32, align: 8 };
+    default: throw new Error(`unsupported primitive '${type}'`);
   }
 }
 

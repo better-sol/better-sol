@@ -6,7 +6,7 @@
 // - struct() → #[zero_copy] sub-struct
 // - array(T, N) → [T; N] fixed-size array
 // - p.remaining() → ctx.remaining_accounts with typed deserialization
-// - bool in zero-copy (maps to u8 in Rust)
+// - u8 flags for zero-copy booleans
 // - Array index assignment (transpiler generates scoped borrows)
 //
 // This is the hardest pattern we support. If this works,
@@ -57,7 +57,7 @@ const OrderBook = account({
   bestAsk: u64,
   totalBidVolume: u64,
   totalAskVolume: u64,
-  isActive: bool,               // → u8 in zero-copy Rust (Pod constraint)
+  isActive: u8,                 // explicit zero-copy flag
   bump: u8,
   bids: array(Order, 256),      // Fixed-size array of Orders
   asks: array(Order, 256),      // Fixed-size array of Orders
@@ -146,7 +146,7 @@ export const orderbook = program({
         book.bestAsk = 0n
         book.totalBidVolume = 0n
         book.totalAskVolume = 0n
-        book.isActive = true    // → 1u8 in zero-copy Rust
+        book.isActive = 1
       },
     }),
 
@@ -158,7 +158,7 @@ export const orderbook = program({
       },
       args: { price: u64, quantity: u64 },
       run: ({ book, trader }, { price, quantity }, ctx) => {
-        ctx.require(book.isActive, 'OrderbookInactive')
+        ctx.require(book.isActive === 1, 'OrderbookInactive')
         ctx.require(price > 0n, 'InvalidPrice')
         ctx.require(price >= book.marketInfo.minOrderSize, 'PriceBelowMin')
         ctx.require(quantity > 0n, 'InvalidQuantity')
@@ -194,7 +194,7 @@ export const orderbook = program({
       },
       args: { price: u64, quantity: u64 },
       run: ({ book, trader }, { price, quantity }, ctx) => {
-        ctx.require(book.isActive, 'OrderbookInactive')
+        ctx.require(book.isActive === 1, 'OrderbookInactive')
         ctx.require(price > 0n, 'InvalidPrice')
         ctx.require(quantity > 0n, 'InvalidQuantity')
         ctx.require(book.askCount < 256, 'OrderbookFull')
@@ -232,7 +232,7 @@ export const orderbook = program({
       },
       args: { maxMatches: u32 },
       run: ({ book, baseReserve, quoteReserve, fills, history }, { maxMatches }, ctx) => {
-        ctx.require(book.isActive, 'OrderbookInactive')
+        ctx.require(book.isActive === 1, 'OrderbookInactive')
         ctx.require(book.bidCount > 0, 'NoOrders')
         ctx.require(book.askCount > 0, 'NoOrders')
 
@@ -286,11 +286,11 @@ export const orderbook = program({
         ctx.require(matchCount > 0, 'NoMatchFound')
 
         // Update trade history
-        history.tradeCount += matchCount
+        history.tradeCount += BigInt(matchCount)
         history.totalVolume += totalQuantity
         history.lastPrice = book.bestBid
 
-        ctx.emit('OrdersMatched', { matchCount: matchCount as unknown as number, totalQuantity })
+        ctx.emit('OrdersMatched', { matchCount, totalQuantity })
         ctx.log('Matched {} orders, total qty: {}', matchCount, totalQuantity)
       },
     }),
@@ -303,7 +303,7 @@ export const orderbook = program({
       },
       args: { orderIndex: u32, side: u8 },
       run: ({ book, trader }, { orderIndex, side }, ctx) => {
-        ctx.require(book.isActive, 'OrderbookInactive')
+        ctx.require(book.isActive === 1, 'OrderbookInactive')
         ctx.require(side === 0 || side === 1, 'InvalidSide')
 
         if (side === 0) {
@@ -343,7 +343,7 @@ export const orderbook = program({
       run: ({ book, admin }, ctx) => {
         // Only market admin can close
         ctx.require(admin === book.market, 'Unauthorized')
-        book.isActive = false  // → 0u8 in zero-copy Rust
+        book.isActive = 0
         ctx.emit('OrderbookClosed', { market: book.market })
       },
     }),

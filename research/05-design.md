@@ -168,34 +168,24 @@ pub struct Order {
 - Field access through `.load_mut()?` / `.load()?`
 - No Borsh serialization — direct memory mapping via `bytemuck`
 - Space = 8 (discriminator) + `std::mem::size_of::<T>()` (with C padding)
-- `bool` maps to `u8` in Rust (Pod constraint)
+- `bool` is rejected; use `u8` flags
 
 ### Bool handling in zero-copy
 
+`bool` is not Pod-safe and is rejected in `account().zeroCopy()` accounts. Use an explicit `u8` flag instead.
+
 ```typescript
-// TypeScript: developer writes bool normally
 const GameState = account({
-  isFinished: bool,    // TypeScript: boolean
+  isFinished: u8,
   winner: pubkey,
   board: array(u8, 64),
 }).zeroCopy()
 
-// Generated Rust: bool becomes u8
-// #[account(zero_copy)]
-// pub struct GameState {
-//     pub is_finished: u8,  // ← not bool!
-//     pub winner: Pubkey,
-//     pub board: [u8; 64],
-// }
-
-// In run: handlers, bool comparison works transparently:
 run: ({ game }) => {
-  game.isFinished = true   // → game.is_finished = 1u8
-  if (game.isFinished) {}  // → if game.is_finished != 0 { }
+  game.isFinished = 1
+  if (game.isFinished === 1) {}
 },
 ```
-
-The transpiler handles this mapping automatically. The developer writes `bool` everywhere; the transpiler knows to use `u8` in zero-copy mode.
 
 ### Space Calculation
 
@@ -209,7 +199,7 @@ Standard accounts (Borsh):
 Zero-copy accounts (Pod):
 ```
 8 (discriminator) + std::mem::size_of::<T>()  (with C alignment padding)
-  pubkey = 32, u64 = 8, u32 = 4, u16 = 2, u8 = 1, bool → u8 = 1
+  pubkey = 32, u64 = 8, u32 = 4, u16 = 2, u8 = 1; bool is rejected
   array(T, N) = size_of::<T>() * N
 ```
 
@@ -1135,8 +1125,8 @@ if (result.ok) {
 }
 
 // ── Wallet integration ──
-import { walletSigner } from 'better-sol/wallets/reown'
-const walletSol = sol.withSigner(walletSigner(appKit))
+import { reownWallet } from 'better-sol/wallets/reown'
+const walletSol = sol.withSigner(reownWallet(appKit))
 await walletSol.amm.swap({ pool, ..., amountIn, minOut })
 
 // ── Account fetching ──
@@ -1157,10 +1147,10 @@ better-sol/wallets/reown           → Reown AppKit integration
 better-sol/wallets/wallet-adapter  → @solana/wallet-adapter integration
 better-sol/wallets/privy           → Privy integration
 better-sol/wallets/dynamic         → Dynamic integration
-better-sol/wallets/keypair         → Server-side keypair signer
+better-sol                         → keypairFile(), secretKey() for server-side signers
 ```
 
-Each exports `walletSigner(adapter)` that returns `{ publicKey, signTransaction }`.
+Each wallet subpath exports a named adapter (`walletAdapter`, `reownWallet`, `privyWallet`, or `dynamicWallet`) that returns a Kit-compatible `TransactionSigner`.
 
 ---
 

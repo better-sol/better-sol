@@ -150,7 +150,7 @@ export const amm = program({
 
         config.totalPools += 1n
 
-        ctx.emit('PoolCreated', { tokenA: tokenAMint, tokenB: tokenBMint })
+        ctx.emit('PoolCreated', { tokenA: tokenAMint.key, tokenB: tokenBMint.key })
       },
     }),
 

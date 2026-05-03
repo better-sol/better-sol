@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { version } from "../src/index";
+import { betterSol, version } from "../src/index";
 import {
   account, AccountConstraint, array, p, program,
   pubkey, sol, struct, token, u8, u64,
   type InstructionAccounts, type InstructionArgs,
 } from "../src/program";
-import { anchorDiscriminator, accountDiscriminator, encodeField, decodeField, encodeAccount, decodeAccount, encodeInstruction } from "../src/coder";
+import { anchorDiscriminator, accountDiscriminator, encodeField, decodeField, encodeAccount, decodeAccount, decodeZeroCopyAccount, encodeInstruction } from "../src/coder";
 import { bool, i64, option, string, vec } from "../src/program";
 import { fromIdl } from "../src/idl";
 import type { AnchorIdl } from "../src/idl";
@@ -113,6 +113,27 @@ describe("program builder stubs", () => {
     expect(OrderBook.zeroCopyEnabled).toBe(true);
   });
 
+  test("rejects dynamic string seed templates", () => {
+    const Counter = account({ id: u64 });
+    expect(() => Counter.derive(() => ["counter", "{id}"])).toThrow("Dynamic PDA seed template");
+  });
+
+  test("rejects account and arg name collisions", () => {
+    const Counter = account({ count: u64 });
+    expect(() => program(
+      { name: "collision", address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs" },
+      ix => ({
+        increment: ix({
+          accounts: { amount: p.mut(Counter) },
+          args: { amount: u64 },
+          run: ({ amount }, args) => {
+            amount.count += args.amount;
+          },
+        }),
+      }),
+    )).toThrow("conflicts with an instruction arg");
+  });
+
   test("exposes token and sysvar stubs", () => {
     const TransferState = account({ owner: pubkey, amount: u64, decimals: u8 });
     const transferProgram = program(
@@ -211,6 +232,12 @@ describe("Borsh coder", () => {
     expect(disc.length).toBe(8);
   });
 
+  test("normalizes snake account names for discriminators", async () => {
+    const snake = await accountDiscriminator("trade_record");
+    const pascal = await accountDiscriminator("TradeRecord");
+    expect([...snake]).toEqual([...pascal]);
+  });
+
   test("encodeInstruction includes discriminator followed by encoded args", async () => {
     const args = { amount: u64 };
     const data = await encodeInstruction("increment", args, { amount: 42n });
@@ -235,6 +262,27 @@ describe("Borsh coder", () => {
     const encoded = encodeField(string, "hello");
     expect(encoded.length).toBe(9);
     expect(decodeField(string, encoded, 0).value).toBe("hello");
+  });
+
+  test("decodeField rejects invalid bool bytes", () => {
+    expect(() => decodeField(bool, new Uint8Array([2]), 0)).toThrow("Invalid boolean byte");
+  });
+
+  test("decodes nested zero-copy structs inside arrays", () => {
+    const owner = "11111111111111111111111111111111";
+    const Order = struct({ quantity: u64, owner: pubkey });
+    const fields = { orders: array(Order, 2), market: pubkey };
+    const data = new Uint8Array(112);
+    data.set(encodeField(u64, 42n), 0);
+    data.set(encodeField(pubkey, owner), 8);
+    data.set(encodeField(u64, 7n), 40);
+    data.set(encodeField(pubkey, owner), 48);
+    data.set(encodeField(pubkey, owner), 80);
+
+    const decoded = decodeZeroCopyAccount(fields, data);
+    expect(decoded.orders[0]!.quantity).toBe(42n);
+    expect(decoded.orders[1]!.quantity).toBe(7n);
+    expect(decoded.market).toBe(owner);
   });
 });
 
@@ -381,6 +429,7 @@ describe("fromIdl", () => {
   test("handles readonly non-signer account", () => {
     const idl = {
       name: "test",
+      metadata: { address: "11111111111111111111111111111111" },
       instructions: [
         {
           name: "read",
@@ -397,6 +446,7 @@ describe("fromIdl", () => {
     if (sysvar instanceof AccountConstraint) {
       expect(sysvar.mutable).toBe(false);
     }
+
   });
 
   test("parses compound IDL types", () => {
@@ -600,6 +650,14 @@ test("derive with no field seeds accepts empty object", () => {
     ix => ({ ping: ix({ accounts: {}, run: () => {} }) }),
   );
   expect([...prog.accounts.Config.seedValues]).toEqual(["config"]);
+});
+
+describe("client factory", () => {
+  test("supports read-only clients without a payer", async () => {
+    const client = await betterSol({ cluster: "devnet" });
+    expect(client.payer).toBeNull();
+    await expect(client.transfer({ to: "11111111111111111111111111111111", amount: 1n })).rejects.toThrow("No signer configured");
+  });
 });
 
 describe("wallet adapter round-trip", () => {

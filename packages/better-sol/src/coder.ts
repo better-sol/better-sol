@@ -3,6 +3,7 @@ import type { FieldSchema, InferFields, InferType, TypeKind, TypeToken } from ".
 
 type HasInner = { readonly kind: string; readonly inner: TypeToken<unknown, TypeKind> };
 type HasInnerAndSize = { readonly kind: string; readonly inner: TypeToken<unknown, TypeKind>; readonly size: number };
+type HasFields = { readonly kind: string; readonly fields: FieldSchema };
 
 function hasInner(token: { readonly kind: string }): token is HasInner {
   return "inner" in token;
@@ -12,13 +13,16 @@ function hasInnerAndSize(token: { readonly kind: string }): token is HasInnerAnd
   return "inner" in token && "size" in token;
 }
 
+function hasFields(token: { readonly kind: string }): token is HasFields {
+  return "fields" in token;
+}
+
 export async function anchorDiscriminator(name: string): Promise<Uint8Array> {
   return await discriminator(`global:${name}`);
 }
 
 export async function accountDiscriminator(name: string): Promise<Uint8Array> {
-  const pascal = name.charAt(0).toUpperCase() + name.slice(1);
-  return await discriminator(`account:${pascal}`);
+  return await discriminator(`account:${toPascal(name)}`);
 }
 
 async function discriminator(preimage: string): Promise<Uint8Array> {
@@ -75,7 +79,7 @@ export function decodeField(token: TypeToken<unknown, TypeKind>, data: Uint8Arra
     case "i128": return { value: decodeI128(data, offset), offset: offset + 16 };
     case "f32": return { value: decodeF32(data, offset), offset: offset + 4 };
     case "f64": return { value: decodeF64(data, offset), offset: offset + 8 };
-    case "bool": return { value: (data[offset] as number) === 1, offset: offset + 1 };
+    case "bool": return { value: decodeBool(data[offset]), offset: offset + 1 };
     case "pubkey": return { value: getAddressDecoder().decode(data.subarray(offset, offset + 32)), offset: offset + 32 };
     case "string": { const len = decodeU32(data, offset); const str = new TextDecoder().decode(data.subarray(offset + 4, offset + 4 + len)); return { value: str, offset: offset + 4 + len }; }
     case "bytes": { const len = decodeU32(data, offset); return { value: data.subarray(offset + 4, offset + 4 + len), offset: offset + 4 + len }; }
@@ -150,8 +154,44 @@ function zeroCopyLayout(token: TypeToken<unknown, TypeKind>): { readonly size: n
       const inner = zeroCopyLayout(token.inner);
       return { size: inner.size * token.size, align: inner.align };
     }
+    case "struct_zc_ref": {
+      if (!hasFields(token)) throw new Error("Zero-copy struct token missing fields");
+      return zeroCopyStructLayout(token.fields);
+    }
     default: throw new Error(`Zero-copy decoding not supported for type: ${token.kind}`);
   }
+}
+
+function zeroCopyStructLayout(fields: FieldSchema): { readonly size: number; readonly align: number } {
+  let offset = 0;
+  let maxAlign = 1;
+  for (const key of Object.keys(fields)) {
+    const token = fields[key];
+    if (token === undefined) continue;
+    const layout = zeroCopyLayout(token);
+    offset += paddingFor(offset, layout.align) + layout.size;
+    if (layout.align > maxAlign) maxAlign = layout.align;
+  }
+  return { size: offset + paddingFor(offset, maxAlign), align: maxAlign };
+}
+
+function decodeZeroCopyStruct(fields: FieldSchema, data: Uint8Array): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  let offset = 0;
+  for (const key of Object.keys(fields)) {
+    const token = fields[key];
+    if (token === undefined) continue;
+    const layout = zeroCopyLayout(token);
+    offset += paddingFor(offset, layout.align);
+    result[key] = decodeZeroCopyField(token, data.subarray(offset, offset + layout.size));
+    offset += layout.size;
+  }
+  return result;
+}
+
+function paddingFor(offset: number, align: number): number {
+  const remainder = offset % align;
+  return remainder === 0 ? 0 : align - remainder;
 }
 
 function decodeZeroCopyField(token: TypeToken<unknown, TypeKind>, data: Uint8Array): unknown {
@@ -179,6 +219,10 @@ function decodeZeroCopyField(token: TypeToken<unknown, TypeKind>, data: Uint8Arr
       }
       return values;
     }
+    case "struct_zc_ref": {
+      if (!hasFields(token)) throw new Error("Zero-copy struct token missing fields");
+      return decodeZeroCopyStruct(token.fields, data);
+    }
     default: throw new Error(`Zero-copy field decoding not supported for: ${token.kind}`);
   }
 }
@@ -193,6 +237,14 @@ export async function encodeInstruction<TArgs extends Record<string, TypeToken<u
     parts.push(encodeField(token, value));
   }
   return concat(parts);
+}
+
+function toPascal(name: string): string {
+  return name
+    .split(/[_\s-]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
 }
 
 function encodeU8(value: number): Uint8Array {
@@ -250,6 +302,12 @@ function encodeF64(value: number): Uint8Array {
 }
 
 function encodeBool(value: boolean): Uint8Array { return new Uint8Array([value ? 1 : 0]); }
+
+function decodeBool(value: number | undefined): boolean {
+  if (value === 0) return false;
+  if (value === 1) return true;
+  throw new Error(`Invalid boolean byte: ${String(value)}`);
+}
 
 function encodePubkey(value: string): Uint8Array { return new Uint8Array(getAddressEncoder().encode(kitAddress(value))); }
 

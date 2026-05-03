@@ -212,7 +212,7 @@ must validate the bit pattern, but Anchor's zero-copy uses `Pod`, not `CheckedBi
 - With `#[account(zero_copy(unsafe))]`: `bool` will compile (bypasses Pod derive), but reading
   a non-0/1 byte as `bool` is **undefined behavior** in Rust. Extremely dangerous.
 
-**Our transpiler should:** Map `bool` → `u8` in zero-copy mode, and provide an accessor
+**Current implementation:** `bool` is rejected in zero-copy mode. Use an explicit `u8` flag.
 that interprets 0 as false and non-zero as true.
 
 ### The `Pubkey` handling — CRITICAL DETAIL:
@@ -390,7 +390,7 @@ fn test_zero_copy_struct() {
 pub struct Pool {
     pub authority: Pubkey,    // 32 bytes, align 1
     pub amount: u64,          // 8 bytes, align 8
-    pub is_active: u8,       // 1 byte, align 1 (bool -> u8 for zero-copy)
+    pub is_active: u8,       // 1 byte, align 1 (explicit flag)
     pub fee_bps: u16,         // 2 bytes, align 2
     pub bump: u8,             // 1 byte, align 1
 }
@@ -706,7 +706,7 @@ const Orderbook = account({
   asks: array(u64, 128),      // 1024 bytes
   bidCount: u32,              // 4 bytes
   askCount: u32,              // 4 bytes
-  isActive: bool,             // TypeScript bool → Rust u8 (zero-copy)
+  isActive: u8,               // explicit zero-copy flag
   bump: u8,                   // 1 byte
 }).derive((seed) => ['orderbook', seed.authority]).zeroCopy()
 
@@ -816,7 +816,7 @@ pub struct Orderbook {
     // 2 bytes, align 2
     pub fee_bps: u16,
     // 1 byte, align 1
-    pub is_active: u8,  // bool maps to u8 in zero-copy (bool is NOT Pod)
+    pub is_active: u8,  // explicit flag because bool is NOT Pod
     // 1 byte, align 1
     pub bump: u8,
 }
@@ -884,7 +884,7 @@ pub mod orderbook_program {
         orderbook.fee_bps = fee_bps;
         orderbook.bid_count = 0;
         orderbook.ask_count = 0;
-        orderbook.is_active = 1;  // bool maps to u8 in zero-copy
+        orderbook.is_active = 1;
         Ok(())
     }
 
@@ -928,7 +928,7 @@ pub mod orderbook_program {
    - Reorder fields largest-first to minimize padding (optimization)
    - Convert `camelCase` → `snake_case`
    - Map TypeScript types to Rust types
-   - `bool` → `u8` (bool is NOT Pod; zero-copy uses u8 with 0/1 semantics)
+   - `bool` is rejected; use `u8` flags (bool is NOT Pod)
    - `bytes(N)` → `[u8; N]`
    - `u64.array(N)` → `[u64; N]`
 
@@ -972,7 +972,7 @@ In Borsh, `bool` is 1 byte. In zero-copy, `bool` is **not Pod** (bytemuck reject
 not all bit patterns are valid: 0x02 is UB for `bool`). Use `u8` instead:
 - `0` = false
 - `1` = true
-- Our transpiler maps TypeScript `bool` → Rust `u8` in zero-copy mode
+- The transpiler rejects TypeScript `bool` in zero-copy mode
 - Accessor: `orderbook.is_active != 0` for truthiness check
 
 ### No dynamic sizing
@@ -1105,7 +1105,7 @@ const TYPE_INFO = {
   i128:  { size: 16, alignment: 8 },
   f32:   { size: 4,  alignment: 4 },
   f64:   { size: 8,  alignment: 8 },
-  bool:  { size: 1,  alignment: 1 },  // maps to u8 in zero-copy (bool is NOT Pod)
+  // bool is rejected in zero-copy; use u8 flags
   pubkey: { size: 32, alignment: 1 },  // [u8; 32] has alignment 1 (element alignment)
   // arrays: alignment = alignment of element type, size = N * sizeof(element)
 };

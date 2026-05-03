@@ -136,7 +136,7 @@ export const t22Amm = program({
 
         config.totalPools += 1n
 
-        ctx.emit('PoolCreated', { tokenA: tokenAMint, tokenB: tokenBMint, feeBps })
+        ctx.emit('PoolCreated', { tokenA: tokenAMint.key, tokenB: tokenBMint.key, feeBps })
       },
     }),
 
