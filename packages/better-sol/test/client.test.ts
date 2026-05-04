@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { address } from "@solana/kit";
 import { betterSol } from "../src/index";
-import { account, bool, i64, p, program, pubkey, string, u8, u64 } from "../src/program";
+import { account, bool, event, i64, p, program, pubkey, string, u8, u64 } from "../src/program";
 
 const signer = {
   address: address("11111111111111111111111111111111"),
@@ -202,6 +202,81 @@ describe("client factory", () => {
     const client = await betterSol({ cluster: "devnet" });
     expect(client.payer).toBeNull();
     await expect(client.transfer({ to: "11111111111111111111111111111111", amount: 1n })).rejects.toThrow("No signer configured");
+  });
+});
+
+describe("new SDK features", () => {
+  test("instruction methods expose .simulate() and .prepare() at type level", async () => {
+    const Counter = account({ count: u64, authority: pubkey });
+    const prog = program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      ix => ({
+        increment: ix({
+          accounts: { counter: p.mut(Counter), authority: p.signer() },
+          args: { amount: u64 },
+          run: () => {},
+        }),
+      }),
+    );
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { test: prog } });
+    const fn = client.test.increment;
+    expect(typeof fn.simulate).toBe("function");
+    expect(typeof fn.prepare).toBe("function");
+    expect(typeof fn.send).toBe("function");
+    expect(typeof fn.instruction).toBe("function");
+    expect(typeof fn.transaction).toBe("function");
+  });
+
+  test("BoundAccount exposes fetchMultiple", async () => {
+    const Counter = account({ count: u64 });
+    const prog = program(
+      { name: "test", address: "11111111111111111111111111111111", accounts: { Counter } },
+      ix => ({ ping: ix({ run: () => {} }) }),
+    );
+    const client = await betterSol({ cluster: "devnet", programs: { test: prog } });
+    expect(typeof client.test.accounts.Counter.fetchMultiple).toBe("function");
+  });
+
+  test("p.createIfNeeded() produces correct constraint kind", () => {
+    const Counter = account({ count: u64 });
+    const prog = program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      ix => ({
+        init: ix({
+          accounts: { counter: p.createIfNeeded(Counter), authority: p.signer() },
+          args: { value: u64 },
+          run: () => {},
+        }),
+      }),
+    );
+    expect(prog.instructions.init.accounts.counter.constraintKind).toBe("initIfNeeded");
+  });
+
+  test("event() produces a FieldSchema", () => {
+    const TransferEvent = event({ from: pubkey, to: pubkey, amount: u64 });
+    expect(TransferEvent.from!.kind).toBe("pubkey");
+    expect(TransferEvent.amount!.kind).toBe("u64");
+  });
+
+  test("program accepts events config", () => {
+    const TransferEvent = event({ from: pubkey, to: pubkey, amount: u64 });
+    const prog = program(
+      {
+        name: "test",
+        address: "11111111111111111111111111111111",
+        events: { Transfer: TransferEvent },
+      },
+      ix => ({
+        transfer: ix({
+          accounts: { authority: p.signer() },
+          args: { amount: u64 },
+          run: (accounts, args, ctx) => {
+            ctx.emit("Transfer", { from: accounts.authority, to: accounts.authority, amount: args.amount });
+          },
+        }),
+      }),
+    );
+    expect(prog.events.Transfer).toBeDefined();
   });
 });
 

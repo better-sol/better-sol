@@ -231,5 +231,76 @@ describe("fromIdl", () => {
 
     expect(prog.errors).toEqual({ SlippageExceeded: "Output below minimum" });
   });
+
+  test("accepts full Anchor IDL format with address at top level", () => {
+    const idl = {
+      address: "MyPr0g11111111111111111111111111111111111",
+      metadata: { name: "my_program", version: "1.0.0", spec: "0.1.0" },
+      instructions: [],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(prog.address).toBe("MyPr0g11111111111111111111111111111111111");
+    expect(prog.name).toBe("my_program");
+  });
+
+  test("accepts coption type", () => {
+    const idl = {
+      name: "test",
+      instructions: [],
+      accounts: [
+        {
+          name: "Data",
+          type: {
+            kind: "struct" as const,
+            fields: [{ name: "value", type: { coption: "u64" as const } }],
+          },
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(prog.accounts["Data"]!.fields.value!.kind).toBe("option");
+  });
+
+  test("handles IdlInstructionAccounts (nested/composite accounts)", () => {
+    const idl = {
+      name: "test",
+      instructions: [
+        {
+          name: "doThing",
+          accounts: [
+            {
+              name: "nested",
+              accounts: [
+                { name: "mint", writable: false, signer: false },
+                { name: "token", writable: true, signer: false },
+              ],
+            },
+            { name: "authority", writable: false, signer: true },
+          ],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    const ix = prog.instructions.doThing!;
+    expect(Object.keys(ix.accounts)).toEqual(["mint", "token", "authority"]);
+  });
+
+  test("skips optional accounts", () => {
+    const idl = {
+      name: "test",
+      instructions: [
+        {
+          name: "maybe",
+          accounts: [
+            { name: "required", writable: true, signer: false },
+            { name: "optional", writable: true, signer: false, optional: true },
+          ],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    const ix = prog.instructions.maybe!;
+    expect(Object.keys(ix.accounts)).toEqual(["required"]);
+  });
 });
 

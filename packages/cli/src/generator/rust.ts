@@ -210,14 +210,16 @@ function generateAccountAttrs(
   const lines: string[] = [];
 
   switch (c.kind) {
-    case "init": {
+    case "init":
+    case "initIfNeeded": {
+      const initKind = c.kind === "initIfNeeded" ? "init_if_needed" : "init";
       const accountDef = findAccountDef(c.accountName, accounts);
       const space = accountDef?.space ?? (8 + 32);
       const seeds = accountDef !== undefined ? formatSeedsForAttr(accountDef, accounts, ixAccounts, ixArgs, acc.name) : undefined;
       const payer = findPayer(acc, ixAccounts);
 
       lines.push("#[account(");
-      lines.push("    init,");
+      lines.push(`    ${initKind},`);
       lines.push(`    payer = ${toSnake(payer)},`);
       lines.push(`    space = ${space},`);
       if (seeds !== undefined) {
@@ -283,7 +285,7 @@ function resolveAccountsStructType(acc: IrInstructionAccount, accounts: readonly
   if (c.kind === "clock") return "Sysvar<'info, Clock>";
   if (c.kind === "remaining") return "/* remaining_accounts */";
 
-  const accountName = c.kind === "init" || c.kind === "mut" || c.kind === "close" || c.kind === "bare"
+  const accountName = c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "mut" || c.kind === "close" || c.kind === "bare"
     ? c.accountName
     : acc.name;
 
@@ -293,7 +295,7 @@ function resolveAccountsStructType(acc: IrInstructionAccount, accounts: readonly
     return `Account<'info, ${toPascal(accountDef.name)}>`;
   }
 
-  if (c.kind === "init" || c.kind === "mut" || c.kind === "close") return "Signer<'info>";
+  if (c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "mut" || c.kind === "close") return "Signer<'info>";
 
   return "Account<'info, AccountInfo>";
 }
@@ -311,14 +313,14 @@ function findPayer(_current: IrInstructionAccount, allAccounts: readonly IrInstr
 }
 
 function needsSystemProgram(ix: IrInstruction): boolean {
-  const hasInit = ix.accounts.some((acc) => acc.constraint.kind === "init");
+  const hasInit = ix.accounts.some((acc) => acc.constraint.kind === "init" || acc.constraint.kind === "initIfNeeded");
   const hasSystemProgram = ix.accounts.some((acc) => acc.constraint.kind === "systemProgram");
   return hasInit && !hasSystemProgram;
 }
 
 function isMutable(acc: IrInstructionAccount): boolean {
   const c = acc.constraint;
-  return c.kind === "mut" || c.kind === "init" || c.kind === "close" ||
+  return c.kind === "mut" || c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "close" ||
     (c.kind === "tokenAccount" && c.mutable) ||
     (c.kind === "mint" && c.mutable);
 }
@@ -348,7 +350,7 @@ function formatSeedsForAttr(
       throw new Error(`Unknown PDA seed field '${seed.fieldName}' for account '${account.name}'. Use .derive((seed) => ['literal', seed.fieldName]) with a pubkey or integer field on the account.`);
     }
 
-    if (currentIxAccount?.constraint.kind === "init") {
+    if (currentIxAccount?.constraint.kind === "init" || currentIxAccount?.constraint.kind === "initIfNeeded") {
       const arg = ixArgs.find((candidate) => candidate.name === seed.fieldName);
       if (arg !== undefined) return formatSeedBytes(toSnake(arg.name), arg.type);
 

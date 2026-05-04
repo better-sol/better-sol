@@ -521,3 +521,20 @@ We should NOT adopt Anchor's full builder chain (`.accounts().signers().remainin
 - Builder pattern is more composable than our single `.send()` ✅
 - Events, simulation, views, close accounts are missing from better-sol ✅
 - Our `fromIdl()` is too simplified for real Anchor IDL interop ✅
+
+---
+
+## Progress Update (2026-05-04)
+
+| Gap Identified | Status |
+|---|---|
+| Simulation missing | ✅ Added `.simulate()` to all instruction methods |
+| Events missing | ✅ Added `event()` DSL function; transpiler already handled `emit!()` |
+| Close accounts missing | ✅ Already existed (`p.close()` + transpiler) |
+| `fetchAll`/`fetchMultiple` missing | ✅ Added `fetchMultiple()` to BoundAccount |
+| `.transaction()` terminal | ✅ Already existed |
+| `.prepare()` terminal | ✅ Added |
+| `fromIdl()` too simplified | ✅ Updated for full Anchor IDL (coption, composite accounts, optionals, address fields) |
+| Views missing | ❌ Deferred |
+| Event listener missing | ❌ Deferred |
+| IDL from chain (`Program.at()`) | ❌ Deferred |

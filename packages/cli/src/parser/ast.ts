@@ -213,6 +213,8 @@ function resolveConstraint(prop: Node, accountName: string, rawAccounts: readonl
     case "init":
     case "create":
       return { kind: "init", accountName: callArgId(call, 0) ?? accountName };
+    case "createIfNeeded":
+      return { kind: "initIfNeeded", accountName: callArgId(call, 0) ?? accountName };
     case "mut":
       return { kind: "mut", accountName: callArgId(call, 0) ?? accountName };
     case "signer":

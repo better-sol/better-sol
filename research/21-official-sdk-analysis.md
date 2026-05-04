@@ -541,3 +541,28 @@ TypeScript program definition
 - The Anchor target is the right choice
 - The IR-based architecture is sound
 - The unsupported-pattern approach is conservative and safe
+
+---
+
+## Progress Update (2026-05-04)
+
+Items implemented since this analysis:
+
+| Priority | Item | Status |
+|---|---|---|
+| HIGH | Pure instruction builder export (`.instruction()`) | ✅ Already existed |
+| HIGH | Transaction builder (`.transaction()`) | ✅ Already existed |
+| HIGH | `.simulate()` method | ✅ Added |
+| HIGH | `.prepare()` method | ✅ Added |
+| HIGH | `fetchMultiple()` on BoundAccount | ✅ Added |
+| HIGH | `.send` explicit property | ✅ Added |
+| HIGH | Close account support | ✅ Already existed |
+| HIGH | Event support in DSL + transpiler | ✅ Added `event()` function; transpiler already handled `emit!()` |
+| HIGH | `initIfNeeded` constraint | ✅ Added to DSL, parser, IR, generator |
+| HIGH | `fromIdl()` full Anchor spec | ✅ Updated (coption, composite accounts, optional, top-level address) |
+| MEDIUM | Instruction plan composability | ❌ Deferred |
+| MEDIUM | Compute unit estimation | ❌ Deferred |
+| MEDIUM | Transaction planner abstraction | ❌ Deferred |
+| LOW | Message packer support | ❌ Deferred |
+| LOW | Parallel instruction plans | ❌ Deferred |
+| LOW | Reactive stores | ❌ Out of scope |

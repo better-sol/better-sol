@@ -169,11 +169,15 @@ export function struct<const TFields extends FieldSchema>(fields: ZeroCopyFields
   return new StructZCDefinition(fields);
 }
 
+export function event<const TFields extends FieldSchema>(fields: TFields): EventSchema[string] {
+  return fields;
+}
+
 export type AccountDefs = Readonly<Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>>>;
 export type ErrorMessages = Readonly<Record<string, string>>;
 export type EventSchema = Readonly<Record<string, FieldSchema>>;
 
-type AccountConstraintKind = "init" | "mut" | "close" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";
+type AccountConstraintKind = "init" | "initIfNeeded" | "mut" | "close" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";
 
 export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMutable extends boolean = false> {
   public declare readonly [constraintValue]: TValue;
@@ -388,6 +392,12 @@ export type ProgramAccounts<TProgram> =
 export const p = {
   create<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "init", true> {
     return new AccountConstraint("init", true, accountDefinition);
+  },
+  createIfNeeded<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "initIfNeeded", true> {
+    return new AccountConstraint("initIfNeeded", true, accountDefinition);
+  },
+  realloc<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "mut", true> {
+    return new AccountConstraint("mut", true, accountDefinition);
   },
   mut<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "mut", true> {
     return new AccountConstraint("mut", true, accountDefinition);

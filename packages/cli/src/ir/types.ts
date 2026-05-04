@@ -62,6 +62,7 @@ export type IrStructZC = {
 
 type AccountConstraint =
   | { readonly kind: "init"; accountName: string }
+  | { readonly kind: "initIfNeeded"; accountName: string }
   | { readonly kind: "mut"; accountName: string }
   | { readonly kind: "close"; accountName: string; refundTo: string }
   | { readonly kind: "signer" }

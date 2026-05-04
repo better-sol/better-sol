@@ -379,6 +379,7 @@ increment: ix({ accounts: { counter: p.mut(Counter) }, args: { amount: u64 }, ru
 | Expression | Anchor Rust equivalent | Description |
 |---|---|---|
 | `p.create(Account)` | `init, payer, space, seeds` | Create a new PDA account |
+| `p.createIfNeeded(Account)` | `init_if_needed, payer, space, seeds` | Create or reuse an existing PDA |
 | `p.mut(Account)` | `mut` | Read/write existing account |
 | `p.close(Account, "refund")` | `close = refund` | Close account, refund rent |
 | `p.signer()` | `Signer` | Transaction signer (auto-fills from active payer) |
@@ -416,6 +417,33 @@ token.burn({ from, mint, authority, amount });
 ```
 
 These are type-checked at definition time and transpiled to Anchor CPI calls.
+
+### Events
+
+```ts
+import { event, u64, pubkey } from "better-sol/program";
+
+const TransferEvent = event({ from: pubkey, to: pubkey, amount: u64 });
+
+const myProgram = program(
+  {
+    name: "my_program",
+    address: "...",
+    events: { Transfer: TransferEvent },
+  },
+  ix => ({
+    transfer: ix({
+      accounts: { authority: p.signer() },
+      args: { amount: u64 },
+      run: (accounts, args, ctx) => {
+        ctx.emit("Transfer", { from: accounts.authority, to: accounts.authority, amount: args.amount });
+      },
+    }),
+  }),
+);
+```
+
+Events are emitted as Anchor `emit!()` calls in the generated Rust. The transpiler validates event names and field types at compile time.
 
 ### Sysvar stubs
 
@@ -491,17 +519,26 @@ await sol.app.closeVault({ vault: vaultAddr });         // accounts only
 await sol.counter.increment({ counter: addr, amount: 5n }); // accounts + params
 ```
 
-Three forms per instruction:
+Five forms per instruction:
 
 ```ts
-// 1. Sign, send, confirm — returns signature string
-const sig: string = await sol.counter.increment({ counter: addr, amount: 5n });
+// 1. Sign, send, confirm — returns Kit Signature
+const sig = await sol.counter.increment({ counter: addr, amount: 5n });
 
-// 2. Build instruction — returns Kit Instruction for manual composition
-const ix: Instruction = await sol.counter.increment.instruction({ counter: addr, amount: 5n });
+// 2. Same as above but explicit
+const sig = await sol.counter.increment({ counter: addr, amount: 5n }).send();
 
-// 3. Build signed transaction — returns signed sendable transaction
-const tx: SignedTransaction = await sol.counter.increment.transaction({ counter: addr, amount: 5n });
+// 3. Build instruction — returns Kit Instruction for manual composition
+const ix = await sol.counter.increment({ counter: addr, amount: 5n }).instruction();
+
+// 4. Build signed transaction — returns signed sendable transaction
+const tx = await sol.counter.increment({ counter: addr, amount: 5n }).transaction();
+
+// 5. Simulate without sending — returns logs, units consumed, return data
+const sim = await sol.counter.increment({ counter: addr, amount: 5n }).simulate();
+
+// 6. Prepare for external composition
+const { instruction, signers, pubkeys } = await sol.counter.increment({ counter: addr, amount: 5n }).prepare();
 ```
 
 ### Signer auto-fill
@@ -525,6 +562,10 @@ const addr: Address = await sol.counter.accounts.Counter.derive({ authority: sol
 // Account fetching — returns typed data or null
 const data: { count: bigint; authority: Address } | null
   = await sol.counter.accounts.Counter.fetch(addr);
+
+// Fetch multiple accounts at once
+const results = await sol.counter.accounts.Counter.fetchMultiple([addr1, addr2]);
+// → [ { count: 5n, ... }, null ]
 
 // Data is auto-decoded — Borsh for standard accounts, zero-copy layout for zero-copy accounts
 ```
@@ -678,7 +719,7 @@ await sol.mango.someInstruction({ ... });
 | Import path | Exports |
 |---|---|
 | `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `version` |
-| `better-sol/program` | `program`, `account`, `struct`, `p`, `token`, `sol`, all type tokens (`u8`, `u64`, `pubkey`, `bool`, ...), compound type helpers (`option`, `vec`, `array`), type helpers (`InstructionAccounts`, `InstructionArgs`, ...) |
+| `better-sol/program` | `program`, `account`, `struct`, `event`, `p`, `token`, `sol`, all type tokens (`u8`, `u64`, `pubkey`, `bool`, ...), compound type helpers (`option`, `vec`, `array`), type helpers (`InstructionAccounts`, `InstructionArgs`, ...) |
 | `better-sol/wallets` | `walletAdapter`, `reownWallet`, `privyWallet`, `dynamicWallet` |
 | `better-sol/wallets/wallet-adapter` | `walletAdapter` |
 | `better-sol/wallets/reown` | `reownWallet` |
@@ -703,7 +744,7 @@ console.log(version); // "0.1.0"
 | `programs` glob | `programs/**/*.ts` | `config.ts` |
 | `cluster` | `devnet` | `config.ts` |
 | `out` directory | `generated` | `config.ts` |
-| `compilerUrl` | `http://localhost:8080` | `deploy.ts` |
+| `compilerUrl` | `https://api.better-sol.dev` | `api/client.ts` |
 
 ### Client SDK defaults
 
@@ -711,9 +752,9 @@ console.log(version); // "0.1.0"
 |---|---|---|
 | `cluster` | `devnet` | `client.ts` |
 | `commitment` | `"confirmed"` | `client.ts` |
-| `confirmationRetries` | `30` | `client.ts` |
-| `confirmationInterval` | `1000` ms | `client.ts` |
-| `rpcRetries` | `3` | `client.ts` |
+| `simulate` | Removed (use `.simulate()` per instruction) | `client.ts` |
+| `confirmationRetries` | `30` | `client.ts` (internal) |
+| `confirmationInterval` | `1000` ms | `client.ts` (internal) |
 
 ### RPC URLs
 
@@ -755,9 +796,12 @@ The generated Rust passes `cargo check` with zero warnings and no `#[allow()]` a
 - **`struct_zc` outside zero-copy**: Only valid inside `account().zeroCopy()` accounts
 - **PDA-signed token CPI**: Token transfer with `authority: tokenAccount` generates invalid signer seeds — authority must be a PDA from the program or a signer
 - **`bool` in zero-copy**: `bool` is not Pod-safe — use `u8` with explicit `=== 1` checks
-- **DB schema**: Supports Drizzle ORM only (Postgres, MySQL, SQLite)
-- **Deployment adapter**: Compilation and IDL persistence are end-to-end; on-chain deployment adapter is still being wired
 - **`vec()` default max**: `vec(type)` defaults to 32 entries — use `.max(N)` for custom limits
+- **DB schema**: Drizzle only (Postgres, MySQL, SQLite)
+- **Event listeners**: Events are emitted on-chain but no client-side subscription API yet
+- **Parallel execution**: `sol.steps()` executes sequentially — no parallel instruction plan support yet
+- **Compute unit estimation**: Not yet integrated — add `computeUnitLimit` instructions manually
+- **Multi-signer**: One active signer at a time — use `sol.withSigner()` for multiple signers in sequence
 
 ---
 

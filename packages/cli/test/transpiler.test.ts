@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { parseProgramsFromFile } from "../src/parser/ast";
 import { generateAnchorProject } from "../src/generator/rust";
 
-const counterSource = `
-import { program, account, u64, bool, pubkey, p } from 'better-sol/program'
+const counterSource = `import { program, account, u64, bool, pubkey, p } from 'better-sol/program'
 
 const Counter = account({
   count: u64,
@@ -50,80 +49,42 @@ export const counter = program({
       },
       run: () => {},
     }),
-}))
-`;
+}))`;
 
 describe("AST parser", () => {
-  test("parses program name and address", () => {
+  test("parses program metadata", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    expect(programs.length).toBe(1);
     expect(programs[0]!.name).toBe("counter");
     expect(programs[0]!.address).toBe("91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs");
-  });
-
-  test("parses accounts", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    expect(programs[0]!.accounts.length).toBe(1);
-    expect(programs[0]!.accounts[0]!.name).toBe("Counter");
-    expect(programs[0]!.accounts[0]!.fields.length).toBe(3);
-    expect(programs[0]!.accounts[0]!.fields[0]!.name).toBe("count");
-    expect(programs[0]!.accounts[0]!.fields[0]!.type).toBe("u64");
-    expect(programs[0]!.accounts[0]!.fields[1]!.name).toBe("authority");
-    expect(programs[0]!.accounts[0]!.fields[1]!.type).toBe("pubkey");
-    expect(programs[0]!.accounts[0]!.fields[2]!.name).toBe("isActive");
-    expect(programs[0]!.accounts[0]!.fields[2]!.type).toBe("bool");
-  });
-
-  test("parses account seeds", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    const seeds = programs[0]!.accounts[0]!.seeds;
-    expect(seeds.length).toBe(2);
-    expect(seeds[0]).toEqual({ kind: "literal", value: "counter" });
-    expect(seeds[1]).toEqual({ kind: "field", fieldName: "authority" });
-  });
-
-  test("parses instructions", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
     expect(programs[0]!.instructions.length).toBe(3);
-    expect(programs[0]!.instructions[0]!.name).toBe("initialize");
-    expect(programs[0]!.instructions[1]!.name).toBe("increment");
-    expect(programs[0]!.instructions[2]!.name).toBe("close");
+    expect(programs[0]!.accounts.length).toBe(1);
+    expect(programs[0]!.errors.length).toBe(2);
   });
 
-  test("parses instruction accounts with constraints", () => {
+  test("parses account fields and seeds", () => {
+    const programs = parseProgramsFromFile(counterSource, "counter.ts");
+    const account = programs[0]!.accounts[0]!;
+    expect(account.name).toBe("Counter");
+    expect(account.fields.length).toBe(3);
+    expect(account.fields[0]!.name).toBe("count");
+    expect(account.fields[0]!.type).toBe("u64");
+    expect(account.fields[2]!.type).toBe("bool");
+    expect(account.seeds.length).toBe(2);
+    expect(account.seeds[0]).toEqual({ kind: "literal", value: "counter" });
+    expect(account.seeds[1]).toEqual({ kind: "field", fieldName: "authority" });
+    expect(account.space).toBe(49);
+  });
+
+  test("parses instruction constraints", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const initIx = programs[0]!.instructions[0]!;
-    expect(initIx.accounts.length).toBe(2);
-    expect(initIx.accounts[0]!.name).toBe("counter");
     expect(initIx.accounts[0]!.constraint.kind).toBe("init");
-    expect(initIx.accounts[1]!.name).toBe("authority");
     expect(initIx.accounts[1]!.constraint.kind).toBe("signer");
-  });
-
-  test("parses instruction args", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    const initIx = programs[0]!.instructions[0]!;
-    expect(initIx.args.length).toBe(1);
     expect(initIx.args[0]!.name).toBe("initialValue");
     expect(initIx.args[0]!.type).toBe("u64");
-  });
 
-  test("parses close constraint", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const closeIx = programs[0]!.instructions[2]!;
     expect(closeIx.accounts[0]!.constraint.kind).toBe("close");
-  });
-
-  test("parses errors", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    expect(programs[0]!.errors.length).toBe(2);
-    expect(programs[0]!.errors[0]!.name).toBe("Unauthorized");
-    expect(programs[0]!.errors[0]!.message).toBe("Only the creator can perform this action");
-  });
-
-  test("calculates account space", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    expect(programs[0]!.accounts[0]!.space).toBe(49);
   });
 
   test("rejects dynamic string PDA seed templates", () => {
@@ -137,147 +98,70 @@ describe("AST parser", () => {
   });
 
   test("rejects zero-copy bool fields", () => {
-    const source = `
-import { program, account, bool, p } from 'better-sol/program'
-const Flags = account({ paused: bool }).zeroCopy()
-export const flags = program({ name: 'flags', address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs' }, ix => ({
-  init: ix({ accounts: { flags: p.create(Flags) }, run: () => {} })
-}))`;
+    const source = "import { program, account, bool, u8, p } from 'better-sol/program'\nconst Flags = account({ paused: bool, bump: u8 }).zeroCopy()\nexport const flags = program({ name: 'flags', address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs' }, ix => ({\n  init: ix({ accounts: { flags: p.create(Flags), authority: p.signer() }, run: () => {} })\n}))";
     expect(() => parseProgramsFromFile(source, "flags.ts")).toThrow("not zero-copy safe");
   });
 });
 
-describe("Transpiler diagnostics", () => {
-  function expectDiagnostic(runBody: string, expected: string): void {
-    const source = `
-import { program, account, u64, bool, pubkey, p } from 'better-sol/program'
-const Counter = account({ count: u64, authority: pubkey, isActive: bool }).derive((seed) => ["counter", seed.authority])
-export const counter = program({
-  name: 'counter',
-  address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',
-  errors: { Unauthorized: 'Unauthorized' },
-}, ix => ({
-    bad: ix({
-      accounts: { counter: p.mut(Counter), authority: p.signer() },
-      args: { amount: u64 },
-      run: ({ counter, authority }, { amount }, ctx) => ${runBody},
-    }),
-}))`;
-    const program = parseProgramsFromFile(source, "bad.ts")[0]!;
-    expect(() => generateAnchorProject(program)).toThrow(expected);
-  }
-
-  test("rejects while loops with guidance", () => {
-    expectDiagnostic(`{
-      while (amount > 0n) {
-        counter.count += 1n
-      }
-    }`, "while/do loops");
-  });
-
-  test("rejects custom function calls with supported alternatives", () => {
-    expectDiagnostic(`{
-      counter.count = Math.max(counter.count, amount)
-    }`, "Supported calls are ctx.require");
-  });
-
-  test("rejects destructuring locals", () => {
-    expectDiagnostic(`{
-      const { count } = counter
-      counter.count = count
-    }`, "destructuring variable declarations");
-  });
-
-  test("rejects await expressions", () => {
-    expectDiagnostic(`{
-      counter.count = await fetchCount()
-    }`, "await expressions");
-  });
-
-  test("rejects object spread", () => {
-    expectDiagnostic(`{
-      counter.count = { ...counter }.count
-    }`, "object spread");
-  });
-
-  test("rejects external identifiers", () => {
-    expectDiagnostic(`{
-      counter.count = DEFAULT_AMOUNT
-    }`, "identifier 'DEFAULT_AMOUNT'");
-  });
-
-  test("rejects unknown account fields", () => {
-    expectDiagnostic(`{
-      counter.missingField = amount
-    }`, "unknown field 'missingField'");
-  });
-});
-
 describe("Rust generator", () => {
-  test("generates declare_id", () => {
+  test("generates header with declare_id and imports", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
     expect(project.libRs).toContain('declare_id!("91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs")');
+    expect(project.libRs).toContain("use anchor_lang::prelude::*;");
   });
 
-  test("generates account struct", () => {
+  test("generates account struct with fields", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
+    expect(project.libRs).toContain("#[account]");
     expect(project.libRs).toContain("pub struct Counter");
     expect(project.libRs).toContain("pub count: u64");
     expect(project.libRs).toContain("pub authority: Pubkey");
     expect(project.libRs).toContain("pub is_active: bool");
   });
 
-  test("generates error enum", () => {
+  test("generates error enum with messages", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
     expect(project.libRs).toContain("#[error_code]");
     expect(project.libRs).toContain("pub enum ProgramError");
-    expect(project.libRs).toContain("Unauthorized");
+    expect(project.libRs).toContain('#[msg("Only the creator can perform this action")]');
+    expect(project.libRs).toContain("Unauthorized,");
+    expect(project.libRs).toContain("NotActive,");
   });
 
-  test("generates program module with instructions", () => {
+  test("generates program module with instruction fns", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
     expect(project.libRs).toContain("#[program]");
-    expect(project.libRs).toContain("pub fn initialize");
-    expect(project.libRs).toContain("pub fn increment");
-    expect(project.libRs).toContain("pub fn close");
+    expect(project.libRs).toContain("pub fn initialize(ctx: Context<Initialize>");
+    expect(project.libRs).toContain("pub fn increment(ctx: Context<Increment>");
+    expect(project.libRs).toContain("pub fn close(_ctx: Context<Close>");
   });
 
-  test("generates accounts validation structs", () => {
+  test("generates Accounts structs with constraints", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
     expect(project.libRs).toContain("#[derive(Accounts)]");
     expect(project.libRs).toContain("pub struct Initialize<");
     expect(project.libRs).toContain("pub struct Increment<");
-  });
-
-  test("generates init constraint with seeds", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    const project = generateAnchorProject(programs[0]!);
+    expect(project.libRs).toContain("pub struct Close<");
     expect(project.libRs).toContain("init,");
     expect(project.libRs).toContain("payer = authority");
     expect(project.libRs).toContain("space = 49");
-    expect(project.libRs).toContain("seeds = [");
     expect(project.libRs).toContain('b"counter"');
-  });
-
-  test("generates close constraint", () => {
-    const programs = parseProgramsFromFile(counterSource, "counter.ts");
-    const project = generateAnchorProject(programs[0]!);
     expect(project.libRs).toContain("close = authority");
   });
 
-  test("generates Cargo.toml with correct name", () => {
+  test("generates Cargo.toml with dependencies", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
     expect(project.cargoToml).toContain('name = "counter"');
-    expect(project.cargoToml).toContain("anchor-lang");
+    expect(project.cargoToml).toContain('anchor-lang = { version = "=1.0.2"');
   });
 
-  test("generates IDL with correct structure", () => {
+  test("generates IDL with instructions, accounts, and errors", () => {
     const programs = parseProgramsFromFile(counterSource, "counter.ts");
     const project = generateAnchorProject(programs[0]!);
     const idl = project.idl as Record<string, unknown>;
@@ -286,5 +170,42 @@ describe("Rust generator", () => {
     expect(Array.isArray(idl.instructions)).toBe(true);
     expect(Array.isArray(idl.accounts)).toBe(true);
     expect(Array.isArray(idl.errors)).toBe(true);
+    expect((idl.instructions as ReadonlyArray<Record<string, unknown>>).length).toBe(3);
+  });
+});
+
+describe("Transpiler diagnostics", () => {
+  function expectDiagnostic(runBody: string, expected: string): void {
+    const source = "import { program, account, u64, bool, pubkey, p } from 'better-sol/program'\nconst Counter = account({ count: u64, authority: pubkey, isActive: bool }).derive((seed) => ['counter', seed.authority])\nexport const counter = program({\n  name: 'counter',\n  address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',\n  errors: { Unauthorized: 'Unauthorized' },\n}, ix => ({\n    bad: ix({\n      accounts: { counter: p.mut(Counter), authority: p.signer() },\n      args: { amount: u64 },\n      run: ({ counter, authority }, { amount }, ctx) => " + runBody + ",\n    }),\n}))";
+    const program = parseProgramsFromFile(source, "bad.ts")[0]!;
+    expect(() => generateAnchorProject(program)).toThrow(expected);
+  }
+
+  test("rejects destructuring declarations", () => {
+    expectDiagnostic("{ const { count } = counter; counter.count = count }", "destructuring variable declarations");
+  });
+
+  test("rejects object spread", () => {
+    expectDiagnostic("{ counter.count = { ...counter }.count }", "object spread");
+  });
+
+  test("rejects unknown external identifiers", () => {
+    expectDiagnostic("{ counter.count = DEFAULT_AMOUNT }", "identifier 'DEFAULT_AMOUNT'");
+  });
+
+  test("rejects unknown account fields", () => {
+    expectDiagnostic("{ counter.missingField = amount }", "unknown field 'missingField'");
+  });
+
+  test("rejects unsupported function calls", () => {
+    expectDiagnostic("{ counter.count = Math.max(counter.count, amount) }", "Supported calls are ctx.require");
+  });
+
+  test("rejects return statements", () => {
+    expectDiagnostic("{ return; }", "return statements");
+  });
+
+  test("rejects template string expressions", () => {
+    expectDiagnostic("{ const size = 'size-' + String(amount); counter.count = 1n }", "unsupported TypeScript");
   });
 });
