@@ -216,7 +216,7 @@ function generateAccountAttrs(
       const accountDef = findAccountDef(c.accountName, accounts);
       const space = accountDef?.space ?? (8 + 32);
       const seeds = accountDef !== undefined ? formatSeedsForAttr(accountDef, accounts, ixAccounts, ixArgs, acc.name) : undefined;
-      const payer = findPayer(acc, ixAccounts);
+      const payer = findPayer(ixAccounts);
 
       lines.push("#[account(");
       lines.push(`    ${initKind},`);
@@ -307,7 +307,7 @@ function findAccountDef(name: string, accounts: readonly IrAccount[]): IrAccount
   );
 }
 
-function findPayer(_current: IrInstructionAccount, allAccounts: readonly IrInstructionAccount[]): string {
+function findPayer(allAccounts: readonly IrInstructionAccount[]): string {
   const signer = allAccounts.find((acc) => acc.constraint.kind === "signer");
   return signer !== undefined ? toSnake(signer.name) : "authority";
 }

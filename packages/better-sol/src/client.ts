@@ -346,13 +346,13 @@ function buildClient<const TPrograms extends ProgramInputs, THasSigner extends b
       if (kitAddress(sourceAddress) !== signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
       const ix = getTransferSolInstruction({ source: signer, destination: kitAddress(transferParams.to), amount: transferParams.amount });
       const signedTx = await buildAndSignTransaction([ix], params.rpc, signer, params.commitment);
-      return await sendAndConfirm(signedTx, params.rpc, params.commitment);
+      return await sendAndConfirm(signedTx, params.rpc);
     },
     send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature> => {
       const signer = requireSigner(params.signer);
       const resolved = await Promise.all(instructions);
       const signedTx = await buildAndSignTransaction(resolved, params.rpc, signer, params.commitment);
-      return await sendAndConfirm(signedTx, params.rpc, params.commitment);
+      return await sendAndConfirm(signedTx, params.rpc);
     },
     steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {
       const results: unknown[] = [];
@@ -389,7 +389,7 @@ function buildProgramClient(
       const params = inputParams ?? {};
       const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed");
       const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment);
-      return await sendAndConfirm(signedTx, rpc, commitment);
+      return await sendAndConfirm(signedTx, rpc);
     };
 
     const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction> => {
@@ -456,7 +456,7 @@ function buildTokenClient(
     return ata;
   };
   const sendFn = async (tx: SignedTransaction): Promise<Signature> => {
-    return await sendAndConfirm(tx, rpc, commitment);
+    return await sendAndConfirm(tx, rpc);
   };
   return {
     getATA: async (params) => await deriveAtaAddr(params.owner, params.mint),
@@ -540,7 +540,6 @@ async function buildAndSignTransaction(
 async function sendAndConfirm(
   transaction: SignedTransaction,
   rpc: KitRpc,
-  _commitment: "processed" | "confirmed" | "finalized",
 ): Promise<Signature> {
   const signature = getSignatureFromTransaction(transaction);
   await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
