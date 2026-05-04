@@ -29,7 +29,7 @@ describe("end-to-end program fixtures", () => {
         expect(project.libRs).toContain("#[program]");
         expect(project.libRs).toContain(`declare_id!("${program.address}")`);
         expect(project.libRs).toContain("#[derive(Accounts)]");
-        expect(project.cargoToml).toContain("anchor-lang = { version = \"=1.0.1\"");
+        expect(project.cargoToml).toContain("anchor-lang = { version = \"=1.0.2\"");
         expect(project.idl).toMatchObject({ name: program.name, address: program.address });
       }
     });

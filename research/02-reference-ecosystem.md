@@ -86,8 +86,8 @@ Kit (formerly `@solana/web3.js` v2) is the official JavaScript SDK for building 
 ### 3. Plugin System (`@solana/plugin-core`)
 ```typescript
 const sol = await betterSol()
-    .use(rpcPlugin('https://api.mainnet-beta.solana.com'))
-    .use(rpcSubscriptionsPlugin('wss://api.mainnet-beta.solana.com'))
+    .use(rpcPlugin('https://api.mainnet.solana.com'))
+    .use(rpcSubscriptionsPlugin('wss://api.mainnet.solana.com'))
     .use(generatedPayerPlugin())
     .use(generatedAuthorityPlugin());
 ```

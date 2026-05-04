@@ -170,7 +170,7 @@ import {
     getBase64EncodedWireTransaction,
 } from '@solana/kit';
 
-const rpc = createSolanaRpc('https://api.mainnet-beta.solana.com');
+const rpc = createSolanaRpc('https://api.mainnet.solana.com');
 
 // Build your transaction message, sign it, then:
 const wireTransactionBytes = compileTransaction(signedTransaction);
@@ -304,7 +304,7 @@ type ParsedInnerInstruction = {
 ```ts
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 
-const connection = new Connection('https://api.mainnet-beta.solana.com');
+const connection = new Connection('https://api.mainnet.solana.com');
 
 const result = await connection.simulateTransaction(
     versionedTransaction,
@@ -345,7 +345,7 @@ You must fetch the account state before simulation, then compare:
 ```ts
 import { createSolanaRpc, getAddressEncoder, getBase64EncodedWireTransaction } from '@solana/kit';
 
-const rpc = createSolanaRpc('https://api.mainnet-beta.solana.com');
+const rpc = createSolanaRpc('https://api.mainnet.solana.com');
 const targetAccounts = [
     'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
     'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
@@ -475,7 +475,7 @@ function decodeSimulationResult(
 The actual HTTP call made by both libraries:
 
 ```jsonc
-// POST to https://api.mainnet-beta.solana.com
+// POST to https://api.mainnet.solana.com
 {
     "jsonrpc": "2.0",
     "id": 1,

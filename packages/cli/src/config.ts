@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { CliConfig, Cluster } from "./types";
 
-const clusterValues: readonly Cluster[] = ["devnet", "testnet", "mainnet-beta", "localnet"];
+const clusterValues: readonly Cluster[] = ["devnet", "testnet", "mainnet", "localnet"];
 
 function isCluster(value: string): value is Cluster {
   return clusterValues.includes(value as Cluster);

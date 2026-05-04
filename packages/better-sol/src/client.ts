@@ -54,19 +54,19 @@ import {
   type TypeToken,
 } from "./program";
 
-export type Cluster = "devnet" | "testnet" | "mainnet-beta" | "localnet";
+export type Cluster = "devnet" | "testnet" | "mainnet" | "localnet";
 
 const CLUSTER_URLS: Record<Cluster, string> = {
   devnet: "https://api.devnet.solana.com",
   testnet: "https://api.testnet.solana.com",
-  "mainnet-beta": "https://api.mainnet-beta.solana.com",
+  mainnet: "https://api.mainnet.solana.com",
   localnet: "http://127.0.0.1:8899",
 };
 
 const CLUSTER_WS_URLS: Record<Cluster, string> = {
   devnet: "wss://api.devnet.solana.com",
   testnet: "wss://api.testnet.solana.com",
-  "mainnet-beta": "wss://api.mainnet-beta.solana.com",
+  mainnet: "wss://api.mainnet.solana.com",
   localnet: "ws://127.0.0.1:8900",
 };
 

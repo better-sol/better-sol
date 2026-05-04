@@ -21,7 +21,7 @@ type AnchorProject = {
   readonly program: IrProgram;
 };
 
-const ANCHOR_VERSION = "1.0.1";
+const ANCHOR_VERSION = "1.0.2";
 
 function generateCargoToml(program: IrProgram): string {
   const usesToken2022 = program.instructions.some(hasToken2022Cpi);

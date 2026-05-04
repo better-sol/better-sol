@@ -603,7 +603,7 @@ Solana has several networks:
 
 | Network | Purpose | SOL Value |
 |---|---|---|
-| **mainnet-beta** | Production. Real money. | Real SOL (~$150) |
+| **mainnet** | Production. Real money. | Real SOL (~$150) |
 | **devnet** | Testing with fake SOL | Free (airdropped) |
 | **testnet** | Stress testing, validator testing | Free |
 | **localnet** | Runs on your machine | Free |

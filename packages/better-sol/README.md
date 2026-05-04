@@ -173,7 +173,7 @@ npx @better-sol/cli deploy
 |---|---|---|
 | `--src <glob>` | `programs/**/*.ts` (or from config) | Glob pattern for program sources |
 | `--program <name>` | all programs | Target a specific program by name |
-| `--cluster <cluster>` | `devnet` (or from config) | `devnet`, `testnet`, `mainnet-beta`, or `localnet` |
+| `--cluster <cluster>` | `devnet` (or from config) | `devnet`, `testnet`, `mainnet`, or `localnet` |
 | `--output <dir>` | `generated` (or from config) | Directory for generated Rust files |
 | `--dry-run` | `false` | Generate Rust only — no compile or deploy |
 | `--verify` | `false` | Write generated Rust files for verified builds |
@@ -237,7 +237,7 @@ export default defineConfig({
 | Field | Default | Description |
 |---|---|---|
 | `programs` | `programs/**/*.ts` | Glob pattern for finding program source files |
-| `cluster` | `devnet` | Default cluster: `devnet`, `testnet`, `mainnet-beta`, `localnet` |
+| `cluster` | `devnet` | Default cluster: `devnet`, `testnet`, `mainnet`, `localnet` |
 | `out` | `generated` | Default output directory for generated Rust |
 
 The config file is optional — all fields can be overridden via CLI flags.
@@ -458,7 +458,7 @@ const userSol = await sol.withSigner(walletAdapter(wallet));
 
 | Config field | Default | Description |
 |---|---|---|
-| `cluster` | `devnet` | Predefined RPC URL for devnet/testnet/mainnet-beta/localnet |
+| `cluster` | `devnet` | Predefined RPC URL for devnet/testnet/mainnet/localnet |
 | `rpcUrl` | derived from `cluster` | Custom RPC URL (requires explicit `rpcSubscriptionsUrl`) |
 | `rpcSubscriptionsUrl` | derived from `cluster` | WebSocket URL for RPC subscriptions |
 | `payer` | (none) | Signer configuration — `keypairFile()`, `secretKey()`, or Kit `TransactionSigner` |
@@ -622,7 +622,7 @@ better-sol is wallet-agnostic. A shared client stores RPC connections and progra
 import { walletAdapter } from "better-sol/wallets/wallet-adapter";
 import { useWallet } from "@solana/wallet-adapter-react";
 
-const sol = await betterSol({ cluster: "mainnet-beta" });
+const sol = await betterSol({ cluster: "mainnet" });
 
 function App() {
   const wallet = useWallet();
@@ -662,7 +662,7 @@ import mangoIdl from "./mango.json";
 
 const mango = fromIdl(mangoIdl);
 const sol = await betterSol({
-  cluster: "mainnet-beta",
+  cluster: "mainnet",
   payer: keypairFile("./keypair.json"),
   programs: { mango },
 });
@@ -721,7 +721,7 @@ console.log(version); // "0.1.0"
 |---|---|---|
 | `devnet` | `https://api.devnet.solana.com` | `wss://api.devnet.solana.com` |
 | `testnet` | `https://api.testnet.solana.com` | `wss://api.testnet.solana.com` |
-| `mainnet-beta` | `https://api.mainnet-beta.solana.com` | `wss://api.mainnet-beta.solana.com` |
+| `mainnet` | `https://api.mainnet.solana.com` | `wss://api.mainnet.solana.com` |
 | `localnet` | `http://127.0.0.1:8899` | `ws://127.0.0.1:8900` |
 
 ---

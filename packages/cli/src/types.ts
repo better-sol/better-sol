@@ -1,4 +1,4 @@
-export type Cluster = "devnet" | "testnet" | "mainnet-beta" | "localnet";
+export type Cluster = "devnet" | "testnet" | "mainnet" | "localnet";
 
 export type CliConfig = {
   readonly programs: string;

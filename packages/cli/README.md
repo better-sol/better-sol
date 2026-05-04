@@ -106,7 +106,7 @@ npx @better-sol/cli deploy
 npx @better-sol/cli deploy --program counter
 
 # Custom source glob and cluster
-npx @better-sol/cli deploy --src "src/programs/*.ts" --cluster mainnet-beta
+npx @better-sol/cli deploy --src "src/programs/*.ts" --cluster mainnet
 ```
 
 The deploy command:
@@ -119,7 +119,7 @@ The deploy command:
 |---|---|---|
 | `--src` | (from config) | Glob pattern for program sources |
 | `--program` | all | Target a specific program by name |
-| `--cluster` | devnet | `devnet`, `testnet`, `mainnet-beta`, `localnet` |
+| `--cluster` | devnet | `devnet`, `testnet`, `mainnet`, `localnet` |
 | `--output` | `generated/` | Directory for generated Rust files |
 | `--dry-run` | `false` | Generate Rust only — no compile or deploy |
 | `--verify` | `false` | Write Rust files for verified builds |

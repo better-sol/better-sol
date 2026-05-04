@@ -209,7 +209,7 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "1.0.0"
+anchor-lang = "1.0.2"
 "#
     )
 }

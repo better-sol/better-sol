@@ -33,7 +33,7 @@ const sol = await betterSol({ cluster: "devnet" })
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `cluster` | `"devnet" \| "testnet" \| "mainnet-beta" \| "localnet"` | `"devnet"` | Sets RPC URL |
+| `cluster` | `"devnet" \| "testnet" \| "mainnet" \| "localnet"` | `"devnet"` | Sets RPC URL |
 | `rpcUrl` | `string` | cluster default | Custom RPC endpoint |
 | `rpcSubscriptionsUrl` | `string` | cluster default | Required if `rpcUrl` is set |
 | `payer` | `SolSigner` | `undefined` | Read-only if omitted |
@@ -141,7 +141,7 @@ All return `TransactionSigner` from `@solana/kit`. Shared signing logic in `sign
 Usage:
 ```typescript
 const signer = walletAdapter(useWallet())
-const sol = await betterSol({ cluster: "mainnet-beta", payer: signer, programs: { counter } })
+const sol = await betterSol({ cluster: "mainnet", payer: signer, programs: { counter } })
 ```
 
 ---

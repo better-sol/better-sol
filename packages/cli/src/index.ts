@@ -38,7 +38,7 @@ cli
   .description("Generate Rust, compile, and deploy programs")
   .option("--src <glob>", "program source glob")
   .option("--program <name>", "target a specific program by name")
-  .option("--cluster <cluster>", "devnet, testnet, mainnet-beta, or localnet")
+  .option("--cluster <cluster>", "devnet, testnet, mainnet, or localnet")
   .option("--verify", "write generated Rust for verified builds", false)
   .option("--dry-run", "generate and validate without compiling or deploying", false)
   .option("--output <dir>", "generated Rust output directory")
