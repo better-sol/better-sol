@@ -36,9 +36,6 @@ class VecToken<TInner extends TypeToken<unknown, TypeKind>, TMax extends number>
   public declare readonly [typeValue]: BoundedArray<InferType<TInner>>;
   public declare readonly [typeKind]: "vec";
   public constructor(public readonly inner: TInner, public readonly maxEntries: TMax) {}
-  public max<const TNextMax extends number>(maxEntries: TNextMax): VecToken<TInner, TNextMax> {
-    return new VecToken(this.inner, maxEntries);
-  }
 }
 
 class ArrayToken<TInner extends TypeToken<unknown, TypeKind>, TSize extends number> implements TypeToken<FixedArray<InferType<TInner>, TSize>, "array"> {
@@ -63,34 +60,22 @@ export type RemainingAccounts<TValue> = {
   [index: number]: TValue;
 };
 
-export const u8 = new PrimitiveToken<number, "u8">("u8");
-export const u16 = new PrimitiveToken<number, "u16">("u16");
-export const u32 = new PrimitiveToken<number, "u32">("u32");
-export const u64 = new PrimitiveToken<bigint, "u64">("u64");
-export const u128 = new PrimitiveToken<bigint, "u128">("u128");
-export const i8 = new PrimitiveToken<number, "i8">("i8");
-export const i16 = new PrimitiveToken<number, "i16">("i16");
-export const i32 = new PrimitiveToken<number, "i32">("i32");
-export const i64 = new PrimitiveToken<bigint, "i64">("i64");
-export const i128 = new PrimitiveToken<bigint, "i128">("i128");
-export const f32 = new PrimitiveToken<number, "f32">("f32");
-export const f64 = new PrimitiveToken<number, "f64">("f64");
-export const bool = new PrimitiveToken<boolean, "bool">("bool");
-export const pubkey = new PrimitiveToken<Address, "pubkey">("pubkey");
-export const string = new PrimitiveToken<string, "string">("string");
-export const bytes = new PrimitiveToken<Uint8Array, "bytes">("bytes");
-
-export function option<TInner extends TypeToken<unknown, TypeKind>>(inner: TInner): OptionToken<TInner> {
-  return new OptionToken(inner);
-}
-
-export function vec<TInner extends TypeToken<unknown, TypeKind>>(inner: TInner): VecToken<TInner, 32> {
-  return new VecToken(inner, 32);
-}
-
-export function array<TInner extends TypeToken<unknown, TypeKind>, const TSize extends number>(inner: TInner, size: TSize): ArrayToken<TInner, TSize> {
-  return new ArrayToken(inner, size);
-}
+const u8Token = new PrimitiveToken<number, "u8">("u8");
+const u16Token = new PrimitiveToken<number, "u16">("u16");
+const u32Token = new PrimitiveToken<number, "u32">("u32");
+const u64Token = new PrimitiveToken<bigint, "u64">("u64");
+const u128Token = new PrimitiveToken<bigint, "u128">("u128");
+const i8Token = new PrimitiveToken<number, "i8">("i8");
+const i16Token = new PrimitiveToken<number, "i16">("i16");
+const i32Token = new PrimitiveToken<number, "i32">("i32");
+const i64Token = new PrimitiveToken<bigint, "i64">("i64");
+const i128Token = new PrimitiveToken<bigint, "i128">("i128");
+const f32Token = new PrimitiveToken<number, "f32">("f32");
+const f64Token = new PrimitiveToken<number, "f64">("f64");
+const boolToken = new PrimitiveToken<boolean, "bool">("bool");
+const pubkeyToken = new PrimitiveToken<Address, "pubkey">("pubkey");
+const stringToken = new PrimitiveToken<string, "string">("string");
+const bytesToken = new PrimitiveToken<Uint8Array, "bytes">("bytes");
 
 type NumericKind = "u8" | "u16" | "u32" | "u64" | "u128" | "i8" | "i16" | "i32" | "i64" | "i128";
 type ZeroCopyPrimitiveKind = NumericKind | "f32" | "f64" | "pubkey";
@@ -161,18 +146,6 @@ export class AccountDefinition<TFields extends FieldSchema, TZeroCopy extends bo
 
 export type AccountData<TAccount> = TAccount extends AccountDefinition<infer TFields, boolean, readonly string[]> ? InferFields<TFields> : never;
 
-export function account<const TFields extends FieldSchema>(fields: TFields): AccountDefinition<TFields, false, readonly []> {
-  return new AccountDefinition(fields, [], false);
-}
-
-export function struct<const TFields extends FieldSchema>(fields: ZeroCopyFields<TFields>): StructZCDefinition<TFields> {
-  return new StructZCDefinition(fields);
-}
-
-export function event<const TFields extends FieldSchema>(fields: TFields): EventSchema[string] {
-  return fields;
-}
-
 export type AccountDefs = Readonly<Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>>>;
 export type ErrorMessages = Readonly<Record<string, string>>;
 export type EventSchema = Readonly<Record<string, FieldSchema>>;
@@ -188,12 +161,6 @@ export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMut
     public readonly refundTo: string | undefined = undefined,
     public readonly remainingItem: unknown = undefined,
   ) {}
-}
-
-export class MutableAccountConstraint<TValue, TKind extends AccountConstraintKind, TMutable extends boolean = false> extends AccountConstraint<TValue, TKind, TMutable> {
-  public mut(): MutableAccountConstraint<TValue, TKind, true> {
-    return new MutableAccountConstraint(this.constraintKind, true, this.accountDefinition, this.refundTo, this.remainingItem);
-  }
 }
 
 export type MintAccount = {
@@ -344,7 +311,7 @@ export class ProgramDefinition<TName extends string, TAddress extends Address, T
   ) {}
 }
 
-export function program<
+function createProgram<
   const TName extends string,
   const TAddress extends Address,
   const TErrors extends ErrorMessages,
@@ -365,71 +332,13 @@ export function program<
   );
 }
 
-export type InstructionAccounts<TInstruction> =
-  TInstruction extends InstructionDefinition<infer TAccounts, ArgsSchema | undefined> ? InferAccounts<TAccounts> :
-  never;
+function createAccount<const TFields extends FieldSchema>(fields: TFields): AccountDefinition<TFields, false, readonly []> {
+  return new AccountDefinition(fields, [], false);
+}
 
-export type InstructionArgs<TInstruction> =
-  TInstruction extends InstructionDefinition<AccountInputs, infer TArgs> ? TArgs extends ArgsSchema ? InferArgs<TArgs> : Record<never, never> :
-  never;
-
-export type ProgramInstructions<TProgram> =
-  TProgram extends ProgramDefinition<string, Address, ErrorMessages, EventSchema, infer TInstructions, AccountDefs> ? TInstructions :
-  never;
-
-export type ProgramErrors<TProgram> =
-  TProgram extends ProgramDefinition<string, Address, infer TErrors, EventSchema, Instructions, AccountDefs> ? TErrors :
-  never;
-
-export type ProgramEvents<TProgram> =
-  TProgram extends ProgramDefinition<string, Address, ErrorMessages, infer TEvents, Instructions, AccountDefs> ? TEvents :
-  never;
-
-export type ProgramAccounts<TProgram> =
-  TProgram extends ProgramDefinition<string, Address, ErrorMessages, EventSchema, Instructions, infer TAccountDefs> ? TAccountDefs :
-  never;
-
-export const p = {
-  create<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "init", true> {
-    return new AccountConstraint("init", true, accountDefinition);
-  },
-  createIfNeeded<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "initIfNeeded", true> {
-    return new AccountConstraint("initIfNeeded", true, accountDefinition);
-  },
-  realloc<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "mut", true> {
-    return new AccountConstraint("mut", true, accountDefinition);
-  },
-  mut<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "mut", true> {
-    return new AccountConstraint("mut", true, accountDefinition);
-  },
-  close<TAccount extends AnyAccountDefinition>(accountDefinition: TAccount, refundTo: string): AccountConstraint<AccountData<TAccount> & { key: Address }, "close", true> {
-    return new AccountConstraint("close", true, accountDefinition, refundTo);
-  },
-  signer(): AccountConstraint<SignerInfo, "signer", false> {
-    return new AccountConstraint("signer", false);
-  },
-  mint(): MutableAccountConstraint<MintAccount, "mint", false> {
-    return new MutableAccountConstraint("mint", false);
-  },
-  tokenAccount(): MutableAccountConstraint<TokenAccountInfo, "tokenAccount", false> {
-    return new MutableAccountConstraint("tokenAccount", false);
-  },
-  tokenProgram(): AccountConstraint<TokenProgramInfo, "tokenProgram", false> {
-    return new AccountConstraint("tokenProgram", false);
-  },
-  token2022Program(): AccountConstraint<TokenProgramInfo, "token2022Program", false> {
-    return new AccountConstraint("token2022Program", false);
-  },
-  systemProgram(): AccountConstraint<SystemProgramInfo, "systemProgram", false> {
-    return new AccountConstraint("systemProgram", false);
-  },
-  clock(): AccountConstraint<ClockInfo, "clock", false> {
-    return new AccountConstraint("clock", false);
-  },
-  remaining<TItem extends AccountInput>(item: TItem): AccountConstraint<RemainingAccounts<RemainingConstraintValue<TItem>>, "remaining", false> {
-    return new AccountConstraint("remaining", false, undefined, undefined, item);
-  },
-} as const;
+function createStruct<const TFields extends FieldSchema>(fields: ZeroCopyFields<TFields>): StructZCDefinition<TFields> {
+  return new StructZCDefinition(fields);
+}
 
 type TokenAuthority = Address | { readonly key: Address };
 
@@ -459,15 +368,101 @@ type BurnParams = {
   readonly amount: bigint;
 };
 
-export const token = {
-  transfer(_params: TransferParams): void {},
-  transferChecked(_params: TransferCheckedParams): void {},
-  mintTo(_params: MintToParams): void {},
-  burn(_params: BurnParams): void {},
-} as const;
+class WritableBuilder<TValue, TKind extends AccountConstraintKind> extends AccountConstraint<TValue, TKind, false> {
+  public constructor(kind: TKind) {
+    super(kind, false);
+  }
+  public writable(): AccountConstraint<TValue, TKind, true> {
+    return new AccountConstraint(this.constraintKind, true);
+  }
+}
 
-export const sol = {
-  timestamp(): bigint {
-    return 0n;
+export const bs = {
+  u8: () => u8Token,
+  u16: () => u16Token,
+  u32: () => u32Token,
+  u64: () => u64Token,
+  u128: () => u128Token,
+  i8: () => i8Token,
+  i16: () => i16Token,
+  i32: () => i32Token,
+  i64: () => i64Token,
+  i128: () => i128Token,
+  f32: () => f32Token,
+  f64: () => f64Token,
+  bool: () => boolToken,
+  pubkey: () => pubkeyToken,
+  string: () => stringToken,
+  bytes: () => bytesToken,
+
+  optional: <TInner extends TypeToken<unknown, TypeKind>>(inner: TInner): OptionToken<TInner> => new OptionToken(inner),
+  vector: <TInner extends TypeToken<unknown, TypeKind>>(inner: TInner, maxEntries?: number): VecToken<TInner, number> => new VecToken(inner, maxEntries ?? 32),
+  array: <TInner extends TypeToken<unknown, TypeKind>, const TSize extends number>(inner: TInner, size: TSize): ArrayToken<TInner, TSize> => new ArrayToken(inner, size),
+
+  account: createAccount,
+  struct: createStruct,
+  program: createProgram,
+
+  init: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "init", true> => {
+    return new AccountConstraint("init", true, accountDefinition);
+  },
+  initIfNeeded: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "initIfNeeded", true> => {
+    return new AccountConstraint("initIfNeeded", true, accountDefinition);
+  },
+  mut: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount): AccountConstraint<AccountData<TAccount> & { key: Address }, "mut", true> => {
+    return new AccountConstraint("mut", true, accountDefinition);
+  },
+  close: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount, refundTo: string): AccountConstraint<AccountData<TAccount> & { key: Address }, "close", true> => {
+    return new AccountConstraint("close", true, accountDefinition, refundTo);
+  },
+  signer: (): AccountConstraint<SignerInfo, "signer", false> => {
+    return new AccountConstraint("signer", false);
+  },
+  mint: (): WritableBuilder<MintAccount, "mint"> => new WritableBuilder("mint"),
+  tokenAccount: (): WritableBuilder<TokenAccountInfo, "tokenAccount"> => new WritableBuilder("tokenAccount"),
+  tokenProgram: (): AccountConstraint<TokenProgramInfo, "tokenProgram", false> => new AccountConstraint("tokenProgram", false),
+  token2022Program: (): AccountConstraint<TokenProgramInfo, "token2022Program", false> => new AccountConstraint("token2022Program", false),
+  systemProgram: (): AccountConstraint<SystemProgramInfo, "systemProgram", false> => new AccountConstraint("systemProgram", false),
+  clock: (): AccountConstraint<ClockInfo, "clock", false> => new AccountConstraint("clock", false),
+  remaining: <TItem extends AccountInput>(item: TItem): AccountConstraint<RemainingAccounts<RemainingConstraintValue<TItem>>, "remaining", false> => {
+    return new AccountConstraint("remaining", false, undefined, undefined, item);
   },
 } as const;
+
+export type { bs as BsNamespace };
+
+export const cpi = {
+  token: {
+    transfer(_params: TransferParams): void {},
+    transferChecked(_params: TransferCheckedParams): void {},
+    mintTo(_params: MintToParams): void {},
+    burn(_params: BurnParams): void {},
+  },
+  sol: {
+    timestamp(): bigint { return 0n; },
+  },
+} as const;
+
+export type InstructionAccounts<TInstruction> =
+  TInstruction extends InstructionDefinition<infer TAccounts, ArgsSchema | undefined> ? InferAccounts<TAccounts> :
+  never;
+
+export type InstructionArgs<TInstruction> =
+  TInstruction extends InstructionDefinition<AccountInputs, infer TArgs> ? TArgs extends ArgsSchema ? InferArgs<TArgs> : Record<never, never> :
+  never;
+
+export type ProgramInstructions<TProgram> =
+  TProgram extends ProgramDefinition<string, Address, ErrorMessages, EventSchema, infer TInstructions, AccountDefs> ? TInstructions :
+  never;
+
+export type ProgramErrors<TProgram> =
+  TProgram extends ProgramDefinition<string, Address, infer TErrors, EventSchema, Instructions, AccountDefs> ? TErrors :
+  never;
+
+export type ProgramEvents<TProgram> =
+  TProgram extends ProgramDefinition<string, Address, ErrorMessages, infer TEvents, Instructions, AccountDefs> ? TEvents :
+  never;
+
+export type ProgramAccounts<TProgram> =
+  TProgram extends ProgramDefinition<string, Address, ErrorMessages, EventSchema, Instructions, infer TAccountDefs> ? TAccountDefs :
+  never;

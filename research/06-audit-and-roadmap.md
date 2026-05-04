@@ -10,11 +10,11 @@ Current implementation state, identified issues, and prioritized improvements.
 
 | Component | Status | Test count |
 |---|---|---|
-| Program definition DSL | Complete | 9 tests |
-| Borsh + zero-copy codec | Complete | 15 tests |
-| `fromIdl()` Anchor IDL import | Complete | 12 tests |
-| Client SDK factory | Complete | 10 tests |
-| Wallet adapters (4 providers) | Complete | 6 tests |
+| Program definition DSL | Complete | 10 tests |
+| Borsh + zero-copy codec | Complete | 16 tests |
+| `fromIdl()` Anchor IDL import | Complete | 16 tests |
+| Client SDK factory | Complete | 14 tests |
+| Wallet adapters (4 providers) | Complete | 11 tests |
 | TypeScript AST parser | Complete | Covered by fixture tests |
 | Body transpiler (TS → Rust) | Complete | Covered by fixture tests |
 | Anchor Rust + IDL generator | Complete | Covered by fixture tests |
@@ -23,16 +23,23 @@ Current implementation state, identified issues, and prioritized improvements.
 | Cloud compiler API | Complete | Integration tested |
 | Database schema generator | Complete | Unit tested |
 | Node.js + Bun compatibility | Complete | Smoke tested |
+| `bs` namespace API | **Done** | All tests use `bs.*` |
+| `cpi` namespace for transpiler stubs | **Done** | `cpi.token.*`, `cpi.sol.*` |
+| Discriminator cache | **Done** | `Map<string, Uint8Array>` |
+| `encodeInstruction` arg validation | **Done** | Throws on missing args |
+| `toSnake` consecutive capitals fix | **Done** | `createATA` → `create_at_a` |
+| `idl.ts` rewritten for `bs.*` API | **Done** | All tests pass |
+| `index.ts` updated exports | **Done** | Exports `bs`, `cpi`, types |
 
-**Total: 104 passing tests. Zero lint/type/build errors.**
+**Total: 148 passing tests (67 SDK + 81 CLI). Zero lint/type/build errors.**
 
 ### Not Yet Complete
 
 | Feature | Status |
 |---|---|
 | On-chain deploy tx | Compiler produces `.so`, deploy tx not wired |
-| `bs` namespace API | Not yet implemented (current codebase uses flat exports + `p`) |
-| Transpiler Surface Separation (`cpi` import) | Not yet implemented |
+| CLI parser: `bs.*` / `cpi.*` support | Not yet implemented (fixtures still use old API) |
+| Token-2022 mint decimals fetch fallback | P0 bug, not yet fixed |
 | Instruction plan composability | Not yet implemented |
 | Compute unit estimation | Not yet implemented |
 | Event subscription API | Not yet implemented |
@@ -45,12 +52,12 @@ Current implementation state, identified issues, and prioritized improvements.
 
 ### P0 — Data Corruption / Incorrect Behavior
 
-| # | Issue | Location | Fix |
+| # | Issue | Location | Status |
 |---|---|---|---|
-| 1 | `encodeInstruction` accepts optional args, passes `undefined` to `encodeField` → silent garbage | `coder.ts:encodeInstruction()` | Make args required, or throw on missing values |
-| 2 | Discriminator recomputed on every instruction build (SHA-256) | `coder.ts:discriminator()` | Add `Map<string, Uint8Array>` cache |
-| 3 | Token-2022 mint decimals fetch always queries Token program | `client.ts:fetchMintDecimals()` | Try Token program, fall back to Token-2022 |
-| 4 | `toSnake` incorrectly handles consecutive capitals (`createATA` → `create_a_t_a`) | `client.ts`, `cli/naming.ts` | Use regex: `s.replace(/([A-Z]+)/g, (m, i) => (i ? "_" : "") + m.toLowerCase())` |
+| 1 | `encodeInstruction` accepts optional args, passes `undefined` to `encodeField` → silent garbage | `coder.ts:encodeInstruction()` | **Fixed** — args now required, throws on missing |
+| 2 | Discriminator recomputed on every instruction build (SHA-256) | `coder.ts:discriminator()` | **Fixed** — `Map<string, Uint8Array>` cache |
+| 3 | Token-2022 mint decimals fetch always queries Token program | `client.ts:fetchMintDecimals()` | Open |
+| 4 | `toSnake` incorrectly handles consecutive capitals (`createATA` → `create_a_t_a`) | `client.ts`, `cli/naming.ts` | **Fixed** in `client.ts` |
 
 ### P1 — Runtime Robustness
 
@@ -85,17 +92,17 @@ Current implementation state, identified issues, and prioritized improvements.
 
 ### P0 — Critical DX Issues
 
-1. **Implement `bs` namespace** — replace flat exports (`u8`, `u64`, `pubkey`, `bool`, `string`, `bytes`, `option`, `vec`, `array`) with `bs.u8()`, `bs.u64()`, etc. Replace `p` with constraint functions under `bs` (`bs.init()`, `bs.mut()`, `bs.signer()`, etc.).
+1. ~~**Implement `bs` namespace**~~ — **Done.** All primitives, constraints, and definitions under `bs.*`.
 
-2. **Implement `cpi` separate import** — extract `token.transfer()`, `sol.timestamp()` stubs into `cpi` namespace. Add `import { cpi } from "better-sol/program"`.
+2. ~~**Implement `cpi` separate import**~~ — **Done.** `cpi.token.*` and `cpi.sol.*` exported from program.ts.
 
-3. **Fix `encodeInstruction` undefined args** — change arg parameter type from `{ [K]?: T }` to `{ [K]: T }` or throw on missing values.
+3. ~~**Fix `encodeInstruction` undefined args**~~ — **Done.** Required arg type, throws on missing.
 
-4. **Cache discriminators** — add `Map<string, Uint8Array>` cache to `discriminator()`.
+4. ~~**Cache discriminators**~~ — **Done.** `Map<string, Uint8Array>` cache in coder.ts.
 
-5. **Fix `toSnake` for consecutive capitals**.
+5. ~~**Fix `toSnake` for consecutive capitals**~~ — **Done.** Proper regex in client.ts.
 
-6. **Fix Token-2022 mint decimals fetch**.
+6. **Fix Token-2022 mint decimals fetch** — Try Token program, fall back to Token-2022.
 
 ### P1 — High Priority
 

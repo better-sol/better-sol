@@ -1,6 +1,33 @@
 export { betterSol, secretKey, keypairFile } from "./client";
 export type { BetterSolClient, BetterSolConfig, BoundAccount, TokenClient, DeriveInput, AddressInput, StepChain } from "./client";
 
+export { bs, cpi } from "./program";
+export type {
+  Address,
+  InferType,
+  InferFields,
+  FieldSchema,
+  TypeKind,
+  TypeToken,
+  AccountData,
+  AccountDefs,
+  ErrorMessages,
+  EventSchema,
+  AccountInputs,
+  ArgsSchema,
+  InstructionDefinition,
+  Instructions,
+  ProgramDefinition,
+  ProgramConfig,
+  InstructionContext,
+  InstructionAccounts,
+  InstructionArgs,
+  ProgramInstructions,
+  ProgramErrors,
+  ProgramEvents,
+  ProgramAccounts,
+} from "./program";
+
 export { fromIdl } from "./idl";
 export type { AnchorIdl, IdlProgram, IdlField, IdlType, IdlDiscriminator } from "./idl";
 

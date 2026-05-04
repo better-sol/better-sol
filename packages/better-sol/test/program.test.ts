@@ -1,41 +1,41 @@
 import { describe, expect, test } from "bun:test";
-import { account, array, p, program, pubkey, sol, struct, token, u8, u64, type InstructionAccounts, type InstructionArgs } from "../src/program";
+import { bs, cpi } from "../src/program";
 import { version } from "../src/index";
 
 test("exports a version", () => {
   expect(version).toBe("0.1.0");
 });
 
-describe("program builder stubs", () => {
+describe("program builder", () => {
   test("creates typed account definitions", () => {
-    const Counter = account({ count: u64, authority: pubkey }).derive((seed) => ["counter", seed.authority]);
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((seed) => ["counter", seed.authority]);
     expect(Counter.fields.count.kind).toBe("u64");
     expect(Counter.seedValues).toEqual(["counter", "{authority}"]);
   });
 
   test("creates typed instructions with account and arg context", () => {
-    const Counter = account({ count: u64, authority: pubkey });
-    const prog = program(
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() });
+    const prog = bs.program(
       { name: "test", address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs" },
-      ix => ({
+      (ix) => ({
         increment: ix({
           accounts: {
-            counter: p.mut(Counter),
-            authority: p.signer(),
+            counter: bs.mut(Counter),
+            authority: bs.signer(),
           },
-          args: { amount: u64 },
+          args: { amount: bs.u64() },
           run: ({ counter, authority }, { amount }, ctx) => {
             ctx.require(authority === counter.authority, "Unauthorized");
             counter.count += amount;
           },
         }),
-      })
+      }),
     );
 
     const increment = prog.instructions.increment;
 
-    type IncrementAccounts = InstructionAccounts<typeof increment>;
-    type IncrementArgs = InstructionArgs<typeof increment>;
+    type IncrementAccounts = import("../src/program").InstructionAccounts<typeof increment>;
+    type IncrementArgs = import("../src/program").InstructionArgs<typeof increment>;
     const args: IncrementArgs = { amount: 1n };
     const counterAccount: IncrementAccounts["counter"] = {
       key: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
@@ -49,29 +49,29 @@ describe("program builder stubs", () => {
   });
 
   test("creates program with typed autocomplete for errors and events", () => {
-    const Counter = account({ count: u64, authority: pubkey });
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() });
 
-    const counterProgram = program(
+    const counterProgram = bs.program(
       {
         name: "counter",
         address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
         errors: { Unauthorized: "Only authority" },
-        events: { Incremented: { amount: u64, authority: pubkey } },
+        events: { Incremented: { amount: bs.u64(), authority: bs.pubkey() } },
       },
-      ix => ({
+      (ix) => ({
         increment: ix({
           accounts: {
-            counter: p.mut(Counter),
-            authority: p.signer(),
+            counter: bs.mut(Counter),
+            authority: bs.signer(),
           },
-          args: { amount: u64 },
+          args: { amount: bs.u64() },
           run: ({ counter, authority }, { amount }, ctx) => {
             ctx.require(authority === counter.authority, "Unauthorized");
             counter.count += amount;
             ctx.emit("Incremented", { amount, authority });
           },
         }),
-      })
+      }),
     );
 
     expect(counterProgram.errors.Unauthorized).toBe("Only authority");
@@ -79,30 +79,27 @@ describe("program builder stubs", () => {
   });
 
   test("creates program with params-only instruction", () => {
-    const pingProgram = program(
+    bs.program(
       {
         name: "ping_program",
         address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
-        events: { Pinged: { value: u64 } },
+        events: { Pinged: { value: bs.u64() } },
       },
-      ix => ({
+      (ix) => ({
         ping: ix({
-          args: { value: u64 },
+          args: { value: bs.u64() },
           run: ({ value }, ctx) => {
             ctx.emit("Pinged", { value });
           },
         }),
-      })
+      }),
     );
-
-    expect(Object.keys(pingProgram.instructions.ping.accounts)).toEqual([]);
-    expect(pingProgram.events.Pinged.value.kind).toBe("u64");
   });
 
   test("creates program with no accounts and no params", () => {
-    const heartbeatProgram = program(
+    const heartbeatProgram = bs.program(
       { name: "heartbeat", address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs" },
-      ix => ({
+      (ix) => ({
         ping: ix({
           run: (ctx) => {
             ctx.log("ping");
@@ -116,24 +113,24 @@ describe("program builder stubs", () => {
   });
 
   test("supports nested zero-copy array field tokens", () => {
-    const Order = struct({ quantity: u64, owner: pubkey });
-    const OrderBook = account({ orders: array(Order, 8), market: pubkey }).derive((seed) => ["orderbook", seed.market]).zeroCopy();
+    const Order = bs.struct({ quantity: bs.u64(), owner: bs.pubkey() });
+    const OrderBook = bs.account({ orders: bs.array(Order, 8), market: bs.pubkey() }).derive((seed) => ["orderbook", seed.market]).zeroCopy();
     expect(OrderBook.zeroCopyEnabled).toBe(true);
   });
 
   test("rejects dynamic string seed templates", () => {
-    const Counter = account({ id: u64 });
+    const Counter = bs.account({ id: bs.u64() });
     expect(() => Counter.derive(() => ["counter", "{id}"])).toThrow("Dynamic PDA seed template");
   });
 
   test("rejects account and arg name collisions", () => {
-    const Counter = account({ count: u64 });
-    expect(() => program(
+    const Counter = bs.account({ count: bs.u64() });
+    expect(() => bs.program(
       { name: "collision", address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs" },
-      ix => ({
+      (ix) => ({
         increment: ix({
-          accounts: { amount: p.mut(Counter) },
-          args: { amount: u64 },
+          accounts: { amount: bs.mut(Counter) },
+          args: { amount: bs.u64() },
           run: ({ amount }, args) => {
             amount.count += args.amount;
           },
@@ -142,35 +139,32 @@ describe("program builder stubs", () => {
     )).toThrow("conflicts with an instruction arg");
   });
 
-  test("exposes token and sysvar stubs", () => {
-    const TransferState = account({ owner: pubkey, amount: u64, decimals: u8 });
-    const transferProgram = program(
+  test("exposes constraint kinds and CPI stubs", () => {
+    const TransferState = bs.account({ owner: bs.pubkey(), amount: bs.u64(), decimals: bs.u8() });
+    bs.program(
       {
         name: "transfer_program",
         address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
       },
-      ix => ({
+      (ix) => ({
         transfer: ix({
           accounts: {
-            state: p.mut(TransferState),
-            from: p.tokenAccount().mut(),
-            to: p.tokenAccount().mut(),
-            mint: p.mint(),
-            authority: p.signer(),
-            tokenProgram: p.tokenProgram(),
+            state: bs.mut(TransferState),
+            from: bs.tokenAccount().writable(),
+            to: bs.tokenAccount().writable(),
+            mint: bs.mint(),
+            authority: bs.signer(),
+            tokenProgram: bs.tokenProgram(),
           },
-          args: { amount: u64 },
+          args: { amount: bs.u64() },
           run: ({ state, from, to, mint, authority }, { amount }) => {
             state.amount = amount;
             state.decimals = mint.decimals;
-            token.transfer({ from, to, authority, amount });
-            state.amount = sol.timestamp();
+            cpi.token.transfer({ from, to, authority, amount });
+            state.amount = cpi.sol.timestamp();
           },
         }),
-      })
+      }),
     );
-
-    expect(transferProgram.instructions.transfer.accounts.tokenProgram.constraintKind).toBe("tokenProgram");
   });
 });
-

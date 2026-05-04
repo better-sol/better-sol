@@ -1,27 +1,8 @@
 import {
-  account,
+  bs,
   AccountConstraint,
   AccountDefinition,
   InstructionDefinition,
-  array as arrToken,
-  bool,
-  bytes,
-  f32,
-  f64,
-  i128,
-  i16,
-  i32,
-  i64,
-  i8,
-  option as optToken,
-  pubkey,
-  string,
-  u128,
-  u16,
-  u32,
-  u64,
-  u8,
-  vec as vecToken,
   ProgramDefinition,
   type Address,
   type ArgsSchema,
@@ -98,28 +79,40 @@ export type AnchorIdl = {
   readonly constants?: readonly { readonly name: string; readonly type: IdlType; readonly value: string }[];
 };
 
-const PRIMITIVE_MAP: Record<IdlTypePrimitive, TypeToken<unknown, TypeKind>> = {
-  u8, u16, u32, u64, u128,
-  i8, i16, i32, i64, i128,
-  f32, f64,
-  bool,
-  pubkey, publicKey: pubkey,
-  string,
-  bytes,
-};
-
 function idlTypeToToken(type: IdlType): TypeToken<unknown, TypeKind> {
   if (typeof type === "string") {
-    const token = PRIMITIVE_MAP[type];
+    const token = idlPrimitiveToToken(type);
     if (token === undefined) throw new Error(`Unknown IDL type: ${type}`);
     return token;
   }
-  if ("option" in type && type.option !== undefined) return optToken(idlTypeToToken(type.option));
-  if ("coption" in type && type.coption !== undefined) return optToken(idlTypeToToken(type.coption));
-  if ("vec" in type && type.vec !== undefined) return vecToken(idlTypeToToken(type.vec));
-  if ("array" in type && type.array !== undefined) return arrToken(idlTypeToToken(type.array[0]), type.array[1]);
-  if ("defined" in type) return pubkey;
+  if ("option" in type && type.option !== undefined) return bs.optional(idlTypeToToken(type.option));
+  if ("coption" in type && type.coption !== undefined) return bs.optional(idlTypeToToken(type.coption));
+  if ("vec" in type && type.vec !== undefined) return bs.vector(idlTypeToToken(type.vec));
+  if ("array" in type && type.array !== undefined) return bs.array(idlTypeToToken(type.array[0]), type.array[1]);
+  if ("defined" in type) return bs.pubkey();
   throw new Error(`Unknown IDL type: ${JSON.stringify(type)}`);
+}
+
+function idlPrimitiveToToken(type: IdlTypePrimitive): TypeToken<unknown, TypeKind> | undefined {
+  switch (type) {
+    case "u8": return bs.u8();
+    case "u16": return bs.u16();
+    case "u32": return bs.u32();
+    case "u64": return bs.u64();
+    case "u128": return bs.u128();
+    case "i8": return bs.i8();
+    case "i16": return bs.i16();
+    case "i32": return bs.i32();
+    case "i64": return bs.i64();
+    case "i128": return bs.i128();
+    case "f32": return bs.f32();
+    case "f64": return bs.f64();
+    case "bool": return bs.bool();
+    case "pubkey": case "publicKey": return bs.pubkey();
+    case "string": return bs.string();
+    case "bytes": return bs.bytes();
+    default: return undefined;
+  }
 }
 
 function fieldsToSchema(fields: readonly IdlField[] | undefined): FieldSchema {
@@ -129,10 +122,6 @@ function fieldsToSchema(fields: readonly IdlField[] | undefined): FieldSchema {
     result[field.name] = idlTypeToToken(field.type);
   }
   return result as FieldSchema;
-}
-
-function normalizeName(name: string): string {
-  return name;
 }
 
 export type IdlProgram = ProgramDefinition<
@@ -161,7 +150,7 @@ function buildErrors(errors: readonly IdlErrorDef[] | undefined): Record<string,
   if (errors === undefined) return {} as Record<string, string>;
   const result: Record<string, string> = {};
   for (const error of errors) {
-    result[normalizeName(error.name)] = error.msg ?? error.name;
+    result[error.name] = error.msg ?? error.name;
   }
   return result as Record<string, string>;
 }
@@ -170,7 +159,7 @@ function buildEvents(events: readonly { readonly name: string }[] | undefined): 
   if (events === undefined) return {} as Record<string, FieldSchema>;
   const result: Record<string, FieldSchema> = {};
   for (const event of events) {
-    result[normalizeName(event.name)] = {} as FieldSchema;
+    result[event.name] = {} as FieldSchema;
   }
   return result as Record<string, FieldSchema>;
 }
@@ -178,9 +167,9 @@ function buildEvents(events: readonly { readonly name: string }[] | undefined): 
 function buildInstructions(
   idlInstructions: readonly IdlInstructionDef[],
 ): Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> {
-  const result: Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> = {} as Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>;
+  const result: Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> = {};
   for (const ix of idlInstructions) {
-    const ixName = normalizeName(ix.name);
+    const ixName = ix.name;
     const flatAccounts = flattenAccountItems(ix.accounts);
     const accounts: Record<string, AccountConstraint<unknown, "signer" | "mut", boolean>> = {};
     for (const acc of flatAccounts) {
@@ -223,12 +212,12 @@ function flattenAccountItems(items: readonly IdlInstructionAccountItem[] | undef
 function buildAccounts(
   idlAccounts: readonly IdlAccountDef[] | undefined,
 ): Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>> {
-  if (idlAccounts === undefined || idlAccounts.length === 0) return {} as Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>>;
-  const result: Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>> = {} as Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>>;
+  if (idlAccounts === undefined || idlAccounts.length === 0) return {};
+  const result: Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>> = {};
   for (const acc of idlAccounts) {
     const schema = fieldsToSchema(acc.type.fields);
     if (Object.keys(schema).length === 0) continue;
-    result[normalizeName(acc.name)] = account(schema) as AccountDefinition<FieldSchema, boolean, readonly string[]>;
+    result[acc.name] = bs.account(schema);
   }
   return result;
 }

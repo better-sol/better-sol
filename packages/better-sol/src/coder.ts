@@ -25,10 +25,16 @@ export async function accountDiscriminator(name: string): Promise<Uint8Array> {
   return await discriminator(`account:${toPascal(name)}`);
 }
 
+const discriminatorCache = new Map<string, Uint8Array>();
+
 async function discriminator(preimage: string): Promise<Uint8Array> {
+  const cached = discriminatorCache.get(preimage);
+  if (cached !== undefined) return cached;
   const encoded = new TextEncoder().encode(preimage);
   const hash = await globalThis.crypto.subtle.digest("SHA-256", encoded);
-  return new Uint8Array(hash).subarray(0, 8);
+  const result = new Uint8Array(hash).subarray(0, 8);
+  discriminatorCache.set(preimage, result);
+  return result;
 }
 
 export function encodeField(token: TypeToken<unknown, TypeKind>, value: unknown): Uint8Array {
@@ -227,13 +233,14 @@ function decodeZeroCopyField(token: TypeToken<unknown, TypeKind>, data: Uint8Arr
   }
 }
 
-export async function encodeInstruction<TArgs extends Record<string, TypeToken<unknown, TypeKind>>>(ixName: string, argTypes: TArgs, args: { [K in keyof TArgs]?: InferType<TArgs[K]> }): Promise<Uint8Array> {
+export async function encodeInstruction<TArgs extends Record<string, TypeToken<unknown, TypeKind>>>(ixName: string, argTypes: TArgs, args: { [K in keyof TArgs]: InferType<TArgs[K]> }): Promise<Uint8Array> {
   const disc = await anchorDiscriminator(ixName);
   const parts: Uint8Array[] = [disc];
   for (const key of Object.keys(argTypes)) {
     const token = argTypes[key as keyof TArgs];
     if (token === undefined) continue;
     const value = args[key as keyof typeof args];
+    if (value === undefined) throw new Error(`Missing instruction arg '${key}'`);
     parts.push(encodeField(token, value));
   }
   return concat(parts);

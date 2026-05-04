@@ -779,7 +779,7 @@ function readSecretKeyBytes(value: unknown): Uint8Array {
 }
 
 function toSnake(name: string): string {
-  return name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+  return name.replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
 }
 
 function decodeBase64Data(data: readonly [string, string]): Uint8Array {

@@ -162,7 +162,6 @@ describe("fromIdl", () => {
     if (sysvar instanceof AccountConstraint) {
       expect(sysvar.mutable).toBe(false);
     }
-
   });
 
   test("parses compound IDL types", () => {
@@ -303,4 +302,3 @@ describe("fromIdl", () => {
     expect(Object.keys(ix.accounts)).toEqual(["required"]);
   });
 });
-

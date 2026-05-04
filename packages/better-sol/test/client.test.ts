@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { address } from "@solana/kit";
 import { betterSol } from "../src/index";
-import { account, bool, event, i64, p, program, pubkey, string, u8, u64 } from "../src/program";
+import { bs } from "../src/program";
 
 const signer = {
   address: address("11111111111111111111111111111111"),
@@ -10,17 +10,17 @@ const signer = {
 
 describe("client SDK", () => {
   test("program accepts accounts config", () => {
-    const Counter = account({ count: u64, authority: pubkey }).derive((seed) => ["counter", seed.authority]);
-    const counterProg = program(
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((seed) => ["counter", seed.authority]);
+    const counterProg = bs.program(
       {
         name: "counter",
         address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
         accounts: { Counter },
       },
-      ix => ({
+      (ix) => ({
         increment: ix({
-          accounts: { counter: p.mut(Counter), authority: p.signer() },
-          args: { amount: u64 },
+          accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+          args: { amount: bs.u64() },
           run: () => {},
         }),
       }),
@@ -31,12 +31,12 @@ describe("client SDK", () => {
   });
 
   test("program works without accounts", () => {
-    const counterProg = program(
+    const counterProg = bs.program(
       { name: "counter", address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs" },
-      ix => ({
+      (ix) => ({
         increment: ix({
-          accounts: { authority: p.signer() },
-          args: { amount: u64 },
+          accounts: { authority: bs.signer() },
+          args: { amount: bs.u64() },
           run: () => {},
         }),
       }),
@@ -46,13 +46,13 @@ describe("client SDK", () => {
   });
 
   test("instruction methods expose .instruction() and .transaction() at type level", () => {
-    const Counter = account({ count: u64, authority: pubkey });
-    const prog = program(
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() });
+    const prog = bs.program(
       { name: "test", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         increment: ix({
-          accounts: { counter: p.mut(Counter), authority: p.signer() },
-          args: { amount: u64 },
+          accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+          args: { amount: bs.u64() },
           run: () => {},
         }),
       }),
@@ -63,28 +63,28 @@ describe("client SDK", () => {
     expect(method.accounts.authority!.constraintKind).toBe("signer");
   });
 
-  test("instruction definition exposes p.signer and p.mut constraints correctly", () => {
-    const Counter = account({ count: u64, authority: pubkey });
-    const prog = program(
+  test("instruction definition exposes constraint kinds correctly", () => {
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() });
+    const prog = bs.program(
       { name: "test", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         initialize: ix({
-          accounts: { counter: p.create(Counter), authority: p.signer(), systemProgram: p.systemProgram() },
-          args: { initialValue: u64 },
+          accounts: { counter: bs.init(Counter), authority: bs.signer(), systemProgram: bs.systemProgram() },
+          args: { initialValue: bs.u64() },
           run: () => {},
         }),
         transfer: ix({
           accounts: {
-            from: p.tokenAccount().mut(),
-            to: p.tokenAccount().mut(),
-            authority: p.signer(),
-            tokenProgram: p.tokenProgram(),
+            from: bs.tokenAccount().writable(),
+            to: bs.tokenAccount().writable(),
+            authority: bs.signer(),
+            tokenProgram: bs.tokenProgram(),
           },
-          args: { amount: u64 },
+          args: { amount: bs.u64() },
           run: () => {},
         }),
         close: ix({
-          accounts: { counter: p.close(Counter, "authority"), authority: p.signer() },
+          accounts: { counter: bs.close(Counter, "authority"), authority: bs.signer() },
           run: () => {},
         }),
       }),
@@ -103,12 +103,12 @@ describe("client SDK", () => {
   });
 
   test("instruction args respect their type tokens", () => {
-    const prog = program(
+    const prog = bs.program(
       { name: "multi", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         multi: ix({
-          accounts: { authority: p.signer() },
-          args: { flag: bool, score: i64, name: string },
+          accounts: { authority: bs.signer() },
+          args: { flag: bs.bool(), score: bs.i64(), name: bs.string() },
           run: () => {},
         }),
       }),
@@ -121,28 +121,28 @@ describe("client SDK", () => {
   });
 
   test("instruction call signatures match required inputs", async () => {
-    const Counter = account({ count: u64, authority: pubkey });
-    const prog = program(
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() });
+    const prog = bs.program(
       { name: "signatures", address: "11111111111111111111111111111111", accounts: { Counter } },
-      ix => ({
+      (ix) => ({
         ping: ix({
           run: () => {},
         }),
         setAuthority: ix({
-          args: { authority: pubkey },
+          args: { authority: bs.pubkey() },
           run: () => {},
         }),
         close: ix({
-          accounts: { counter: p.mut(Counter) },
+          accounts: { counter: bs.mut(Counter) },
           run: () => {},
         }),
         increment: ix({
-          accounts: { counter: p.mut(Counter), authority: p.signer() },
-          args: { amount: u64 },
+          accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+          args: { amount: bs.u64() },
           run: () => {},
         }),
         signedPing: ix({
-          accounts: { authority: p.signer() },
+          accounts: { authority: bs.signer() },
           run: () => {},
         }),
       }),
@@ -159,12 +159,12 @@ describe("client SDK", () => {
   });
 
   test("instruction calls reject missing required accounts at runtime", async () => {
-    const Counter = account({ count: u64 });
-    const prog = program(
+    const Counter = bs.account({ count: bs.u64() });
+    const prog = bs.program(
       { name: "runtime", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         close: ix({
-          accounts: { counter: p.mut(Counter) },
+          accounts: { counter: bs.mut(Counter) },
           run: () => {},
         }),
       }),
@@ -175,11 +175,11 @@ describe("client SDK", () => {
   });
 
   test("instruction with no args produces undefined args", () => {
-    const prog = program(
+    const prog = bs.program(
       { name: "simple", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         ping: ix({
-          accounts: { authority: p.signer() },
+          accounts: { authority: bs.signer() },
           run: () => {},
         }),
       }),
@@ -189,10 +189,10 @@ describe("client SDK", () => {
 });
 
 test("derive with no field seeds accepts empty object", () => {
-  const Config = account({ admin: pubkey, bump: u8 }).derive(() => ["config"]);
-  const prog = program(
+  const Config = bs.account({ admin: bs.pubkey(), bump: bs.u8() }).derive(() => ["config"]);
+  const prog = bs.program(
     { name: "test", address: "11111111111111111111111111111111", accounts: { Config } },
-    ix => ({ ping: ix({ run: () => {} }) }),
+    (ix) => ({ ping: ix({ run: () => {} }) }),
   );
   expect([...prog.accounts.Config.seedValues]).toEqual(["config"]);
 });
@@ -207,13 +207,13 @@ describe("client factory", () => {
 
 describe("new SDK features", () => {
   test("instruction methods expose .simulate() and .prepare() at type level", async () => {
-    const Counter = account({ count: u64, authority: pubkey });
-    const prog = program(
+    const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() });
+    const prog = bs.program(
       { name: "test", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         increment: ix({
-          accounts: { counter: p.mut(Counter), authority: p.signer() },
-          args: { amount: u64 },
+          accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+          args: { amount: bs.u64() },
           run: () => {},
         }),
       }),
@@ -228,23 +228,23 @@ describe("new SDK features", () => {
   });
 
   test("BoundAccount exposes fetchMultiple", async () => {
-    const Counter = account({ count: u64 });
-    const prog = program(
+    const Counter = bs.account({ count: bs.u64() });
+    const prog = bs.program(
       { name: "test", address: "11111111111111111111111111111111", accounts: { Counter } },
-      ix => ({ ping: ix({ run: () => {} }) }),
+      (ix) => ({ ping: ix({ run: () => {} }) }),
     );
     const client = await betterSol({ cluster: "devnet", programs: { test: prog } });
     expect(typeof client.test.accounts.Counter.fetchMultiple).toBe("function");
   });
 
-  test("p.createIfNeeded() produces correct constraint kind", () => {
-    const Counter = account({ count: u64 });
-    const prog = program(
+  test("bs.initIfNeeded() produces correct constraint kind", () => {
+    const Counter = bs.account({ count: bs.u64() });
+    const prog = bs.program(
       { name: "test", address: "11111111111111111111111111111111" },
-      ix => ({
+      (ix) => ({
         init: ix({
-          accounts: { counter: p.createIfNeeded(Counter), authority: p.signer() },
-          args: { value: u64 },
+          accounts: { counter: bs.initIfNeeded(Counter), authority: bs.signer() },
+          args: { value: bs.u64() },
           run: () => {},
         }),
       }),
@@ -252,24 +252,19 @@ describe("new SDK features", () => {
     expect(prog.instructions.init.accounts.counter.constraintKind).toBe("initIfNeeded");
   });
 
-  test("event() produces a FieldSchema", () => {
-    const TransferEvent = event({ from: pubkey, to: pubkey, amount: u64 });
-    expect(TransferEvent.from!.kind).toBe("pubkey");
-    expect(TransferEvent.amount!.kind).toBe("u64");
-  });
-
-  test("program accepts events config", () => {
-    const TransferEvent = event({ from: pubkey, to: pubkey, amount: u64 });
-    const prog = program(
+  test("program accepts inline event definitions", () => {
+    const prog = bs.program(
       {
         name: "test",
         address: "11111111111111111111111111111111",
-        events: { Transfer: TransferEvent },
+        events: {
+          Transfer: { from: bs.pubkey(), to: bs.pubkey(), amount: bs.u64() },
+        },
       },
-      ix => ({
+      (ix) => ({
         transfer: ix({
-          accounts: { authority: p.signer() },
-          args: { amount: u64 },
+          accounts: { authority: bs.signer() },
+          args: { amount: bs.u64() },
           run: (accounts, args, ctx) => {
             ctx.emit("Transfer", { from: accounts.authority, to: accounts.authority, amount: args.amount });
           },
@@ -279,4 +274,3 @@ describe("new SDK features", () => {
     expect(prog.events.Transfer).toBeDefined();
   });
 });
-
