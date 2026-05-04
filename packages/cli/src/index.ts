@@ -11,6 +11,7 @@ import { defineConfig } from "./config";
 import type { CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
 
 export { defineConfig };
+export type { CliConfig, CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
 export const cliName = "@better-sol/cli";
 
 const cli = new Command();

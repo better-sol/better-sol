@@ -1,4 +1,4 @@
-import { getBase64EncodedWireTransaction, type Address, type SignatureDictionary, type Transaction, type TransactionSigner } from "@solana/kit";
+import { getBase64EncodedWireTransaction, type Address, type SignatureDictionary, type Transaction, type TransactionPartialSigner } from "@solana/kit";
 import { VersionedTransaction } from "@solana/web3.js";
 
 type PrivySignTransaction = (args: { readonly transaction: Uint8Array; readonly wallet: unknown }) => Promise<{ readonly signedTransaction: Uint8Array }>;
@@ -9,7 +9,7 @@ type PrivyWalletLike = {
   readonly signTransaction: PrivySignTransaction;
 };
 
-export function privyWallet(wallet: PrivyWalletLike): TransactionSigner {
+export function privyWallet(wallet: PrivyWalletLike): TransactionPartialSigner {
   const address = wallet.wallet.address as Address;
 
   return {

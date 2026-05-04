@@ -1,4 +1,4 @@
-import type { Address, TransactionSigner } from "@solana/kit";
+import type { Address, TransactionPartialSigner } from "@solana/kit";
 import { createSignTransactions } from "./sign-utils";
 
 type ReownProvider = {
@@ -10,7 +10,7 @@ type ReownWalletLike = {
   readonly walletProvider: ReownProvider;
 };
 
-export function reownWallet(wallet: ReownWalletLike): TransactionSigner {
+export function reownWallet(wallet: ReownWalletLike): TransactionPartialSigner {
   const address = wallet.address as Address;
   const signTransaction = wallet.walletProvider.signTransaction;
   if (signTransaction === undefined) {

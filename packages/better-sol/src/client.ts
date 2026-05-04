@@ -27,6 +27,7 @@ import {
   type SolanaRpcApi,
   type SolanaRpcSubscriptionsApi,
   type TransactionSigner,
+  nonDivisibleSequentialInstructionPlan,
   flattenInstructionPlan,
 } from "@solana/kit";
 import { getTransferSolInstruction, SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
@@ -85,7 +86,7 @@ type AnyProgram = ProgramDefinition<string, ProgramAddress, ErrorMessages, Event
 type ProgramInputs = Record<string, AnyProgram>;
 type KitRpc = Rpc<SolanaRpcApi & GetAccountInfoApi & GetMultipleAccountsApi>;
 type KitRpcSubscriptions = RpcSubscriptions<SolanaRpcSubscriptionsApi>;
-type AddressInput = string | KitAddress;
+export type AddressInput = string | KitAddress;
 
 type SignedTransaction = Awaited<ReturnType<typeof signTransactionMessageWithSigners>>;
 
@@ -110,7 +111,7 @@ export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, nev
   readonly commitment?: "processed" | "confirmed" | "finalized";
 };
 
-type StepChain<TOutputs extends readonly unknown[], TPrevious extends readonly unknown[] = readonly []> =
+export type StepChain<TOutputs extends readonly unknown[], TPrevious extends readonly unknown[] = readonly []> =
   TOutputs extends readonly [infer TNext, ...infer TRest]
     ? readonly [(...previous: TPrevious) => Promise<TNext>, ...StepChain<TRest, readonly [...TPrevious, TNext]>]
     : readonly [];
@@ -212,7 +213,7 @@ type SeedFieldValue<TFields extends FieldSchema, K extends string> =
     ? TKind extends "pubkey" ? AddressInput : TValue
     : never : never;
 
-type DeriveInput<TFields extends FieldSchema, TSeeds extends readonly string[]> = string extends TSeeds[number]
+export type DeriveInput<TFields extends FieldSchema, TSeeds extends readonly string[]> = string extends TSeeds[number]
   ? Partial<{ [K in SeedableKeysOf<TFields>]: unknown }>
   : { [K in SeedFieldNames<TSeeds>]: SeedFieldValue<TFields, K> };
 
@@ -233,7 +234,7 @@ type ProgramClient<TProgram> = {
   readonly accounts: AccountNamespace<ExtractAccountDefs<TProgram>>;
 } & InstructionMethods<TProgram>;
 
-type TokenClient = {
+export type TokenClient = {
   getATA(params: { readonly owner: AddressInput; readonly mint: AddressInput }): Promise<KitAddress>;
   createMint(params: { readonly decimals: number; readonly authority?: AddressInput; readonly freezeAuthority?: AddressInput | null }): Promise<{ readonly mint: KitAddress; readonly mintSigner: TransactionSigner; readonly signature: Signature }>;
   mintTo(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly decimals?: number }): Promise<Signature>;
@@ -249,6 +250,7 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   readonly token2022: TokenClient;
   withSigner(signer: SignerInput): Promise<BetterSolClient<TPrograms, true>>;
   send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
+  batch(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
   steps<const TOutputs extends readonly unknown[]>(steps: StepChain<TOutputs>): Promise<TOutputs>;
   getBalance(address: AddressInput): Promise<bigint>;
   transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<Signature>;
@@ -352,6 +354,18 @@ function buildClient<const TPrograms extends ProgramInputs, THasSigner extends b
       const signer = requireSigner(params.signer);
       const resolved = await Promise.all(instructions);
       const signedTx = await buildAndSignTransaction(resolved, params.rpc, signer, params.commitment);
+      return await sendAndConfirm(signedTx, params.rpc);
+    },
+    batch: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature> => {
+      const signer = requireSigner(params.signer);
+      const resolved = await Promise.all(instructions);
+      const plan = nonDivisibleSequentialInstructionPlan(resolved);
+      const signedTx = await buildAndSignTransaction(
+        flattenInstructionPlan(plan).flatMap((leaf) => leaf.kind === "single" ? [leaf.instruction] : []),
+        params.rpc,
+        signer,
+        params.commitment,
+      );
       return await sendAndConfirm(signedTx, params.rpc);
     },
     steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {

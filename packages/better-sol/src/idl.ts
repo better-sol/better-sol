@@ -47,10 +47,10 @@ type IdlTypeCompound =
   | { readonly array: readonly [IdlType, number] }
   | { readonly defined: string | { readonly name: string } };
 
-type IdlType = IdlTypePrimitive | IdlTypeCompound;
+export type IdlType = IdlTypePrimitive | IdlTypeCompound;
 
-type IdlField = { readonly name: string; readonly type: IdlType };
-type IdlDiscriminator = readonly number[];
+export type IdlField = { readonly name: string; readonly type: IdlType };
+export type IdlDiscriminator = readonly number[];
 
 type IdlInstructionAccount = {
   readonly name: string;

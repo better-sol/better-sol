@@ -1,0 +1,31 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "tsconfig": "tsconfig.build.json",
+  "out": "docs",
+  "name": "better-sol",
+  "includeVersion": true,
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "categorizeByGroup": true,
+  "groupOrder": [
+    "Functions",
+    "Types",
+    "Classes",
+    "Interfaces",
+    "Type Aliases",
+    "Variables"
+  ],
+  "sort": ["source-order"],
+  "kindSortOrder": [
+    "Function",
+    "TypeAlias",
+    "Interface",
+    "Class",
+    "Variable"
+  ],
+  "plugin": []
+}

@@ -1,4 +1,4 @@
-import type { Address, TransactionSigner } from "@solana/kit";
+import type { Address, TransactionPartialSigner } from "@solana/kit";
 import { createSignTransactions } from "./sign-utils";
 
 type WalletAdapterLike = {
@@ -6,7 +6,7 @@ type WalletAdapterLike = {
   readonly signTransaction?: <T>(transaction: T) => Promise<T>;
 };
 
-export function walletAdapter(wallet: WalletAdapterLike): TransactionSigner {
+export function walletAdapter(wallet: WalletAdapterLike): TransactionPartialSigner {
   const address = wallet.publicKey.toBase58() as Address;
   const signTransaction = wallet.signTransaction;
   if (signTransaction === undefined) {

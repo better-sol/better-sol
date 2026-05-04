@@ -1,4 +1,4 @@
-import type { Address, TransactionSigner } from "@solana/kit";
+import type { Address, TransactionPartialSigner } from "@solana/kit";
 import { createSignTransactions } from "./sign-utils";
 
 type DynamicSigner = {
@@ -10,7 +10,7 @@ type DynamicWallet = {
   getSigner(): Promise<DynamicSigner>;
 };
 
-export function dynamicWallet(wallet: DynamicWallet): TransactionSigner {
+export function dynamicWallet(wallet: DynamicWallet): TransactionPartialSigner {
   const address = wallet.address as Address;
 
   return {
