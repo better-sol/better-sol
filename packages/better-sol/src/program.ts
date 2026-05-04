@@ -294,8 +294,8 @@ export class InstructionDefinition<TAccounts extends AccountInputs, TArgs extend
 type IxOverloads<TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   <const TAccounts extends AccountInputs, const TArgs extends ArgsSchema>(config: IxConfigWithAccountsAndArgs<TAccounts, TArgs, TErrors, TEvents>): InstructionDefinition<TAccounts, TArgs>;
   <const TAccounts extends AccountInputs>(config: IxConfigWithAccounts<TAccounts, TErrors, TEvents>): InstructionDefinition<TAccounts, undefined>;
-  <const TArgs extends ArgsSchema>(config: IxConfigWithArgs<TArgs, TErrors, TEvents>): InstructionDefinition<Record<string, never>, TArgs>;
-  (config: IxConfigWithoutAccountsOrArgs<TErrors, TEvents>): InstructionDefinition<Record<string, never>, undefined>;
+  <const TArgs extends ArgsSchema>(config: IxConfigWithArgs<TArgs, TErrors, TEvents>): InstructionDefinition<Record<never, never>, TArgs>;
+  (config: IxConfigWithoutAccountsOrArgs<TErrors, TEvents>): InstructionDefinition<Record<never, never>, undefined>;
 };
 
 function makeIx(): IxOverloads<ErrorMessages, EventSchema> {
