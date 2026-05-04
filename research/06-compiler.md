@@ -1,573 +1,150 @@
 # Cloud Compiler Design
 
-## The Compilation Pipeline
+Internal design doc for the compilation pipeline.
+
+---
+
+## Pipeline
 
 ```
 Developer writes:        programs/counter.ts
                          ↓
-npx @better-sol/cli deploy:     1. Parse TypeScript AST
-                         2. Extract program(), account(), and callback-scoped ix() definitions
-                         3. Generate Anchor Rust source code
-                         4. POST Rust to cloud compiler
-                         5. Server runs: cargo build-sbf → .so file
-                         6. Deploys .so to the target cluster
-                         7. Prints summary with explorer link
+npx @better-sol/cli deploy:
+                         1. Discover programs from glob pattern
+                         2. Parse TypeScript AST via ts-morph
+                         3. Generate Anchor Rust (lib.rs + Cargo.toml + IDL)
+                         4. POST to cloud compiler API
+                         5. Server runs cargo build-sbf → .so bytecode
+                         6. Returns compilation artifacts
                          ↓
-Result:                  Program is live on-chain. Same .ts file = typed sol.
+Result:                  Compiled .so ready for on-chain deployment
 ```
 
-No build artifacts. The `.so` lives on-chain. IDL auto-published.
-The developer gets a clear summary:
-
-```
-  ✅ counter deployed
-
-  Program:   CouNTeR11111111111111111111111111111111111
-  Cluster:   devnet
-  Explorer:  https://explorer.solana.com/address/CouNTeR.../programs?cluster=devnet
-  IDL:       https://better-sol.fun/idl/CouNTeR.../latest
-  Signature: 4kM7x... (deploy tx)
-
-  2 accounts, 5 instructions, 3 errors, 2 events
-```
-
-### IDL Auto-Publishing
-
-We auto-generate a standard Anchor IDL and publish it alongside the deployment.
-Our users never need it (the TS definition is the sol), but it enables **full ecosystem
-compatibility** — anyone using Codama, Anchor TS, `@solana/kit`, Shiru, or plain RPC calls
-can interact with programs built with our library.
-
-The IDL is stored:
-- **On-chain** via Anchor's `declare_id` + metadata account (standard Anchor approach)
-- **On our cloud** at `https://better-sol.fun/idl/{program_id}/latest` for easy access
-
-What the IDL contains (that our TS computes at runtime instead):
-
-| IDL field | Purpose | Our equivalent |
-|---|---|---|
-| Instruction discriminators | Identify which instruction in binary | `sha256("global:name")[0..8]` computed from `ix()` names |
-| Account discriminators | Identify which account type in binary | `sha256("account:Name")[0..8]` computed from `account()` names |
-| Field byte offsets + sizes | Serialize/deserialize binary data | Computed from field order + type sizes (u64=8, pubkey=32, bool=1) |
-| PDA seed definitions | Derive deterministic addresses | `.derive((seed) => ["counter", seed.authority])` |
-| Error codes (numeric) | Map error code → name | `program.errors` names → assigned 6000, 6001... |
-| Account constraints | Which accounts sign, writable, relations | `p.create()`, `p.mut()`, `p.signer()` |
-
-All deterministic. Same inputs → same IDL. We generate it from the TS definition
-at deploy time, not as a separate step.
-
-If the developer wants to inspect the generated Rust, they use `deploy --dry-run`.
-If they need the `.so` file for auditing or offline deployment, they use `deploy --output ./build`.
+For local review, `deploy --dry-run` writes generated Rust without compiling.
 
 ---
 
-## The Cloud Compiler API
-
-```
-POST https://compile.better-sol.fun/api/v1/compile
-Content-Type: application/json
-
-{
-  "name": "counter",
-  "program_id": "CoUnTeR1111111111111111111111111111111111111",
-  "version": "0.1.0",
-  "lib_rs": "/* generated Anchor Rust */",
-  "cargo_toml": null,
-  "idl": null
-}
-
-→ Response (200):
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "counter",
-  "program_id": "CoUnTeR1111111111111111111111111111111111111",
-  "source_hash": "sha256:...",
-  "bytecode_hash": null,
-  "bytecode": null,
-  "size_bytes": null,
-  "compile_time_ms": 2,
-  "logs": "Build execution disabled...",
-  "idl_url": "/v1/idl/CoUnTeR.../latest",
-  "artifact_url": "/v1/artifacts/550e8400-...",
-  "source_url": "/v1/artifacts/550e8400-.../source"
-}
-```
-
----
-
-## Configuration
-
-### No config file required (Paykit pattern)
-
-The CLI finds program definitions automatically. No `better-sol.config.ts` needed:
+## Authentication
 
 ```bash
-# Default: finds all program() exports in programs/**/*.ts
-npx @better-sol/cli deploy
-
-# Explicit: target specific files
-npx @better-sol/cli deploy --src programs/counter.ts
-npx @better-sol/cli deploy --src 'programs/**/*.ts'    # glob
-
-# With cluster and keypair
-npx @better-sol/cli deploy --cluster devnet --keypair ~/.config/solana/id.json
+npx @better-sol/cli login    # Saves API key to ~/.better-sol/auth.json
 ```
 
-### Optional config file for defaults
+The API key is sent as `x-api-key` header. No env var flags, no `--api-key` parameter. One path.
 
-If the project wants to pin defaults instead of passing flags every time:
+`BETTER_SOL_COMPILER_URL` env var overrides the compiler URL (for local development against the Rust server). Not in user-facing docs.
 
-```typescript
-// better-sol.config.ts
-import { defineConfig } from '@better-sol/cli'
+---
+
+## Cloud Compiler API (apps/compiler-api)
+
+Axum server written in Rust.
+
+### Compile Endpoint
+
+```
+POST /v1/compile
+Content-Type: application/json
+x-api-key: <key>
+
+{
+  "name": "counter",
+  "program_id": "CoUnTeR11111111111111111111111111111111111",
+  "version": "0.1.0",
+  "lib_rs": "/* generated Anchor Rust */",
+  "cargo_toml": "/* generated Cargo.toml */",
+  "idl": {}
+}
+```
+
+Response:
+```json
+{
+  "id": "uuid",
+  "name": "counter",
+  "program_id": "...",
+  "source_hash": "sha256...",
+  "bytecode_hash": "sha256...",
+  "bytecode": "base64 .so",
+  "size_bytes": 12345,
+  "logs": "cargo build output",
+  "idl_url": "https://...",
+  "artifact_url": "https://...",
+  "source_url": "https://..."
+}
+```
+
+### Server Components
+
+| File | Purpose |
+|---|---|
+| `main.rs` | Axum server, route registration |
+| `api.rs` | `/v1/compile` handler |
+| `auth.rs` | API key validation via shared secret |
+| `compiler.rs` | Spawns `cargo build-sbf`, captures output |
+| `config.rs` | Server config (port, storage path, shared secret) |
+| `error.rs` | Error response types |
+| `idl.rs` | IDL storage/retrieval |
+| `storage.rs` | File-based artifact storage |
+
+### Build Process
+
+1. Write `lib.rs` + `Cargo.toml` to temp directory
+2. Run `cargo build-sbf --features <features>` based on program needs
+3. Read `.so` output from `target/deploy/`
+4. Store artifacts (source, bytecode, IDL)
+5. Return compilation result
+
+---
+
+## CLI Config
+
+```ts
+// better-sol.config.ts (optional)
+import { defineConfig } from "@better-sol/cli"
 
 export default defineConfig({
-  programs: './programs/**/*.ts',       // glob to find program() definitions
-  cluster: 'devnet',                      // default cluster
-  keypair: '~/.config/solana/id.json',   // default keypair
-  out: './generated',                     // where to write generated Rust (for verification)
+  programs: "programs/**/*.ts",
+  cluster: "devnet",
+  out: "generated",
 })
 ```
 
-Like Drizzle's `drizzle.config.ts`, but optional. Without it, the CLI uses sensible
-defaults (auto-discovery + CLI flags). With it, you can just run `npx @better-sol/cli deploy`
-with no arguments.
-
-### Why not require a config file?
-
-Three reasons:
-1. **Paykit doesn't need one** — their CLI imports the runtime file directly. We do the same.
-2. **Convention over configuration** — `programs/**/*.ts` is the obvious default.
-3. **Fewer files = less friction** — the library's value is zero setup. Don't add setup.
+All fields optional. No `keypair` field — program keys live in `.better-sol/<name>.json` (created by `create`).
 
 ---
 
-## Program Verification
+## Program Keys
 
-Solana has a [verified builds](https://verify.osec.io/) system (by OtterSec/Ellipsis Labs)
-that lets anyone confirm an on-chain program matches its published source code.
-Verified programs show a ✅ badge in Solana Explorer, SolanaFM, and SolScan.
-
-### The verification process
-
-1. Developer publishes source code on GitHub
-2. `solana-verify` clones the repo, builds it in a deterministic Docker container
-3. Compares the hash of that build against the on-chain program's hash
-4. If they match → verified ✓
-
-### Why this matters for us
-
-Our users write TypeScript, but verification expects Rust source in a Git repo.
-This seems like a problem — but it's actually an opportunity:
-
-**The Anchor Rust we generate is deterministic.** Same TypeScript input always produces
-the same Rust output. So we write that Rust to `generated/` in the user's repo, they
-commit + push to GitHub, and OtterSec verifies against it.
-
-### Whose repository?
-
-**The user's own repository.** Not ours. Not a shared one. Theirs.
-
-Why not alternatives:
-
-| Approach | Problem |
-|---|---|
-| Our monorepo (all programs) | Namespace collisions, mixed codebase, trust conflict (we host + compile) |
-| Self-hosted Git (repo per program) | We'd be running a Git hosting service. Not our job. |
-| User's own repo | ✅ Natural, trusted, zero extra infrastructure |
-
-Verification is about trust: "this on-chain program matches the developer's source."
-If we host the source, users trust *us* instead of the developer. That's a conflict of
-interest. The source must live in a repo the developer controls.
-
-### How it works
-
-**Step 1: Push with `--verify`** (writes generated Rust to `generated/`)
-
-```bash
-npx @better-sol/cli deploy --cluster mainnet-beta --verify
-# → Parsing programs/counter.ts...
-# → Generating Anchor Rust (437 lines)...
-# → Writing to generated/counter/...
-# → Compiling via cloud service... (3.2s)
-# → Deploying to mainnet-beta...
-#
-# ✅ counter deployed
-#    Program:   CouNTeR...
-#    Cluster:   mainnet-beta
-#
-# 📋 To verify: commit and push the generated Rust, then run:
-#    npx @better-sol/cli verify --program-id CouNTeR...
-```
-
-**Step 2: Commit and push** (normal Git workflow — developer controls this)
-
-```bash
-git add generated/
-git commit -m "deploy counter v1.2.0"
-git push
-```
-
-**Step 3: Submit for verification**
-
-```bash
-npx @better-sol/cli verify --program-id CouNTeR...
-# → Repository: github.com/user/my-app
-# → Commit:     abc123def
-# → Submitting to verify.osec.io...
-# → ✅ Verification pending (OtterSec builds in Docker, ~5 min)
-# → Check status: verify.osec.io/status/CouNTeR...
-```
-
-What `verify` does:
-1. Reads the current Git remote + commit hash from the local repo
-2. Validates the program ID is a valid base58 Solana address (32-44 characters)
-3. Calls `POST https://verify.osec.io/verify` with the repository URL, program ID, commit hash, lib name
-   (the Rust crate name), and mount path (defaults to `generated/<name>`)
-4. On success → shows status URL and build logs URL for monitoring
-5. On failure → shows the API error with actionable guidance
-
-### Required parameters
-
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `program_id` | CLI argument or `--program-id` | The on-chain Solana program address |
-| `repository` | `git remote.origin.url` | URL of the public repository containing the generated Rust |
-| `commit_hash` | `git rev-parse HEAD` | Git commit hash of the deployed version |
-| `lib_name` | Program name or `--lib-name` | Rust crate name (matches the Cargo.toml `[package] name`) |
-| `mount_path` | `--mount-path` (default: `generated/<name>`) | Subdirectory where Cargo.toml lives |
-
-### Prerequisites
-
-1. The generated Rust code must be committed to a **public** Git repository and **pushed** to a remote named `origin`
-2. The program must already be **deployed on mainnet**
-3. The `--verify` flag must have been used during deploy so generated Rust exists in `generated/`
-
-### Error handling
-
-| HTTP Status | Cause | User action |
-|-------------|-------|-------------|
-| 400 | Invalid program ID or repository URL | Verify the program ID is a valid mainnet address and the URL is accessible |
-| 429 | Rate limited (1 req/30s per IP) | Wait before retrying |
-| Connection failure | OtterSec API unreachable | Check network connectivity and retry |
-  <repository>
-```
-
-Additional options:
-
-| Flag | Description |
-|------|-------------|
-| `--lib-name <name>` | Rust library name (defaults to program name) |
-| `--mount-path <path>` | Subdirectory where Cargo.toml lives (defaults to `generated/<name>`) |
-
-### Why not auto-commit?
-
-We deliberately don't commit on the user's behalf. Reasons:
-- **No GitHub auth in our CLI** — avoids storing tokens, OAuth flows, permission scopes
-- **Developer controls what ships** — they review the generated Rust before it goes public
-- **Clean Git history** — no surprise commits from a tool
-- **Works with any Git host** — GitHub, GitLab, Bitbucket, self-hosted
-
-### This is a competitive advantage
-
-No other TypeScript Solana tool supports verified builds:
-- Anchor requires manual Docker setup
-- Poseidon, Kite, Gill — none handle verification
-- We make it two commands: `deploy --verify` then `verify`
-
-For production programs (mainnet), verification is expected. Making it this easy is a real differentiator.
-
----
-
-**Mode 1: Cloud compilation (default — no Rust needed)**
-```bash
-npx @better-sol/cli deploy --cluster devnet
-```
-
-The `deploy` command sends generated Rust to the cloud compiler service.
-To inspect generated Rust before compilation, use `--dry-run` or `--verify`.
-
----
-
-## What the Transpiler Generates
-
-From this TypeScript:
-```typescript
-const Counter = account({ count: u64, authority: pubkey }).derive((seed) => ["counter", seed.authority])
-
-export const counter = program(
-  {
-    name: 'counter',
-    address: 'CouNTeR11111111111111111111111111111111111',
-    errors: { Unauthorized: 'Not authorized' },
-    events: { Incremented: { newCount: u64 } },
-  },
-  ix => ({
-    increment: ix({
-      accounts: { counter: p.mut(Counter), authority: p.signer() },
-      args: { amount: u64 },
-      run: ({ counter, authority }, { amount }, ctx) => {
-        ctx.require(authority === counter.authority, 'Unauthorized')
-        counter.count += amount
-        ctx.emit('Incremented', { newCount: counter.count })
-      },
-    }),
-  }),
-)
-```
-
-The transpiler generates:
-
-1. **Error enum** → `#[error_code] pub enum CounterError { Unauthorized }`
-2. **Event structs** → `#[event] pub struct Incremented { pub new_count: u64 }`
-3. **Account structs** → `#[account] pub struct Counter { pub count: u64, pub authority: Pubkey }`
-4. **Instruction handlers** → `pub fn increment(ctx: Context<Increment>) -> Result<()> { ... }`
-5. **Account validation** → `#[derive(Accounts)] pub struct Increment { ... }`
-6. **CPI calls** → `token::transfer(cpi_ctx, amount)?`
-
-See `examples/amm-generated-rust.rs` for a full 633-line example.
-
----
-
-## Security
-
-- The server **compiles only** — it never executes the compiled program
-- The generated Rust source is **transparent and inspectable** (shown in CLI output)
-- The developer can **verify the bytecode hash** against what they expect
-- No secrets are sent to the server — only generated Rust code and a program ID
-
----
-
-## Transpiler Coverage
-
-| Category | Coverage | Notes |
-|---|---|---|
-| Arithmetic (+, -, *, /, %) | ✅ Full | All bigint operations |
-| Control flow (if/else) | ✅ Full | Including else-if chains |
-| Comparisons (===, !==, >, <) | ✅ Full | Direct mapping to Rust |
-| Boolean logic (&&, \|\|, !) | ✅ Full | |
-| Account field read/write | ✅ Full | Assignment and compound (+=, -=) |
-| ctx.require() | ✅ Full | Maps to `require!()` with error enum |
-| ctx.emit() | ✅ Full | Maps to `emit!()` with event struct (Rust output) |
-| ctx.log() | ✅ Full | Maps to `msg!()` with format string |
-| CPI: token.transfer | ✅ Full | Both user-signed and PDA-signed |
-| CPI: token.mintTo | ✅ Full | PDA-signed authority |
-| CPI: token.burn | ✅ Full | |
-| Sysvars (sol.timestamp) | ✅ Full | Maps to `Clock::get()?.unix_timestamp` |
-| Escape hatch (rust\`...\`) | 📋 Planned | Not yet implemented — for edge cases the transpiler can't handle |
-| **Overall** | **83%** | 75 operations tested across 16 program types |
-
-See `04-transpiler.md` for the full coverage matrix.
-
----
-
-# Push Workflow & CLI
-
-## Push Workflow
-
-### The Developer Experience
-
-```bash
-
-npx @better-sol/cli deploy --cluster devnet
-```
-
-That's it. Under the hood:
-
-```
-programs/counter.ts
-       │
-       ▼
-  ┌─────────────────┐
-  │  Parse TS files  │  ← TypeScript compiler API extracts program() + ix() definitions
-  └─────────────────┘
-       │
-       ▼
-  ┌─────────────────┐
-  │  Build IR       │  ← Typed intermediate representation (accounts, instructions, logic)
-  └─────────────────┘
-       │
-       ├─────────────────────┐
-       ▼                     ▼
-  ┌──────────────┐   ┌──────────────┐
-  │  Generate    │   │  Generate    │
-  │  Rust Code   │   │  Client SDK  │
-  └──────────────┘   │  types       │
-       │             └──────────────┘
-       ▼
-  ┌──────────────┐
-  │  Cloud       │
-  │  Compiler    │  ← POST Rust source, get back .so bytecode
-  └──────────────┘
-       │
-       ▼
-  ┌──────────────┐
-  │  Deploy      │  ← solana program deploy (or via RPC)
-  └──────────────┘
-```
-
-### What `deploy` Does (Like `drizzle-kit push`)
-
-1. Reads all `programs/*.ts` files
-2. Extracts `program()`, `account()`, `ix()` definitions using TypeScript AST parsing
-3. For each program, verifies the address matches the keypair in `.better-sol/`
-4. Builds a typed IR (accounts, fields, instructions, logic functions)
-5. Generates Anchor Rust source code (with `declare_id!()` from the address)
-6. Sends Rust to cloud compiler → gets `.so` bytecode back
-7. Deploys the `.so` to the target cluster
-8. Auto-publishes IDL to chain and cloud
-
-**Non-interactive by design.** `deploy` never prompts. This makes it safe for CI/CD:
-- **No keypair in `.better-sol/`?** Generate one silently, save it, continue.
-- **No address in `program()`?** Error immediately with the fix:
-  ```
-  ❌ No address found for program 'counter'.
-     → Run: npx @better-sol/cli create counter
-     → Or add the address manually:
-       program({ name: 'counter', address: '<your-address>', ... })
-  ```
-- **Address mismatch?** Error immediately with the fix:
-  ```
-  ❌ Address mismatch for 'counter':
-     Source:   CouNTeR...
-     Keypair:  DiFfErNt...
-     → Update the address in programs/counter.ts
-       or delete .better-sol/counter.json to generate a new keypair
-  ```
-
-**The `create` command is recommended** — it scaffolds the file with the address
-already in place. But `deploy` handles edge cases gracefully without interaction.
-
-### Schema Diffing (Like Drizzle)
-
-When you change your program:
-
-```bash
-npx @better-sol/cli deploy --cluster devnet
-```
-
-The tool tracks what's deployed (like Drizzle's migration journal) and only
-recompiles/redeploys when the schema changes.
-
-### The CLI Surface
-
-Three commands. Like `paykitjs push`, `drizzle-kit generate`, and `laravel make:migration`.
-
-```bash
-# Create — scaffold a new program (like laravel make:migration)
-npx @better-sol/cli create counter              # Creates programs/counter.ts with boilerplate
-npx @better-sol/cli create escrow --seeds owner  # With custom PDA seeds
-
-# Push — compile and deploy (keypair auto-generated if missing)
-npx @better-sol/cli deploy                     # Parse → Rust → cloud compile → deploy
-npx @better-sol/cli deploy --dry-run           # Show generated Rust without compiling
-npx @better-sol/cli deploy --cluster devnet    # Target cluster (default: devnet)
-npx @better-sol/cli deploy --program counter   # Push a specific program
-npx @better-sol/cli deploy --verify            # Also write generated Rust to generated/ for verification
-
-# Verify (submits to OtterSec after you commit + push)
-npx @better-sol/cli verify --program-id CouNTeR...
-```
-
-Everything else is unnecessary:
-- `deploy` → `solana program deploy` already exists (not our job)
-- `generate` → `--dry-run` flag handles this
-- `client` → contradicts our value prop (the TS definition IS the client, nothing to generate)
-- `diff` → programs are upgradeable, just re-deploy
-- `inspect` → `solana program show` already exists
-
-
-## The `create` Command
-
-Like Laravel's `php artisan make:migration`, this scaffolds a new program file
-with working boilerplate. It's optional — you can always create the file manually.
+Each program gets its own keypair when scaffolded:
 
 ```bash
 npx @better-sol/cli create counter
-# → Created programs/counter.ts
-# → Generated keypair: CoUnTeR11111111111111111111111111111111111
-# → Saved .better-sol/counter.json (private, gitignored)
+# → programs/counter.ts
+# → .better-sol/counter.json  (keypair with publicKey + secretKey)
 ```
 
-This creates:
+The public key is embedded in the generated `declare_id!()` macro. The secret key is used for program deployment (not yet wired in the deploy command).
 
-```typescript
-// programs/counter.ts
-import { program, account, u64, pubkey, p } from 'better-sol/program'
+---
 
-const Counter = account({
-  count: u64,
-  authority: pubkey,
-}).derive((seed) => ["counter", seed.authority])
+## IDL Auto-Generation
 
-export const counter = program(
-  {
-    name: 'counter',
-    address: 'CouNTeR11111111111111111111111111111111111',
-    errors: { Unauthorized: 'Not the authority' },
-  },
-  ix => ({
-    initialize: ix({
-      accounts: {
-        counter: p.create(Counter),
-        authority: p.signer(),
-      },
-      args: { initialValue: u64 },
-      run: ({ counter, authority }, { initialValue }) => {
-        counter.count = initialValue
-        counter.authority = authority
-      },
-    }),
+The CLI generates a standard Anchor IDL alongside the Rust code. This enables ecosystem compatibility — tools using Codama, Anchor TS, or plain RPC can interact with our programs.
 
-    increment: ix({
-      accounts: {
-        counter: p.mut(Counter),
-        authority: p.signer(),
-      },
-      args: { amount: u64 },
-      run: ({ counter, authority }, { amount }, ctx) => {
-        ctx.require(authority === counter.authority, 'Unauthorized')
-        counter.count += amount
-      },
-    }),
-  }),
-)
-```
+The IDL is generated from the parsed IR, not from the compiled `.so`. It's deterministic: same TS input → same IDL.
 
-The developer edits this file — adding accounts, instructions, errors, events — 
-then runs `npx @better-sol/cli deploy` to compile and deploy.
+---
 
-### Why `create` is optional
-
-You don't have to use `create`. If you prefer to start from scratch:
-
-```typescript
-// programs/counter.ts — written from scratch
-import { program, account, u64, pubkey, p } from 'better-sol/program'
-
-// ... your code ...
-
-export const counter = program({ name: 'counter', address: 'CouNTeR...' }, ix => ({ ... }))
-```
-
-`create` is a convenience. It gives you a working starting point with the right
-imports, a basic account, and two instructions. Like `npm init` — helpful, not required.
-
-### Why `create` also generates the keypair
-
-When you run `create counter`, it generates the keypair and writes the address
-into the program file. The address is immediately available:
+## OtterSec Verified Builds
 
 ```bash
-npx @better-sol/cli create counter
-# → Created programs/counter.ts
-# → Generated keypair: CoUnTeR...
-# → Saved .better-sol/counter.json (private, gitignored)
+npx @better-sol/cli verify counter
 ```
 
-The address is in `programs/counter.ts` — committed to git. Anyone who clones the repo can
-use the client immediately. They don't need the keypair to call the program,
-only to deploy upgrades.
+Submits to OtterSec's verification API with:
+- Program ID (from `.better-sol/counter.json` or `--program-id`)
+- Git remote + commit hash
+- Library name + mount path (defaults to `generated/<name>`)
 
-If you skip `create` and write the file manually, `deploy` will offer to generate
-a keypair and update the source file on first deploy — same result, just one step later.
+OtterSec clones the repo, builds in a deterministic Docker container, and verifies the bytecode matches the on-chain program.

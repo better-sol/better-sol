@@ -93,8 +93,6 @@ npx @better-sol/cli login   # one-time setup
 npx @better-sol/cli deploy  # just works
 ```
 
-You can also set the `BETTER_SOL_COMPILER_API_KEY` environment variable or pass `--api-key` to `deploy`.
-
 ### `deploy` — Generate Rust, compile, and deploy
 
 ```bash

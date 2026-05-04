@@ -1,4 +1,6 @@
-# Anchor `remaining_accounts` — Exhaustive Research
+# Anchor `remaining_accounts` — Exhaustive Reference
+
+Deep-dive reference: Anchor remaining_accounts mechanics, validation patterns, transpiler design for `p.remaining()`. For internal use only.
 
 ## Table of Contents
 1. [How `remaining_accounts` Works in Anchor Rust](#1-how-remaining_accounts-works-in-anchor-rust)

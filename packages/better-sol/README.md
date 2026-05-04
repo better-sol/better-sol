@@ -94,19 +94,19 @@ Edit the generated file to define accounts, instructions, errors, events, and co
 ### Generate Rust + deploy
 
 ```bash
-bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
+npx @better-sol/cli deploy
 ```
 
 The CLI:
 1. Parses your TypeScript AST
 2. Generates Anchor Rust (`lib.rs`, `Cargo.toml`, `idl.json`)
-3. Compiles via a cloud compiler API
+3. Compiles via the cloud compiler
 4. Prepares deployment artifacts
 
 For local review without compiling:
 
 ```bash
-bunx @better-sol/cli deploy --src "programs/*.ts" --dry-run
+npx @better-sol/cli deploy --dry-run
 ```
 
 ### Use the client SDK
@@ -166,7 +166,7 @@ Creates `programs/<name>.ts` with a working counter example and generates a keyp
 ### `deploy` — Generate Rust, compile, deploy
 
 ```bash
-bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./keypair.json
+npx @better-sol/cli deploy
 ```
 
 | Option | Default | Description |
@@ -174,30 +174,33 @@ bunx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet --keypair ./k
 | `--src <glob>` | `programs/**/*.ts` (or from config) | Glob pattern for program sources |
 | `--program <name>` | all programs | Target a specific program by name |
 | `--cluster <cluster>` | `devnet` (or from config) | `devnet`, `testnet`, `mainnet-beta`, or `localnet` |
-| `--keypair <path>` | (from config) | Path to payer keypair file |
 | `--output <dir>` | `generated` (or from config) | Directory for generated Rust files |
 | `--dry-run` | `false` | Generate Rust only — no compile or deploy |
 | `--verify` | `false` | Write generated Rust files for verified builds |
-| `--compiler-url <url>` | `http://localhost:8080` or `BETTER_SOL_COMPILER_URL` | Cloud compiler API URL |
-| `--api-key <key>` | `BETTER_SOL_COMPILER_API_KEY` | Compiler API key |
 
 The `--dry-run` flag generates Rust to the output directory without compiling or deploying, useful for inspecting generated code before committing.
+
+### `login` — Save API key
+
+```bash
+npx @better-sol/cli login
+```
+
+Saves your API key to `~/.better-sol/auth.json`. Required before first `deploy`.
 
 ### `generate db` — Generate database schema
 
 ```bash
-bunx @better-sol/cli generate db --out src/db/schema.ts
+npx @better-sol/cli generate db
 ```
 
 Generates a Drizzle ORM schema from your account definitions.
 
 | Option | Default | Description |
 |---|---|---|
-| `--orm <orm>` | `drizzle` | ORM target (currently only Drizzle) |
 | `--dialect <dialect>` | `postgres` | `postgres`, `mysql`, or `sqlite` |
 | `--out <path>` | `src/db/better-sol.ts` | Output file path |
 | `--src <glob>` | (from config) | Glob pattern for program sources |
-| `--merge` | `false` | Merge into existing schema (reserved for future use) |
 
 Extracts account field types and generates Drizzle table definitions with proper column types, nullability, and index hints.
 
@@ -227,7 +230,6 @@ import { defineConfig } from "@better-sol/cli";
 export default defineConfig({
   programs: "programs/**/*.ts",
   cluster: "devnet",
-  keypair: "./keypair.json",
   out: "generated",
 });
 ```
@@ -236,7 +238,6 @@ export default defineConfig({
 |---|---|---|
 | `programs` | `programs/**/*.ts` | Glob pattern for finding program source files |
 | `cluster` | `devnet` | Default cluster: `devnet`, `testnet`, `mainnet-beta`, `localnet` |
-| `keypair` | `null` | Default keypair path |
 | `out` | `generated` | Default output directory for generated Rust |
 
 The config file is optional — all fields can be overridden via CLI flags.

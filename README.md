@@ -14,7 +14,7 @@ npx @better-sol/cli create counter
 npx @better-sol/cli deploy --dry-run
 
 # Compile and deploy to devnet
-npx @better-sol/cli deploy --api-key <key>
+npx @better-sol/cli deploy
 
 # Use the typed SDK client-side
 npm install better-sol

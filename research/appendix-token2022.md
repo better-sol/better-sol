@@ -1,6 +1,10 @@
 # Token-2022 CPI in Anchor — Exhaustive Reference
 
-Source: `anchor-spl v0.31.1`, `spl-token-2022 v6.0.0` actual crate source code.
+Deep-dive reference: anchor-spl Token-2022 modules, CPI functions, feature flags. Verified against source. For internal use only — informs transpiler CPI generation.
+
+---
+
+Source: `anchor-spl v1.0.1`, `spl-token-2022` actual crate source code.
 
 ---
 
@@ -21,7 +25,7 @@ anchor-spl exposes **5 modules** relevant to Token-2022, gated by Cargo features
 ```toml
 # Cargo.toml — minimum for Token-2022 support
 [dependencies]
-anchor-spl = { version = "0.31", features = [
+anchor-spl = { version = "1.0.1", features = [
     "token",           # classic Token (optional, for backward compat)
     "token_2022",      # Token-2022 core + token_interface
     "token_2022_extensions",  # extension CPI calls

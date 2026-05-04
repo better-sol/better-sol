@@ -1,6 +1,6 @@
 # DX Patterns & Developer Pain Points
 
-Learnings from best-in-class developer tools and the Solana pain points they address.
+Reference material: DX patterns from Zod, Drizzle, Better Auth, ElysiaJS, etc. Solana developer pain points. No better-sol-specific content.
 
 ---
 

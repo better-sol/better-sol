@@ -1,5 +1,9 @@
 # Solana Ecosystem Reference
 
+Reference material: @solana/kit package structure, Rust SDK crates, toolchain details. No better-sol-specific content.
+
+---
+
 ## Solana Architecture
 
 Solana is a high-performance blockchain designed for throughput. Key concepts:

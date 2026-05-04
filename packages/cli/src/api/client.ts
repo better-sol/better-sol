@@ -1,6 +1,10 @@
 import type { IrProgram } from "../ir/types";
 
-const COMPILER_URL = "https://api.better-sol.dev";
+const DEFAULT_COMPILER_URL = "https://api.better-sol.dev";
+
+function getCompilerUrl(): string {
+  return process.env.BETTER_SOL_COMPILER_URL ?? DEFAULT_COMPILER_URL;
+}
 
 type CompileRequest = {
   readonly name: string;
@@ -43,7 +47,8 @@ export async function compileProgram(params: {
     idl: params.idl,
   };
 
-  const response = await fetch(`${COMPILER_URL}/v1/compile`, {
+  const url = getCompilerUrl();
+  const response = await fetch(`${url}/v1/compile`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

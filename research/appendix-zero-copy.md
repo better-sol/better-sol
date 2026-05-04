@@ -1,5 +1,9 @@
 # Zero-Copy Account Transpilation: Exhaustive Reference
 
+Deep-dive reference: Anchor zero-copy mechanics, Pod types, space calculation, transpiler rules. For internal use only.
+
+---
+
 ## Table of Contents
 1. [What is Zero-Copy in Anchor?](#1-what-is-zero-copy-in-anchor)
 2. [Rust Code Anchor Generates](#2-rust-code-anchor-generates)

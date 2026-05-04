@@ -1,4 +1,6 @@
-# Competitive Landscape & Hackathon Strategy
+# Competitive Landscape
+
+Reference material: library comparison matrix, hackathon strategy. No better-sol-specific content.
 
 ---
 

@@ -1,7 +1,11 @@
-# Solana Transaction Simulation API — Full Reference
+# Solana Transaction Simulation API — Reference
 
-Research from actual type definitions in `@solana/rpc-api@2.3.0`, `@solana/rpc-types@2.3.0`,
-`@solana/kit@2.3.0`, and `@solana/web3.js@1.98.4`.
+Deep-dive reference: @solana/kit simulation API, parameter types, response shapes. For internal use only.
+
+---
+
+Research from actual type definitions in `@solana/rpc-api`, `@solana/rpc-types`,
+`@solana/kit`, and `@solana/web3.js`.
 
 ---
 

@@ -1,7 +1,6 @@
-# How Solana Works — A Complete Guide
+# How Solana Works — Reference Guide
 
-This document explains everything you need to know about Solana to understand
-what we're building and why. No prior blockchain experience required.
+Foundational Solana concepts. No better-sol-specific content. Useful for onboarding and understanding why certain design decisions were made.
 
 ---
 
