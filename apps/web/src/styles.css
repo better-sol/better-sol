@@ -27,13 +27,14 @@
 }
 
 @layer base {
+
   h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
-    @apply font-serif -tracking-wide;
+    @apply font-serif font-bold;
   }
 
   p,
@@ -41,7 +42,7 @@
   textarea,
   select,
   button {
-    @apply -tracking-wider;
+    @apply tracking-tight;
   }
 }
 

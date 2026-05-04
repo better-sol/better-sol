@@ -2,7 +2,10 @@
   "name": "better-sol-monorepo",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "clean": "bun run --workspaces clean",
     "check": "bun run --workspaces check",
