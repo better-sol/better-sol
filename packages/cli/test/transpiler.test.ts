@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { parseProgramsFromFile } from "../src/parser/ast";
 import { generateAnchorProject } from "../src/generator/rust";
 
-const counterSource = `import { program, account, u64, bool, pubkey, p } from 'better-sol/program'
+const counterSource = `import { bs, cpi } from 'better-sol/program'
 
-const Counter = account({
-  count: u64,
-  authority: pubkey,
-  isActive: bool,
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
 }).derive((seed) => ["counter", seed.authority])
 
-export const counter = program({
+export const counter = bs.program({
   name: 'counter',
   address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',
   errors: {
@@ -20,10 +20,10 @@ export const counter = program({
 }, ix => ({
     initialize: ix({
       accounts: {
-        counter: p.create(Counter),
-        authority: p.signer(),
+        counter: bs.init(Counter),
+        authority: bs.signer(),
       },
-      args: { initialValue: u64 },
+      args: { initialValue: bs.u64() },
       run: ({ counter, authority }, { initialValue }) => {
         counter.count = initialValue
         counter.authority = authority
@@ -32,10 +32,10 @@ export const counter = program({
     }),
     increment: ix({
       accounts: {
-        counter: p.mut(Counter),
-        authority: p.signer(),
+        counter: bs.mut(Counter),
+        authority: bs.signer(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: ({ counter, authority }, { amount }, ctx) => {
         ctx.require(authority === counter.authority, 'Unauthorized')
         ctx.require(counter.isActive, 'NotActive')
@@ -44,8 +44,8 @@ export const counter = program({
     }),
     close: ix({
       accounts: {
-        counter: p.close(Counter, 'authority'),
-        authority: p.signer(),
+        counter: bs.close(Counter, 'authority'),
+        authority: bs.signer(),
       },
       run: () => {},
     }),
@@ -93,12 +93,12 @@ describe("AST parser", () => {
   });
 
   test("rejects account and arg name collisions", () => {
-    const source = counterSource.replace("args: { initialValue: u64 }", "args: { counter: u64 }");
+    const source = counterSource.replace("args: { initialValue: bs.u64() }", "args: { counter: bs.u64() }");
     expect(() => parseProgramsFromFile(source, "counter.ts")).toThrow("both an account and arg named 'counter'");
   });
 
   test("rejects zero-copy bool fields", () => {
-    const source = "import { program, account, bool, u8, p } from 'better-sol/program'\nconst Flags = account({ paused: bool, bump: u8 }).zeroCopy()\nexport const flags = program({ name: 'flags', address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs' }, ix => ({\n  init: ix({ accounts: { flags: p.create(Flags), authority: p.signer() }, run: () => {} })\n}))";
+    const source = "import { bs, cpi } from 'better-sol/program'\nconst Flags = bs.account({ paused: bs.bool(), bump: bs.u8() }).zeroCopy()\nexport const flags = bs.program({ name: 'flags', address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs' }, ix => ({\n  init: ix({ accounts: { flags: bs.init(Flags), authority: bs.signer() }, run: () => {} })\n}))";
     expect(() => parseProgramsFromFile(source, "flags.ts")).toThrow("not zero-copy safe");
   });
 });
@@ -176,7 +176,7 @@ describe("Rust generator", () => {
 
 describe("Transpiler diagnostics", () => {
   function expectDiagnostic(runBody: string, expected: string): void {
-    const source = "import { program, account, u64, bool, pubkey, p } from 'better-sol/program'\nconst Counter = account({ count: u64, authority: pubkey, isActive: bool }).derive((seed) => ['counter', seed.authority])\nexport const counter = program({\n  name: 'counter',\n  address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',\n  errors: { Unauthorized: 'Unauthorized' },\n}, ix => ({\n    bad: ix({\n      accounts: { counter: p.mut(Counter), authority: p.signer() },\n      args: { amount: u64 },\n      run: ({ counter, authority }, { amount }, ctx) => " + runBody + ",\n    }),\n}))";
+    const source = "import { bs, cpi } from 'better-sol/program'\nconst Counter = bs.account({ count: bs.u64(), authority: bs.pubkey(), isActive: bs.bool() }).derive((seed) => ['counter', seed.authority])\nexport const counter = bs.program({\n  name: 'counter',\n  address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',\n  errors: { Unauthorized: 'Unauthorized' },\n}, ix => ({\n    bad: ix({\n      accounts: { counter: bs.mut(Counter), authority: bs.signer() },\n      args: { amount: bs.u64() },\n      run: ({ counter, authority }, { amount }, ctx) => " + runBody + ",\n    }),\n}))";
     const program = parseProgramsFromFile(source, "bad.ts")[0]!;
     expect(() => generateAnchorProject(program)).toThrow(expected);
   }

@@ -1,117 +1,105 @@
-import { program,
-  account,
-  bool,
-  bytes,
-  i64,
-  p,
-  pubkey,
-  sol,
-  string,
-  u8,
-  u32,
-  u64,
-} from "../../../packages/better-sol/src/program";
+import { bs, cpi } from "better-sol/program";
 
-const Realm = account({
-  authority: pubkey,
-  treasury: pubkey,
-  councilMint: pubkey,
-  proposalCount: u64,
-  activeProposalCount: u64,
-  quorumBps: u64,
-  approvalThresholdBps: u64,
-  minVotingPower: u64,
-  votingPeriodSlots: u64,
-  paused: bool,
-  bump: u8,
+const Realm = bs.account({
+  authority: bs.pubkey(),
+  treasury: bs.pubkey(),
+  councilMint: bs.pubkey(),
+  proposalCount: bs.u64(),
+  activeProposalCount: bs.u64(),
+  quorumBps: bs.u64(),
+  approvalThresholdBps: bs.u64(),
+  minVotingPower: bs.u64(),
+  votingPeriodSlots: bs.u64(),
+  paused: bs.bool(),
+  bump: bs.u8(),
 }).derive((seed) => ["realm", seed.authority]);
 
-const MemberRecord = account({
-  realm: pubkey,
-  owner: pubkey,
-  votingPower: u64,
-  delegatedTo: pubkey,
-  lockedUntil: i64,
-  joinedAt: i64,
-  active: bool,
-  bump: u8,
+const MemberRecord = bs.account({
+  realm: bs.pubkey(),
+  owner: bs.pubkey(),
+  votingPower: bs.u64(),
+  delegatedTo: bs.pubkey(),
+  lockedUntil: bs.i64(),
+  joinedAt: bs.i64(),
+  active: bs.bool(),
+  bump: bs.u8(),
 }).derive((seed) => ["member", seed.realm, seed.owner]);
 
-const Proposal = account({
-  realm: pubkey,
-  proposer: pubkey,
-  executor: pubkey,
-  title: string,
-  metadataHash: bytes,
-  yesVotes: u64,
-  noVotes: u64,
-  abstainVotes: u64,
-  startSlot: u64,
-  endSlot: u64,
-  createdAt: i64,
-  executedAt: i64,
-  state: u8,
-  bump: u8,
+const Proposal = bs.account({
+  realm: bs.pubkey(),
+  proposer: bs.pubkey(),
+  executor: bs.pubkey(),
+  title: bs.string(),
+  metadataHash: bs.bytes(),
+  yesVotes: bs.u64(),
+  noVotes: bs.u64(),
+  abstainVotes: bs.u64(),
+  startSlot: bs.u64(),
+  endSlot: bs.u64(),
+  createdAt: bs.i64(),
+  executedAt: bs.i64(),
+  state: bs.u8(),
+  bump: bs.u8(),
 }).derive((seed) => ["proposal", seed.realm, seed.proposer]);
 
-const VoteReceipt = account({
-  proposal: pubkey,
-  voter: pubkey,
-  side: u8,
-  votingPower: u64,
-  timestamp: i64,
-  revoked: bool,
+const VoteReceipt = bs.account({
+  proposal: bs.pubkey(),
+  voter: bs.pubkey(),
+  side: bs.u8(),
+  votingPower: bs.u64(),
+  timestamp: bs.i64(),
+  revoked: bs.bool(),
 }).derive((seed) => ["vote", seed.proposal, seed.voter]);
 
-const ExecutionReceipt = account({
-  proposal: pubkey,
-  executor: pubkey,
-  executedAt: i64,
-  instructionCount: u32,
-  success: bool,
+const ExecutionReceipt = bs.account({
+  proposal: bs.pubkey(),
+  executor: bs.pubkey(),
+  executedAt: bs.i64(),
+  instructionCount: bs.u32(),
+  success: bs.bool(),
 }).derive((seed) => ["execution", seed.proposal]);
 
 ;
 
 const events = {
   RealmCreated: {
-    realm: pubkey,
-    authority: pubkey,
-    quorumBps: u64,
-    approvalThresholdBps: u64,
+    realm: bs.pubkey(),
+    authority: bs.pubkey(),
+    quorumBps: bs.u64(),
+    approvalThresholdBps: bs.u64(),
   },
-  MemberJoined: { realm: pubkey, owner: pubkey, votingPower: u64 },
-  MemberDelegated: { realm: pubkey, owner: pubkey, delegatedTo: pubkey },
+  MemberJoined: { realm: bs.pubkey(), owner: bs.pubkey(), votingPower: bs.u64() },
+  MemberDelegated: { realm: bs.pubkey(), owner: bs.pubkey(), delegatedTo: bs.pubkey() },
   ProposalCreated: {
-    realm: pubkey,
-    proposal: pubkey,
-    proposer: pubkey,
-    endSlot: u64,
+    realm: bs.pubkey(),
+    proposal: bs.pubkey(),
+    proposer: bs.pubkey(),
+    endSlot: bs.u64(),
   },
-  VoteCast: { proposal: pubkey, voter: pubkey, side: u8, votingPower: u64 },
+  VoteCast: { proposal: bs.pubkey(), voter: bs.pubkey(), side: bs.u8(), votingPower: bs.u64() },
   VotesAudited: {
-    proposal: pubkey,
-    receipts: u64,
-    yesVotes: u64,
-    noVotes: u64,
-    abstainVotes: u64,
+    proposal: bs.pubkey(),
+    receipts: bs.u64(),
+    yesVotes: bs.u64(),
+    noVotes: bs.u64(),
+    abstainVotes: bs.u64(),
   },
   ProposalFinalized: {
-    proposal: pubkey,
-    state: u8,
-    yesVotes: u64,
-    noVotes: u64,
+    proposal: bs.pubkey(),
+    state: bs.u8(),
+    yesVotes: bs.u64(),
+    noVotes: bs.u64(),
   },
   ProposalExecuted: {
-    proposal: pubkey,
-    executor: pubkey,
-    instructionCount: u32,
-    executedAt: i64,
+    proposal: bs.pubkey(),
+    executor: bs.pubkey(),
+    instructionCount: bs.u32(),
+    executedAt: bs.i64(),
   },
-  ProposalClosed: { proposal: pubkey, proposer: pubkey },
+  ProposalClosed: { proposal: bs.pubkey(), proposer: bs.pubkey() },
 }
 
-export const daoGovernance = program({
+export const daoGovernance = bs.program({
   name: "dao_governance",
   address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
   errors: {
@@ -127,16 +115,16 @@ export const daoGovernance = program({
 }, ix => ({
     createRealm: ix({
       accounts: {
-        realm: p.create(Realm),
-        authority: p.signer(),
+        realm: bs.init(Realm),
+        authority: bs.signer(),
       },
       args: {
-        treasury: pubkey,
-        councilMint: pubkey,
-        quorumBps: u64,
-        approvalThresholdBps: u64,
-        minVotingPower: u64,
-        votingPeriodSlots: u64,
+        treasury: bs.pubkey(),
+        councilMint: bs.pubkey(),
+        quorumBps: bs.u64(),
+        approvalThresholdBps: bs.u64(),
+        minVotingPower: bs.u64(),
+        votingPeriodSlots: bs.u64(),
       },
       run: (
         { realm, authority },
@@ -172,11 +160,11 @@ export const daoGovernance = program({
 
     joinRealm: ix({
       accounts: {
-        realm: p.mut(Realm),
-        member: p.create(MemberRecord),
-        owner: p.signer(),
+        realm: bs.mut(Realm),
+        member: bs.init(MemberRecord),
+        owner: bs.signer(),
       },
-      args: { votingPower: u64 },
+      args: { votingPower: bs.u64() },
       run: ({ realm, member, owner }, { votingPower }, ctx) => {
         ctx.require(!realm.paused, "RealmPaused");
         ctx.require(votingPower >= realm.minVotingPower, "InvalidVotingPower");
@@ -185,7 +173,7 @@ export const daoGovernance = program({
         member.votingPower = votingPower;
         member.delegatedTo = owner;
         member.lockedUntil = 0n;
-        member.joinedAt = sol.timestamp();
+        member.joinedAt = cpi.sol.timestamp();
         member.active = true;
         member.bump = 0;
         ctx.emit("MemberJoined", { realm: realm.key, owner, votingPower });
@@ -194,11 +182,11 @@ export const daoGovernance = program({
 
     delegateVotes: ix({
       accounts: {
-        realm: p.mut(Realm),
-        member: p.mut(MemberRecord),
-        owner: p.signer(),
+        realm: bs.mut(Realm),
+        member: bs.mut(MemberRecord),
+        owner: bs.signer(),
       },
-      args: { delegatedTo: pubkey },
+      args: { delegatedTo: bs.pubkey() },
       run: ({ realm, member, owner }, { delegatedTo }, ctx) => {
         ctx.require(owner === member.owner, "Unauthorized");
         ctx.require(member.active, "InvalidVotingPower");
@@ -209,15 +197,15 @@ export const daoGovernance = program({
 
     createProposal: ix({
       accounts: {
-        realm: p.mut(Realm),
-        member: p.mut(MemberRecord),
-        proposal: p.create(Proposal),
-        proposer: p.signer(),
+        realm: bs.mut(Realm),
+        member: bs.mut(MemberRecord),
+        proposal: bs.init(Proposal),
+        proposer: bs.signer(),
       },
       args: {
-        executor: pubkey,
-        title: string,
-        metadataHash: bytes,
+        executor: bs.pubkey(),
+        title: bs.string(),
+        metadataHash: bs.bytes(),
       },
       run: (
         { realm, member, proposal, proposer },
@@ -240,7 +228,7 @@ export const daoGovernance = program({
         proposal.abstainVotes = 0n;
         proposal.startSlot = 0n;
         proposal.endSlot = realm.votingPeriodSlots;
-        proposal.createdAt = sol.timestamp();
+        proposal.createdAt = cpi.sol.timestamp();
         proposal.executedAt = 0n;
         proposal.state = 0;
         proposal.bump = 0;
@@ -257,13 +245,13 @@ export const daoGovernance = program({
 
     castVote: ix({
       accounts: {
-        realm: p.mut(Realm),
-        proposal: p.mut(Proposal),
-        member: p.mut(MemberRecord),
-        receipt: p.create(VoteReceipt),
-        voter: p.signer(),
+        realm: bs.mut(Realm),
+        proposal: bs.mut(Proposal),
+        member: bs.mut(MemberRecord),
+        receipt: bs.init(VoteReceipt),
+        voter: bs.signer(),
       },
-      args: { side: u8 },
+      args: { side: bs.u8() },
       run: ({ realm, proposal, member, receipt, voter }, { side }, ctx) => {
         ctx.require(!realm.paused, "RealmPaused");
         ctx.require(proposal.state === 0, "InvalidProposalState");
@@ -282,7 +270,7 @@ export const daoGovernance = program({
         receipt.voter = voter;
         receipt.side = side;
         receipt.votingPower = member.votingPower;
-        receipt.timestamp = sol.timestamp();
+        receipt.timestamp = cpi.sol.timestamp();
         receipt.revoked = false;
         ctx.emit("VoteCast", {
           proposal: proposal.key,
@@ -295,11 +283,11 @@ export const daoGovernance = program({
 
     auditVotes: ix({
       accounts: {
-        proposal: p.mut(Proposal),
-        receipts: p.remaining(VoteReceipt),
-        authority: p.signer(),
+        proposal: bs.mut(Proposal),
+        receipts: bs.remaining(VoteReceipt),
+        authority: bs.signer(),
       },
-      args: { maxReceipts: u64 },
+      args: { maxReceipts: bs.u64() },
       run: ({ proposal, receipts, authority }, { maxReceipts }, ctx) => {
         ctx.require(authority === proposal.proposer, "Unauthorized");
         let receiptCount = 0n;
@@ -310,7 +298,7 @@ export const daoGovernance = program({
           receipts[i]!.voter = authority;
           receipts[i]!.side = 2;
           receipts[i]!.votingPower = 0n;
-          receipts[i]!.timestamp = sol.timestamp();
+          receipts[i]!.timestamp = cpi.sol.timestamp();
           receipts[i]!.revoked = true;
           receiptCount += 1n;
         }
@@ -326,9 +314,9 @@ export const daoGovernance = program({
 
     finalizeProposal: ix({
       accounts: {
-        realm: p.mut(Realm),
-        proposal: p.mut(Proposal),
-        authority: p.signer(),
+        realm: bs.mut(Realm),
+        proposal: bs.mut(Proposal),
+        authority: bs.signer(),
       },
       run: ({ realm, proposal, authority }, ctx) => {
         ctx.require(authority === realm.authority, "Unauthorized");
@@ -358,16 +346,16 @@ export const daoGovernance = program({
 
     executeProposal: ix({
       accounts: {
-        proposal: p.mut(Proposal),
-        execution: p.create(ExecutionReceipt),
-        executor: p.signer(),
+        proposal: bs.mut(Proposal),
+        execution: bs.init(ExecutionReceipt),
+        executor: bs.signer(),
       },
-      args: { instructionCount: u32 },
+      args: { instructionCount: bs.u32() },
       run: ({ proposal, execution, executor }, { instructionCount }, ctx) => {
         ctx.require(executor === proposal.executor, "Unauthorized");
         ctx.require(proposal.state === 1, "InvalidProposalState");
         ctx.require(proposal.executedAt === 0n, "ProposalAlreadyExecuted");
-        proposal.executedAt = sol.timestamp();
+        proposal.executedAt = cpi.sol.timestamp();
         proposal.state = 3;
         execution.proposal = proposal.key;
         execution.executor = executor;
@@ -385,8 +373,8 @@ export const daoGovernance = program({
 
     closeProposal: ix({
       accounts: {
-        proposal: p.close(Proposal, "proposer"),
-        proposer: p.signer(),
+        proposal: bs.close(Proposal, "proposer"),
+        proposer: bs.signer(),
       },
       run: ({ proposal, proposer }, ctx) => {
         ctx.require(proposer === proposal.proposer, "Unauthorized");

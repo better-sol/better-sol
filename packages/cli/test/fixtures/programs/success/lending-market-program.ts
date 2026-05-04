@@ -1,109 +1,99 @@
-import {
-  account,
-  bool,
-  i64,
-  p,
-  program,
-  pubkey,
-  sol,
-  token,
-  u8,
-  u64,
-} from "../../../packages/better-sol/src/program";
+import { bs, cpi } from "better-sol/program";
 
-const MarketConfig = account({
-  admin: pubkey,
-  feeVault: pubkey,
-  insuranceVault: pubkey,
-  riskAuthority: pubkey,
-  totalReserves: u64,
-  paused: bool,
-  bump: u8,
+
+const MarketConfig = bs.account({
+  admin: bs.pubkey(),
+  feeVault: bs.pubkey(),
+  insuranceVault: bs.pubkey(),
+  riskAuthority: bs.pubkey(),
+  totalReserves: bs.u64(),
+  paused: bs.bool(),
+  bump: bs.u8(),
 }).derive((seed) => ["lending_market", seed.admin]);
 
-const Reserve = account({
-  market: pubkey,
-  assetMint: pubkey,
-  collateralMint: pubkey,
-  liquidityVault: pubkey,
-  feeVault: pubkey,
-  totalDeposits: u64,
-  totalBorrows: u64,
-  borrowIndex: u64,
-  depositIndex: u64,
-  utilizationBps: u64,
-  borrowRateBps: u64,
-  liquidationThresholdBps: u64,
-  maxBorrowBps: u64,
-  lastUpdated: i64,
-  paused: bool,
-  bump: u8,
+const Reserve = bs.account({
+  market: bs.pubkey(),
+  assetMint: bs.pubkey(),
+  collateralMint: bs.pubkey(),
+  liquidityVault: bs.pubkey(),
+  feeVault: bs.pubkey(),
+  totalDeposits: bs.u64(),
+  totalBorrows: bs.u64(),
+  borrowIndex: bs.u64(),
+  depositIndex: bs.u64(),
+  utilizationBps: bs.u64(),
+  borrowRateBps: bs.u64(),
+  liquidationThresholdBps: bs.u64(),
+  maxBorrowBps: bs.u64(),
+  lastUpdated: bs.i64(),
+  paused: bs.bool(),
+  bump: bs.u8(),
 }).derive((seed) => ["reserve", seed.market, seed.assetMint]);
 
-const Obligation = account({
-  owner: pubkey,
-  reserve: pubkey,
-  depositedAmount: u64,
-  borrowedAmount: u64,
-  collateralAmount: u64,
-  lastAccrued: i64,
-  healthBps: u64,
-  flags: u8,
-  bump: u8,
+const Obligation = bs.account({
+  owner: bs.pubkey(),
+  reserve: bs.pubkey(),
+  depositedAmount: bs.u64(),
+  borrowedAmount: bs.u64(),
+  collateralAmount: bs.u64(),
+  lastAccrued: bs.i64(),
+  healthBps: bs.u64(),
+  flags: bs.u8(),
+  bump: bs.u8(),
 }).derive((seed) => ["obligation", seed.owner, seed.reserve]);
 
-const LiquidationRecord = account({
-  liquidator: pubkey,
-  borrower: pubkey,
-  reserve: pubkey,
-  repaidAmount: u64,
-  seizedCollateral: u64,
-  timestamp: i64,
-  closed: bool,
+const LiquidationRecord = bs.account({
+  liquidator: bs.pubkey(),
+  borrower: bs.pubkey(),
+  reserve: bs.pubkey(),
+  repaidAmount: bs.u64(),
+  seizedCollateral: bs.u64(),
+  timestamp: bs.i64(),
+  closed: bs.bool(),
 }).derive((seed) => ["liquidation", seed.liquidator, seed.reserve]);
 
 ;
 
 const events = {
-  MarketInitialized: { admin: pubkey, riskAuthority: pubkey },
-  ReserveCreated: { market: pubkey, reserve: pubkey, assetMint: pubkey },
+  MarketInitialized: { admin: bs.pubkey(), riskAuthority: bs.pubkey() },
+  ReserveCreated: { market: bs.pubkey(), reserve: bs.pubkey(), assetMint: bs.pubkey() },
   Deposited: {
-    owner: pubkey,
-    reserve: pubkey,
-    amount: u64,
-    collateralMinted: u64,
+    owner: bs.pubkey(),
+    reserve: bs.pubkey(),
+    amount: bs.u64(),
+    collateralMinted: bs.u64(),
   },
-  Borrowed: { owner: pubkey, reserve: pubkey, amount: u64, healthBps: u64 },
-  Repaid: { owner: pubkey, reserve: pubkey, amount: u64, remainingDebt: u64 },
+  Borrowed: { owner: bs.pubkey(), reserve: bs.pubkey(), amount: bs.u64(), healthBps: bs.u64() },
+  Repaid: { owner: bs.pubkey(), reserve: bs.pubkey(), amount: bs.u64(), remainingDebt: bs.u64() },
   Withdrawn: {
-    owner: pubkey,
-    reserve: pubkey,
-    amount: u64,
-    remainingDeposit: u64,
+    owner: bs.pubkey(),
+    reserve: bs.pubkey(),
+    amount: bs.u64(),
+    remainingDeposit: bs.u64(),
   },
   Liquidated: {
-    liquidator: pubkey,
-    borrower: pubkey,
-    reserve: pubkey,
-    repaidAmount: u64,
-    seizedCollateral: u64,
+    liquidator: bs.pubkey(),
+    borrower: bs.pubkey(),
+    reserve: bs.pubkey(),
+    repaidAmount: bs.u64(),
+    seizedCollateral: bs.u64(),
   },
   InterestAccrued: {
-    reserve: pubkey,
-    totalBorrows: u64,
-    utilizationBps: u64,
-    timestamp: i64,
+    reserve: bs.pubkey(),
+    totalBorrows: bs.u64(),
+    utilizationBps: bs.u64(),
+    timestamp: bs.i64(),
   },
   RiskUpdated: {
-    reserve: pubkey,
-    liquidationThresholdBps: u64,
-    maxBorrowBps: u64,
-    borrowRateBps: u64,
+    reserve: bs.pubkey(),
+    liquidationThresholdBps: bs.u64(),
+    maxBorrowBps: bs.u64(),
+    borrowRateBps: bs.u64(),
   },
-  ObligationClosed: { owner: pubkey, reserve: pubkey },
+  ObligationClosed: { owner: bs.pubkey(), reserve: bs.pubkey() },
 }
 
-export const lendingMarket = program({
+export const lendingMarket = bs.program({
   name: "lending_market",
   address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
   errors: {
@@ -122,13 +112,13 @@ export const lendingMarket = program({
 }, ix => ({
     initializeMarket: ix({
       accounts: {
-        market: p.create(MarketConfig),
-        admin: p.signer(),
+        market: bs.init(MarketConfig),
+        admin: bs.signer(),
       },
       args: {
-        feeVault: pubkey,
-        insuranceVault: pubkey,
-        riskAuthority: pubkey,
+        feeVault: bs.pubkey(),
+        insuranceVault: bs.pubkey(),
+        riskAuthority: bs.pubkey(),
       },
       run: (
         { market, admin },
@@ -148,19 +138,19 @@ export const lendingMarket = program({
 
     createReserve: ix({
       accounts: {
-        market: p.mut(MarketConfig),
-        reserve: p.create(Reserve),
-        assetMint: p.mint(),
-        collateralMint: p.mint().mut(),
-        liquidityVault: p.tokenAccount().mut(),
-        feeVaultAccount: p.tokenAccount().mut(),
-        admin: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        market: bs.mut(MarketConfig),
+        reserve: bs.init(Reserve),
+        assetMint: bs.mint(),
+        collateralMint: bs.mint().writable(),
+        liquidityVault: bs.tokenAccount().writable(),
+        feeVaultAccount: bs.tokenAccount().writable(),
+        admin: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
       args: {
-        liquidationThresholdBps: u64,
-        maxBorrowBps: u64,
-        borrowRateBps: u64,
+        liquidationThresholdBps: bs.u64(),
+        maxBorrowBps: bs.u64(),
+        borrowRateBps: bs.u64(),
       },
       run: (
         {
@@ -192,7 +182,7 @@ export const lendingMarket = program({
         reserve.borrowRateBps = borrowRateBps;
         reserve.liquidationThresholdBps = liquidationThresholdBps;
         reserve.maxBorrowBps = maxBorrowBps;
-        reserve.lastUpdated = sol.timestamp();
+        reserve.lastUpdated = cpi.sol.timestamp();
         reserve.paused = false;
         reserve.bump = 0;
         market.totalReserves += 1n;
@@ -206,16 +196,16 @@ export const lendingMarket = program({
 
     deposit: ix({
       accounts: {
-        reserve: p.mut(Reserve),
-        obligation: p.create(Obligation),
-        userLiquidity: p.tokenAccount().mut(),
-        reserveLiquidity: p.tokenAccount().mut(),
-        userCollateral: p.tokenAccount().mut(),
-        collateralMint: p.mint().mut(),
-        owner: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        reserve: bs.mut(Reserve),
+        obligation: bs.init(Obligation),
+        userLiquidity: bs.tokenAccount().writable(),
+        reserveLiquidity: bs.tokenAccount().writable(),
+        userCollateral: bs.tokenAccount().writable(),
+        collateralMint: bs.mint().writable(),
+        owner: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: (
         {
           reserve,
@@ -241,13 +231,13 @@ export const lendingMarket = program({
           collateralMint.key === reserve.collateralMint,
           "InvalidMint",
         );
-        token.transfer({
+        cpi.token.transfer({
           from: userLiquidity,
           to: reserveLiquidity,
           authority: owner,
           amount,
         });
-        token.mintTo({
+        cpi.token.mintTo({
           mint: collateralMint,
           to: userCollateral,
           authority: reserve,
@@ -258,7 +248,7 @@ export const lendingMarket = program({
         obligation.depositedAmount = amount;
         obligation.borrowedAmount = 0n;
         obligation.collateralAmount = amount;
-        obligation.lastAccrued = sol.timestamp();
+        obligation.lastAccrued = cpi.sol.timestamp();
         obligation.healthBps = 10000n;
         obligation.flags = 1;
         obligation.bump = 0;
@@ -274,14 +264,14 @@ export const lendingMarket = program({
 
     borrow: ix({
       accounts: {
-        reserve: p.mut(Reserve),
-        obligation: p.mut(Obligation),
-        reserveLiquidity: p.tokenAccount().mut(),
-        borrowerLiquidity: p.tokenAccount().mut(),
-        borrower: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        reserve: bs.mut(Reserve),
+        obligation: bs.mut(Obligation),
+        reserveLiquidity: bs.tokenAccount().writable(),
+        borrowerLiquidity: bs.tokenAccount().writable(),
+        borrower: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: (
         { reserve, obligation, reserveLiquidity, borrowerLiquidity, borrower },
         { amount },
@@ -299,7 +289,7 @@ export const lendingMarket = program({
           (obligation.depositedAmount * reserve.maxBorrowBps) / 10000n;
         const nextBorrow = obligation.borrowedAmount + amount;
         ctx.require(nextBorrow <= maxBorrow, "BorrowLimitExceeded");
-        token.transfer({
+        cpi.token.transfer({
           from: reserveLiquidity,
           to: borrowerLiquidity,
           authority: reserve,
@@ -321,14 +311,14 @@ export const lendingMarket = program({
 
     repay: ix({
       accounts: {
-        reserve: p.mut(Reserve),
-        obligation: p.mut(Obligation),
-        payerLiquidity: p.tokenAccount().mut(),
-        reserveLiquidity: p.tokenAccount().mut(),
-        payer: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        reserve: bs.mut(Reserve),
+        obligation: bs.mut(Obligation),
+        payerLiquidity: bs.tokenAccount().writable(),
+        reserveLiquidity: bs.tokenAccount().writable(),
+        payer: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: (
         { reserve, obligation, payerLiquidity, reserveLiquidity, payer },
         { amount },
@@ -341,7 +331,7 @@ export const lendingMarket = program({
           amount > obligation.borrowedAmount
             ? obligation.borrowedAmount
             : amount;
-        token.transfer({
+        cpi.token.transfer({
           from: payerLiquidity,
           to: reserveLiquidity,
           authority: payer,
@@ -366,16 +356,16 @@ export const lendingMarket = program({
 
     withdraw: ix({
       accounts: {
-        reserve: p.mut(Reserve),
-        obligation: p.mut(Obligation),
-        reserveLiquidity: p.tokenAccount().mut(),
-        userLiquidity: p.tokenAccount().mut(),
-        userCollateral: p.tokenAccount().mut(),
-        collateralMint: p.mint().mut(),
-        owner: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        reserve: bs.mut(Reserve),
+        obligation: bs.mut(Obligation),
+        reserveLiquidity: bs.tokenAccount().writable(),
+        userLiquidity: bs.tokenAccount().writable(),
+        userCollateral: bs.tokenAccount().writable(),
+        collateralMint: bs.mint().writable(),
+        owner: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: (
         {
           reserve,
@@ -401,13 +391,13 @@ export const lendingMarket = program({
           userCollateral.mint === reserve.collateralMint,
           "InvalidMint",
         );
-        token.burn({
+        cpi.token.burn({
           from: userCollateral,
           mint: collateralMint,
           authority: owner,
           amount,
         });
-        token.transfer({
+        cpi.token.transfer({
           from: reserveLiquidity,
           to: userLiquidity,
           authority: reserve,
@@ -427,15 +417,15 @@ export const lendingMarket = program({
 
     liquidate: ix({
       accounts: {
-        reserve: p.mut(Reserve),
-        obligation: p.mut(Obligation),
-        record: p.create(LiquidationRecord),
-        liquidatorLiquidity: p.tokenAccount().mut(),
-        reserveLiquidity: p.tokenAccount().mut(),
-        liquidator: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        reserve: bs.mut(Reserve),
+        obligation: bs.mut(Obligation),
+        record: bs.init(LiquidationRecord),
+        liquidatorLiquidity: bs.tokenAccount().writable(),
+        reserveLiquidity: bs.tokenAccount().writable(),
+        liquidator: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { repayAmount: u64 },
+      args: { repayAmount: bs.u64() },
       run: (
         {
           reserve,
@@ -465,7 +455,7 @@ export const lendingMarket = program({
           actualRepay > obligation.collateralAmount
             ? obligation.collateralAmount
             : actualRepay;
-        token.transfer({
+        cpi.token.transfer({
           from: liquidatorLiquidity,
           to: reserveLiquidity,
           authority: liquidator,
@@ -479,7 +469,7 @@ export const lendingMarket = program({
         record.reserve = reserve.key;
         record.repaidAmount = actualRepay;
         record.seizedCollateral = seizeAmount;
-        record.timestamp = sol.timestamp();
+        record.timestamp = cpi.sol.timestamp();
         record.closed = false;
         ctx.emit("Liquidated", {
           liquidator,
@@ -493,10 +483,10 @@ export const lendingMarket = program({
 
     accrueInterest: ix({
       accounts: {
-        reserve: p.mut(Reserve),
+        reserve: bs.mut(Reserve),
       },
       run: ({ reserve }, ctx) => {
-        const now = sol.timestamp();
+        const now = cpi.sol.timestamp();
         const elapsed = now - reserve.lastUpdated;
         ctx.require(elapsed >= 0n, "InvalidAmount");
         if (reserve.totalBorrows > 0n) {
@@ -523,15 +513,15 @@ export const lendingMarket = program({
 
     updateRisk: ix({
       accounts: {
-        market: p.mut(MarketConfig),
-        reserve: p.mut(Reserve),
-        riskAuthority: p.signer(),
+        market: bs.mut(MarketConfig),
+        reserve: bs.mut(Reserve),
+        riskAuthority: bs.signer(),
       },
       args: {
-        liquidationThresholdBps: u64,
-        maxBorrowBps: u64,
-        borrowRateBps: u64,
-        paused: bool,
+        liquidationThresholdBps: bs.u64(),
+        maxBorrowBps: bs.u64(),
+        borrowRateBps: bs.u64(),
+        paused: bs.bool(),
       },
       run: (
         { market, reserve, riskAuthority },
@@ -554,8 +544,8 @@ export const lendingMarket = program({
 
     closeObligation: ix({
       accounts: {
-        obligation: p.close(Obligation, "owner"),
-        owner: p.signer(),
+        obligation: bs.close(Obligation, "owner"),
+        owner: bs.signer(),
       },
       run: ({ obligation, owner }, ctx) => {
         ctx.require(owner === obligation.owner, "Unauthorized");

@@ -19,6 +19,23 @@ type RawAccount = {
   readonly seeds: readonly IrSeed[];
 };
 
+function assertBsonNamespace(node: Node): void {
+  if (node.getKind() !== SyntaxKind.CallExpression) return;
+  const call = node as CallExpression;
+  const expr = call.getExpression();
+  if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
+    const pa = expr as PropertyAccessExpression;
+    const obj = pa.getExpression();
+    if (obj.getKind() === SyntaxKind.Identifier && (obj as import("ts-morph").Identifier).getText() === "bs") return;
+  }
+  if (expr.getKind() === SyntaxKind.Identifier) {
+    const name = expr.getText();
+    if (["program", "account", "struct", "struct_zc", "p", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "f32", "f64", "bool", "pubkey", "string", "bytes", "option", "vec", "array", "event"].includes(name)) {
+      throw new Error(`Old API detected: '${name}' is no longer supported. Use the 'bs' namespace: import { bs, cpi } from "better-sol/program" and use bs.${name}() instead.`);
+    }
+  }
+}
+
 export function parseProgramsFromFile(source: string, filePath: string): readonly IrProgram[] {
   const project = new Project({ useInMemoryFileSystem: true });
   const sf = project.createSourceFile(filePath, source);
@@ -29,7 +46,8 @@ export function parseProgramsFromFile(source: string, filePath: string): readonl
 
   for (const decl of sf.getVariableDeclarations()) {
     const init = decl.getInitializer();
-    if (!isCallTo(init, "program")) continue;
+    if (init !== undefined) assertBsonNamespace(init);
+    if (!isBsCall(init, "program")) continue;
 
     const call = init as CallExpression;
     const firstArg = call.getArguments()[0];
@@ -65,7 +83,7 @@ function collectAccounts(sf: TsSourceFile, rawStructZCs: readonly IrStructZC[]):
     const init = decl.getInitializer();
     if (init === undefined) continue;
     const call = unwrapMethodChain(init);
-    if (call === undefined || !isCallTo(call, "account")) continue;
+    if (call === undefined || !isBsCall(call, "account")) continue;
 
     const name = decl.getName();
     const firstArg = call.getArguments()[0];
@@ -73,8 +91,8 @@ function collectAccounts(sf: TsSourceFile, rawStructZCs: readonly IrStructZC[]):
 
     const fields = parseFields(firstArg as ObjectLiteralExpression);
     const chainText = init.getText();
-    if (chainText.includes(".pda(")) throw new Error(".pda() was renamed to .derive(). Use .derive((seed) => ['literal', seed.fieldName]) for typed address derivation.");
-    if (chainText.includes(".seeds(")) throw new Error(".seeds() was removed. Use .derive((seed) => ['literal', seed.fieldName]) for typed address derivation.");
+    if (chainText.includes(".pda(")) throw new Error(".pda() was renamed to .derive(). Use .derive((seed) => ['literal', seed.fieldName]).");
+    if (chainText.includes(".seeds(")) throw new Error(".seeds() was removed. Use .derive((seed) => ['literal', seed.fieldName]).");
     const zeroCopy = chainText.includes(".zeroCopy");
     if (zeroCopy) validateZeroCopyFields(name, fields, rawStructZCs);
     const seeds = parseSeeds(chainText);
@@ -119,7 +137,7 @@ function collectStructZCs(sf: TsSourceFile): readonly IrStructZC[] {
 
   for (const decl of sf.getVariableDeclarations()) {
     const init = decl.getInitializer();
-    if (!isCallTo(init, "struct") && !isCallTo(init, "struct_zc")) continue;
+    if (!isBsCall(init, "struct")) continue;
     const call = init as CallExpression;
     const firstArg = call.getArguments()[0];
     if (firstArg === undefined || !isObject(firstArg)) continue;
@@ -195,34 +213,35 @@ function resolveConstraint(prop: Node, accountName: string, rawAccounts: readonl
 
   if (init.getKind() === SyntaxKind.Identifier) {
     const text = init.getText();
-    if (text === "p") return { kind: "bare", accountName };
+    if (text === "bs") return { kind: "bare", accountName };
     const hasMatch = rawAccounts.some((a) => a.name === text);
     return { kind: "bare", accountName: hasMatch ? text : accountName };
   }
 
-  if (!isCallTo(init, "p") && !isMethodCall(init)) {
+  if (!isBsCallAny(init) && !isMethodCall(init)) {
     const hasMatch = rawAccounts.some((a) => a.name === init.getText());
     return { kind: "bare", accountName: hasMatch ? init.getText() : accountName };
   }
 
   const call = init as CallExpression;
-  const isMutChain = calleeMethod(call) === "mut";
-  const method = isMutChain ? (unwrapChainedMethod(call) ?? "mut") : calleeMethod(call);
+  const isWritableChain = calleeMethod(call) === "writable";
+  const method = isWritableChain
+    ? (unwrapChainedMethod(call) ?? bsMethodName(call) ?? "unknown")
+    : (bsMethodName(call) ?? calleeMethod(call));
 
   switch (method) {
     case "init":
-    case "create":
       return { kind: "init", accountName: callArgId(call, 0) ?? accountName };
-    case "createIfNeeded":
+    case "initIfNeeded":
       return { kind: "initIfNeeded", accountName: callArgId(call, 0) ?? accountName };
     case "mut":
       return { kind: "mut", accountName: callArgId(call, 0) ?? accountName };
     case "signer":
       return { kind: "signer" };
     case "mint":
-      return { kind: "mint", mutable: isMutChain };
+      return { kind: "mint", mutable: isWritableChain };
     case "tokenAccount":
-      return { kind: "tokenAccount", mutable: isMutChain };
+      return { kind: "tokenAccount", mutable: isWritableChain };
     case "tokenProgram":
       return { kind: "tokenProgram" };
     case "token2022Program":
@@ -291,20 +310,14 @@ function parseFields(obj: ObjectLiteralExpression): readonly IrAccountField[] {
 }
 
 function resolveType(node: Node): IrType {
-  if (node.getKind() === SyntaxKind.Identifier) {
-    const name = node.getText();
-    const primitive = tryResolvePrimitive(name);
-    return primitive !== undefined ? primitive : { kind: "struct_zc_ref", name };
-  }
-
   if (node.getKind() === SyntaxKind.CallExpression) {
     const call = node as CallExpression;
-    const callee = calleeMethod(call) ?? calleeDirect(call) ?? "";
-    if (callee === "option") {
+    const callee = bsMethodName(call) ?? calleeMethod(call) ?? calleeDirect(call) ?? "";
+    if (callee === "optional") {
       const inner = call.getArguments()[0];
       return { kind: "option", inner: inner !== undefined ? resolveType(inner) : "pubkey" as PrimitiveType };
     }
-    if (callee === "vec") {
+    if (callee === "vector") {
       const inner = call.getArguments()[0];
       return { kind: "vec", inner: inner !== undefined ? resolveType(inner) : "pubkey" as PrimitiveType, max: 32 };
     }
@@ -316,6 +329,12 @@ function resolveType(node: Node): IrType {
     }
     const primitive = tryResolvePrimitive(callee);
     return primitive !== undefined ? primitive : { kind: "struct_zc_ref", name: callee };
+  }
+
+  if (node.getKind() === SyntaxKind.Identifier) {
+    const name = node.getText();
+    const primitive = tryResolvePrimitive(name);
+    return primitive !== undefined ? primitive : { kind: "struct_zc_ref", name };
   }
 
   return "u8";
@@ -459,11 +478,32 @@ function unwrapMethodChain(node: Node): CallExpression | undefined {
   return call;
 }
 
-function isCallTo(node: Node | undefined, name: string): boolean {
-  if (node === undefined) return false;
+function isBsCall(node: Node | undefined, method: string): boolean {
+  if (node === undefined || node.getKind() !== SyntaxKind.CallExpression) return false;
+  const call = node as CallExpression;
+  return bsMethodName(call) === method;
+}
+
+function isBsCallAny(node: Node): boolean {
   if (node.getKind() !== SyntaxKind.CallExpression) return false;
   const call = node as CallExpression;
-  return calleeDirect(call) === name || calleeMethod(call) === name;
+  return bsMethodName(call) !== undefined;
+}
+
+function bsMethodName(call: CallExpression): string | undefined {
+  const expr = call.getExpression();
+  if (expr.getKind() !== SyntaxKind.PropertyAccessExpression) return undefined;
+  const pa = expr as PropertyAccessExpression;
+  const obj = pa.getExpression();
+  if (obj.getKind() !== SyntaxKind.Identifier) return undefined;
+  if ((obj as import("ts-morph").Identifier).getText() !== "bs") return undefined;
+  return pa.getName();
+}
+
+function isCallTo(node: Node | undefined, name: string): boolean {
+  if (node === undefined || node.getKind() !== SyntaxKind.CallExpression) return false;
+  const call = node as CallExpression;
+  return calleeDirect(call) === name || bsMethodName(call) === name;
 }
 
 function isMethodCall(node: Node): boolean {
@@ -491,7 +531,7 @@ function unwrapChainedMethod(call: CallExpression): string | undefined {
   const obj = pa.getExpression();
   if (obj.getKind() !== SyntaxKind.CallExpression) return undefined;
   const innerCall = obj as CallExpression;
-  return calleeMethod(innerCall);
+  return bsMethodName(innerCall) ?? calleeMethod(innerCall);
 }
 
 function callArgId(call: CallExpression, index: number): string | undefined {

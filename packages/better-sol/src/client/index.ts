@@ -1,4 +1,4 @@
-export { betterSol, secretKey, keypairFile } from "./client/factory";
+export { betterSol, secretKey, keypairFile } from "./factory";
 export type {
   BetterSolClient,
   BetterSolConfig,
@@ -10,4 +10,4 @@ export type {
   Cluster,
   SimulateResult,
   PrepareResult,
-} from "./client/types";
+} from "./types";

@@ -39,15 +39,15 @@ function validateName(value: string | undefined): string | undefined {
 }
 
 function template(name: string, address: string): string {
-  return `import { account, bool, p, program, pubkey, u64 } from "better-sol/program";
+  return `import { bs, cpi } from "better-sol/program";
 
-const Counter = account({
-  count: u64,
-  authority: pubkey,
-  isActive: bool,
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
 }).derive((seed) => ["counter", seed.authority]);
 
-export const ${name} = program(
+export const ${name} = bs.program(
   {
     name: "${name}",
     address: "${address}",
@@ -60,10 +60,10 @@ export const ${name} = program(
   ix => ({
     initialize: ix({
       accounts: {
-        counter: p.create(Counter),
-        authority: p.signer(),
+        counter: bs.init(Counter),
+        authority: bs.signer(),
       },
-      args: { initialValue: u64 },
+      args: { initialValue: bs.u64() },
       run: ({ counter, authority }, { initialValue }) => {
         counter.count = initialValue;
         counter.authority = authority;
@@ -73,10 +73,10 @@ export const ${name} = program(
 
     increment: ix({
       accounts: {
-        counter: p.mut(Counter),
-        authority: p.signer(),
+        counter: bs.mut(Counter),
+        authority: bs.signer(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: ({ counter, authority }, { amount }, ctx) => {
         ctx.require(authority === counter.authority, "Unauthorized");
         ctx.require(counter.isActive, "NotActive");

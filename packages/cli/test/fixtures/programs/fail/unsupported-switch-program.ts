@@ -1,18 +1,15 @@
-import {
-  program, account,
-  u64, pubkey, p,
-} from "../../../packages/better-sol/src/program";
+import { bs, cpi } from "better-sol/program";
 
-const State = account({ value: u64, authority: pubkey }).derive((seed) => ["state", seed.authority]);
+const State = bs.account({ value: bs.u64(), authority: bs.pubkey() }).derive((seed) => ["state", seed.authority]);
 
-export const unsupportedSwitch = program({
+export const unsupportedSwitch = bs.program({
   name: "unsupported_switch",
   address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
   errors: { Unauthorized: "Unauthorized" },
   }, ix => ({
     badSwitch: ix({
-      accounts: { state: p.mut(State), authority: p.signer() },
-      args: { mode: u8, amount: u64 },
+      accounts: { state: bs.mut(State), authority: bs.signer() },
+      args: { mode: bs.u8(), amount: bs.u64() },
       run: ({ state, authority }, { mode, amount }, ctx) => {
         ctx.require(authority === state.authority, "Unauthorized");
         switch (mode) {

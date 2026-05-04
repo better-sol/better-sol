@@ -1,148 +1,135 @@
-import { program,
-  account,
-  array,
-  bool,
-  i64,
-  p,
-  pubkey,
-  sol,
-  struct,
-  token,
-  u8,
-  u32,
-  u64,
-} from "../../../packages/better-sol/src/program";
+import { bs, cpi } from "better-sol/program";
 
-const RestingOrder = struct({
-  trader: pubkey,
-  orderId: u64,
-  price: u64,
-  quantity: u64,
-  filled: u64,
-  side: u8,
-  flags: u8,
-  timestamp: i64,
+const RestingOrder = bs.struct({
+  trader: bs.pubkey(),
+  orderId: bs.u64(),
+  price: bs.u64(),
+  quantity: bs.u64(),
+  filled: bs.u64(),
+  side: bs.u8(),
+  flags: bs.u8(),
+  timestamp: bs.i64(),
 });
 
-const PerpMarket = account({
-  authority: pubkey,
-  baseMint: pubkey,
-  quoteMint: pubkey,
-  collateralVault: pubkey,
-  feeVault: pubkey,
-  openInterestLong: u64,
-  openInterestShort: u64,
-  fundingIndexLong: i64,
-  fundingIndexShort: i64,
-  markPrice: u64,
-  oraclePrice: u64,
-  nextOrderId: u64,
-  bidCount: u32,
-  askCount: u32,
-  feeBps: u64,
-  paused: u8,
-  bump: u8,
-  bids: array(RestingOrder, 64),
-  asks: array(RestingOrder, 64),
+const PerpMarket = bs.account({
+  authority: bs.pubkey(),
+  baseMint: bs.pubkey(),
+  quoteMint: bs.pubkey(),
+  collateralVault: bs.pubkey(),
+  feeVault: bs.pubkey(),
+  openInterestLong: bs.u64(),
+  openInterestShort: bs.u64(),
+  fundingIndexLong: bs.i64(),
+  fundingIndexShort: bs.i64(),
+  markPrice: bs.u64(),
+  oraclePrice: bs.u64(),
+  nextOrderId: bs.u64(),
+  bidCount: bs.u32(),
+  askCount: bs.u32(),
+  feeBps: bs.u64(),
+  paused: bs.u8(),
+  bump: bs.u8(),
+  bids: bs.array(RestingOrder, 64),
+  asks: bs.array(RestingOrder, 64),
 })
   .derive((seed) => ["perp_market", seed.baseMint, seed.quoteMint])
   .zeroCopy();
 
-const VaultAuthority = account({
-  market: pubkey,
-  baseMint: pubkey,
-  quoteMint: pubkey,
-  bump: u8,
+const VaultAuthority = bs.account({
+  market: bs.pubkey(),
+  baseMint: bs.pubkey(),
+  quoteMint: bs.pubkey(),
+  bump: bs.u8(),
 }).derive((seed) => ["perp_vault", seed.market]);
 
-const TraderPosition = account({
-  owner: pubkey,
-  market: pubkey,
-  collateral: u64,
-  basePosition: i64,
-  quotePosition: i64,
-  entryPrice: u64,
-  realizedPnl: i64,
-  fundingCheckpointLong: i64,
-  fundingCheckpointShort: i64,
-  liquidationPrice: u64,
-  openOrders: u64,
-  bump: u8,
+const TraderPosition = bs.account({
+  owner: bs.pubkey(),
+  market: bs.pubkey(),
+  collateral: bs.u64(),
+  basePosition: bs.i64(),
+  quotePosition: bs.i64(),
+  entryPrice: bs.u64(),
+  realizedPnl: bs.i64(),
+  fundingCheckpointLong: bs.i64(),
+  fundingCheckpointShort: bs.i64(),
+  liquidationPrice: bs.u64(),
+  openOrders: bs.u64(),
+  bump: bs.u8(),
 }).derive((seed) => ["position", seed.owner, seed.market]);
 
-const TradeRecord = account({
-  market: pubkey,
-  maker: pubkey,
-  taker: pubkey,
-  price: u64,
-  quantity: u64,
-  side: u8,
-  timestamp: i64,
+const TradeRecord = bs.account({
+  market: bs.pubkey(),
+  maker: bs.pubkey(),
+  taker: bs.pubkey(),
+  price: bs.u64(),
+  quantity: bs.u64(),
+  side: bs.u8(),
+  timestamp: bs.i64(),
 }).derive((seed) => ["trade_record", seed.market, seed.taker]);
 
-const FundingCheckpoint = account({
-  market: pubkey,
-  timestamp: i64,
-  fundingIndexLong: i64,
-  fundingIndexShort: i64,
-  markPrice: u64,
-  oraclePrice: u64,
+const FundingCheckpoint = bs.account({
+  market: bs.pubkey(),
+  timestamp: bs.i64(),
+  fundingIndexLong: bs.i64(),
+  fundingIndexShort: bs.i64(),
+  markPrice: bs.u64(),
+  oraclePrice: bs.u64(),
 }).derive((seed) => ["funding", seed.market]);
 
 ;
 
 const events = {
   MarketInitialized: {
-    market: pubkey,
-    authority: pubkey,
-    baseMint: pubkey,
-    quoteMint: pubkey,
+    market: bs.pubkey(),
+    authority: bs.pubkey(),
+    baseMint: bs.pubkey(),
+    quoteMint: bs.pubkey(),
   },
   CollateralDeposited: {
-    owner: pubkey,
-    market: pubkey,
-    amount: u64,
-    totalCollateral: u64,
+    owner: bs.pubkey(),
+    market: bs.pubkey(),
+    amount: bs.u64(),
+    totalCollateral: bs.u64(),
   },
   CollateralWithdrawn: {
-    owner: pubkey,
-    market: pubkey,
-    amount: u64,
-    remainingCollateral: u64,
+    owner: bs.pubkey(),
+    market: bs.pubkey(),
+    amount: bs.u64(),
+    remainingCollateral: bs.u64(),
   },
   OrderPlaced: {
-    trader: pubkey,
-    market: pubkey,
-    orderId: u64,
-    side: u8,
-    price: u64,
-    quantity: u64,
+    trader: bs.pubkey(),
+    market: bs.pubkey(),
+    orderId: bs.u64(),
+    side: bs.u8(),
+    price: bs.u64(),
+    quantity: bs.u64(),
   },
   OrderCancelled: {
-    trader: pubkey,
-    market: pubkey,
-    orderId: u64,
-    side: u8,
-    remainingQuantity: u64,
+    trader: bs.pubkey(),
+    market: bs.pubkey(),
+    orderId: bs.u64(),
+    side: bs.u8(),
+    remainingQuantity: bs.u64(),
   },
-  OrdersMatched: { market: pubkey, matches: u64, quantity: u64, price: u64 },
+  OrdersMatched: { market: bs.pubkey(), matches: bs.u64(), quantity: bs.u64(), price: bs.u64() },
   FundingUpdated: {
-    market: pubkey,
-    fundingIndexLong: i64,
-    fundingIndexShort: i64,
-    markPrice: u64,
-    oraclePrice: u64,
+    market: bs.pubkey(),
+    fundingIndexLong: bs.i64(),
+    fundingIndexShort: bs.i64(),
+    markPrice: bs.u64(),
+    oraclePrice: bs.u64(),
   },
   Liquidated: {
-    liquidator: pubkey,
-    owner: pubkey,
-    market: pubkey,
-    penalty: u64,
-    remainingCollateral: u64,
+    liquidator: bs.pubkey(),
+    owner: bs.pubkey(),
+    market: bs.pubkey(),
+    penalty: bs.u64(),
+    remainingCollateral: bs.u64(),
   },
 };
 
-export const perpetualsClearing = program({
+export const perpetualsClearing = bs.program({
   name: "perpetuals_clearing",
   address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
   errors: {
@@ -162,18 +149,18 @@ export const perpetualsClearing = program({
 }, ix => ({
     initializeMarket: ix({
       accounts: {
-        market: p.create(PerpMarket),
-        vaultAuthority: p.create(VaultAuthority),
-        collateralVault: p.tokenAccount().mut(),
-        feeVault: p.tokenAccount().mut(),
-        baseMint: p.mint(),
-        quoteMint: p.mint(),
-        authority: p.signer(),
+        market: bs.init(PerpMarket),
+        vaultAuthority: bs.init(VaultAuthority),
+        collateralVault: bs.tokenAccount().writable(),
+        feeVault: bs.tokenAccount().writable(),
+        baseMint: bs.mint(),
+        quoteMint: bs.mint(),
+        authority: bs.signer(),
       },
       args: {
-        markPrice: u64,
-        oraclePrice: u64,
-        feeBps: u64,
+        markPrice: bs.u64(),
+        oraclePrice: bs.u64(),
+        feeBps: bs.u64(),
       },
       run: (
         {
@@ -224,14 +211,14 @@ export const perpetualsClearing = program({
 
     openPosition: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        position: p.create(TraderPosition),
-        userCollateral: p.tokenAccount().mut(),
-        collateralVault: p.tokenAccount().mut(),
-        owner: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        market: bs.mut(PerpMarket),
+        position: bs.init(TraderPosition),
+        userCollateral: bs.tokenAccount().writable(),
+        collateralVault: bs.tokenAccount().writable(),
+        owner: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { collateral: u64 },
+      args: { collateral: bs.u64() },
       run: (
         { market, position, userCollateral, collateralVault, owner },
         { collateral },
@@ -244,7 +231,7 @@ export const perpetualsClearing = program({
           "InvalidVault",
         );
         ctx.require(userCollateral.mint === market.quoteMint, "InvalidVault");
-        token.transfer({
+        cpi.token.transfer({
           from: userCollateral,
           to: collateralVault,
           authority: owner,
@@ -273,14 +260,14 @@ export const perpetualsClearing = program({
 
     depositCollateral: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        position: p.mut(TraderPosition),
-        userCollateral: p.tokenAccount().mut(),
-        collateralVault: p.tokenAccount().mut(),
-        owner: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        market: bs.mut(PerpMarket),
+        position: bs.mut(TraderPosition),
+        userCollateral: bs.tokenAccount().writable(),
+        collateralVault: bs.tokenAccount().writable(),
+        owner: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: (
         { market, position, userCollateral, collateralVault, owner },
         { amount },
@@ -293,7 +280,7 @@ export const perpetualsClearing = program({
           "InvalidVault",
         );
         ctx.require(userCollateral.mint === market.quoteMint, "InvalidVault");
-        token.transfer({
+        cpi.token.transfer({
           from: userCollateral,
           to: collateralVault,
           authority: owner,
@@ -311,15 +298,15 @@ export const perpetualsClearing = program({
 
     withdrawCollateral: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        position: p.mut(TraderPosition),
-        vaultAuthority: p.mut(VaultAuthority),
-        userCollateral: p.tokenAccount().mut(),
-        collateralVault: p.tokenAccount().mut(),
-        owner: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        market: bs.mut(PerpMarket),
+        position: bs.mut(TraderPosition),
+        vaultAuthority: bs.mut(VaultAuthority),
+        userCollateral: bs.tokenAccount().writable(),
+        collateralVault: bs.tokenAccount().writable(),
+        owner: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: (
         {
           market,
@@ -341,7 +328,7 @@ export const perpetualsClearing = program({
         );
         ctx.require(vaultAuthority.market === market.key, "InvalidVault");
         ctx.require(userCollateral.mint === market.quoteMint, "InvalidVault");
-        token.transfer({
+        cpi.token.transfer({
           from: collateralVault,
           to: userCollateral,
           authority: vaultAuthority,
@@ -359,15 +346,15 @@ export const perpetualsClearing = program({
 
     placeLimitOrder: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        position: p.mut(TraderPosition),
-        trader: p.signer(),
+        market: bs.mut(PerpMarket),
+        position: bs.mut(TraderPosition),
+        trader: bs.signer(),
       },
       args: {
-        side: u8,
-        price: u64,
-        quantity: u64,
-        reduceOnly: bool,
+        side: bs.u8(),
+        price: bs.u64(),
+        quantity: bs.u64(),
+        reduceOnly: bs.bool(),
       },
       run: (
         { market, position, trader },
@@ -396,7 +383,7 @@ export const perpetualsClearing = program({
             filled: 0n,
             side,
             flags,
-            timestamp: sol.timestamp(),
+            timestamp: cpi.sol.timestamp(),
           };
           market.bidCount += 1;
           market.openInterestLong += quantity;
@@ -410,7 +397,7 @@ export const perpetualsClearing = program({
             filled: 0n,
             side,
             flags,
-            timestamp: sol.timestamp(),
+            timestamp: cpi.sol.timestamp(),
           };
           market.askCount += 1;
           market.openInterestShort += quantity;
@@ -430,13 +417,13 @@ export const perpetualsClearing = program({
 
     cancelOrder: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        position: p.mut(TraderPosition),
-        trader: p.signer(),
+        market: bs.mut(PerpMarket),
+        position: bs.mut(TraderPosition),
+        trader: bs.signer(),
       },
       args: {
-        side: u8,
-        orderId: u64,
+        side: bs.u8(),
+        orderId: bs.u64(),
       },
       run: ({ market, position, trader }, { side, orderId }, ctx) => {
         ctx.require(trader === position.owner, "Unauthorized");
@@ -478,11 +465,11 @@ export const perpetualsClearing = program({
 
     matchOrders: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        fills: p.remaining(TradeRecord),
-        authority: p.signer(),
+        market: bs.mut(PerpMarket),
+        fills: bs.remaining(TradeRecord),
+        authority: bs.signer(),
       },
-      args: { maxMatches: u64 },
+      args: { maxMatches: bs.u64() },
       run: ({ market, fills, authority }, { maxMatches }, ctx) => {
         ctx.require(authority === market.authority, "Unauthorized");
         ctx.require(market.paused === 0, "MarketPaused");
@@ -514,7 +501,7 @@ export const perpetualsClearing = program({
           fills[i]!.price = matchPrice;
           fills[i]!.quantity = matchQuantity;
           fills[i]!.side = 0;
-          fills[i]!.timestamp = sol.timestamp();
+          fills[i]!.timestamp = cpi.sol.timestamp();
           matches += 1n;
           totalQuantity += matchQuantity;
           lastPrice = matchPrice;
@@ -532,12 +519,12 @@ export const perpetualsClearing = program({
 
     updateFunding: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        checkpoint: p.create(FundingCheckpoint),
-        authority: p.signer(),
+        market: bs.mut(PerpMarket),
+        checkpoint: bs.init(FundingCheckpoint),
+        authority: bs.signer(),
       },
       args: {
-        oraclePrice: u64,
+        oraclePrice: bs.u64(),
       },
       run: ({ market, checkpoint, authority }, { oraclePrice }, ctx) => {
         ctx.require(authority === market.authority, "Unauthorized");
@@ -555,7 +542,7 @@ export const perpetualsClearing = program({
           market.fundingIndexShort += impact;
         }
         checkpoint.market = market.key;
-        checkpoint.timestamp = sol.timestamp();
+        checkpoint.timestamp = cpi.sol.timestamp();
         checkpoint.fundingIndexLong = market.fundingIndexLong;
         checkpoint.fundingIndexShort = market.fundingIndexShort;
         checkpoint.markPrice = market.markPrice;
@@ -572,15 +559,15 @@ export const perpetualsClearing = program({
 
     liquidatePosition: ix({
       accounts: {
-        market: p.mut(PerpMarket),
-        position: p.mut(TraderPosition),
-        vaultAuthority: p.mut(VaultAuthority),
-        liquidatorCollateral: p.tokenAccount().mut(),
-        collateralVault: p.tokenAccount().mut(),
-        liquidator: p.signer(),
-        tokenProgram: p.tokenProgram(),
+        market: bs.mut(PerpMarket),
+        position: bs.mut(TraderPosition),
+        vaultAuthority: bs.mut(VaultAuthority),
+        liquidatorCollateral: bs.tokenAccount().writable(),
+        collateralVault: bs.tokenAccount().writable(),
+        liquidator: bs.signer(),
+        tokenProgram: bs.tokenProgram(),
       },
-      args: { penalty: u64 },
+      args: { penalty: bs.u64() },
       run: (
         {
           market,
@@ -606,7 +593,7 @@ export const perpetualsClearing = program({
         );
         const payout =
           penalty > position.collateral ? position.collateral : penalty;
-        token.transfer({
+        cpi.token.transfer({
           from: collateralVault,
           to: liquidatorCollateral,
           authority: vaultAuthority,

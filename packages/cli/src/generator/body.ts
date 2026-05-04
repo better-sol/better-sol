@@ -553,7 +553,7 @@ class BodyContext {
 
     if (property === "key" && baseType?.kind === "account") return this.renderAccountKey(baseType.symbol);
 
-    if (base.getText() === "sol" && property === "timestamp") return "Clock::get()?.unix_timestamp";
+    if (isCpiSol(base) && property === "timestamp") return "Clock::get()?.unix_timestamp";
 
     if (baseType?.kind === "account" && baseType.symbol.account.constraint.kind === "clock") {
       return `ctx.accounts.${baseType.symbol.rustName}.${toSnake(property)}`;
@@ -625,7 +625,7 @@ class BodyContext {
     if (Node.isPropertyAccessExpression(expression)) {
       const base = expression.getExpression();
       const method = expression.getName();
-      if (base.getText() === "sol" && method === "timestamp") {
+      if (isCpiSol(base) && method === "timestamp") {
         return expectedType === "u64" ? "Clock::get()?.unix_timestamp as u64" : "Clock::get()?.unix_timestamp";
       }
       if (method === "abs") return this.coerceRendered(`${this.renderExpression(base, "value")}.abs()`, this.inferExpressionType(base), expectedType);
@@ -703,7 +703,9 @@ class BodyContext {
     if (!Node.isCallExpression(expression)) return undefined;
     const callee = expression.getExpression();
     if (!Node.isPropertyAccessExpression(callee)) return undefined;
-    if (callee.getExpression().getText() !== "token") return undefined;
+    const calleeBase = callee.getExpression();
+    const isTokenCall = Node.isPropertyAccessExpression(calleeBase) && calleeBase.getExpression().getText() === "cpi" && calleeBase.getName() === "token";
+    if (!isTokenCall) return undefined;
     const arg = expression.getArguments()[0];
     if (arg === undefined || !Node.isObjectLiteralExpression(arg)) return undefined;
 
@@ -961,7 +963,7 @@ class BodyContext {
     if (node.getKind() === SyntaxKind.NullKeyword) return { kind: "value", type: { kind: "option", inner: "pubkey" }, zeroCopyBool: false };
     if (Node.isCallExpression(node)) {
       const expression = node.getExpression();
-      if (Node.isPropertyAccessExpression(expression) && expression.getExpression().getText() === "sol" && expression.getName() === "timestamp") {
+      if (Node.isPropertyAccessExpression(expression) && isCpiSol(expression.getExpression()) && expression.getName() === "timestamp") {
         return { kind: "value", type: "i64", zeroCopyBool: false };
       }
     }
@@ -1138,6 +1140,11 @@ function isIntegerSeedType(type: IrType): boolean {
 function formatSeedType(type: IrType): string {
   if (typeof type === "string") return type;
   return type.kind;
+}
+
+function isCpiSol(node: Node): boolean {
+  if (!Node.isPropertyAccessExpression(node)) return false;
+  return node.getExpression().getText() === "cpi" && node.getName() === "sol";
 }
 
 function parseBodyStatements(body: string): readonly Statement[] {

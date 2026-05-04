@@ -2,7 +2,8 @@
 
 export function toSnake(value: string): string {
   return value
-    .replace(/([A-Z])/g, "_$1")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2")
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
     .toLowerCase()
     .replace(/^_/, "");
 }

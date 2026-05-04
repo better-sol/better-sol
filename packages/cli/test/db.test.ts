@@ -7,21 +7,21 @@ function parseAndGenerate(source: string, dialect: "postgres" | "mysql" | "sqlit
   return generateDrizzleSchema(programs, dialect);
 }
 
-const simpleSource = `import { program, account, u64, bool, pubkey, p, u8 } from 'better-sol/program'
+const simpleSource = `import { bs } from 'better-sol/program'
 
-const Counter = account({
-  count: u64,
-  authority: pubkey,
-  isActive: bool,
-  bump: u8,
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+  bump: bs.u8(),
 }).derive((seed) => ["counter", seed.authority])
 
-export const counter = program({
+export const counter = bs.program({
   name: 'counter',
   address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',
 }, ix => ({
   init: ix({
-    accounts: { counter: p.create(Counter), authority: p.signer() },
+    accounts: { counter: bs.init(Counter), authority: bs.signer() },
     args: { initialValue: u64 },
     run: ({ counter, authority }, { initialValue }) => {
       counter.count = initialValue
@@ -73,44 +73,44 @@ describe("db generator — column types", () => {
 });
 
 describe("db generator — option types", () => {
-  test("option(u64) becomes nullable bigint", () => {
-    const source = `import { program, account, u64, option, p, u8 } from 'better-sol/program'
-const Data = account({ value: option(u64), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, args: { val: option(u64) }, run: () => {} })
+  test("bs.optional(u64) becomes nullable bigint", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ value: bs.optional(u64), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, args: { val: bs.optional(u64) }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('value: bigint("value", { mode: "bigint" })');
     expect(schema).not.toContain('value: bigint("value", { mode: "bigint" }).notNull()');
   });
 
-  test("option(bool) becomes nullable boolean", () => {
-    const source = `import { program, account, bool, option, p, u8 } from 'better-sol/program'
-const Data = account({ flag: option(bool), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.optional(bool) becomes nullable boolean", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ flag: bs.optional(bool), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('flag: boolean("flag")');
     expect(schema).not.toContain('flag: boolean("flag").notNull()');
   });
 
-  test("option(string) becomes nullable text", () => {
-    const source = `import { program, account, string, option, p, u8 } from 'better-sol/program'
-const Data = account({ name: option(string), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.optional(string) becomes nullable text", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ name: bs.optional(string), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('name: text("name")');
     expect(schema).not.toContain('name: text("name").notNull()');
   });
 
-  test("option(pubkey) becomes nullable text", () => {
-    const source = `import { program, account, pubkey, option, p, u8 } from 'better-sol/program'
-const Data = account({ owner: option(pubkey), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.optional(pubkey) becomes nullable text", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ owner: bs.optional(pubkey), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('owner: text("owner")');
@@ -119,61 +119,61 @@ export const prog = program({ name: 'prog', address: '11111111111111111111111111
 });
 
 describe("db generator — vec and array types", () => {
-  test("vec(u64) uses postgres array", () => {
-    const source = `import { program, account, u64, vec, p, u8 } from 'better-sol/program'
-const Data = account({ items: vec(u64), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.vector(u64) uses postgres array", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ items: bs.vector(u64), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('items: bigint("items", { mode: "bigint" }).array().notNull()');
   });
 
-  test("array(u64, 4) uses postgres array", () => {
-    const source = `import { program, account, u64, array, p, u8 } from 'better-sol/program'
-const Data = account({ items: array(u64, 4), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.array(u64, 4) uses postgres array", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ items: bs.array(u64, 4), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('items: bigint("items", { mode: "bigint" }).array().notNull()');
   });
 
-  test("vec(bool) uses postgres boolean array", () => {
+  test("bs.vector(bool) uses postgres boolean array", () => {
     const source = `import { program, account, bool, vec, p, u8 } from 'better-sol/program'
-const Data = account({ flags: vec(bool), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+const Data = bs.account({ flags: bs.vector(bool), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('flags: boolean("flags").array().notNull()');
   });
 
-  test("vec(u64) falls back to text for sqlite", () => {
-    const source = `import { program, account, u64, vec, p, u8 } from 'better-sol/program'
-const Data = account({ items: vec(u64), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.vector(u64) falls back to text for sqlite", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ items: bs.vector(u64), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "sqlite");
     expect(schema).toContain('items: text("items")');
   });
 
-  test("vec(u64) falls back to text for mysql", () => {
-    const source = `import { program, account, u64, vec, p, u8 } from 'better-sol/program'
-const Data = account({ items: vec(u64), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+  test("bs.vector(u64) falls back to text for mysql", () => {
+    const source = `import { bs } from 'better-sol/program'
+const Data = bs.account({ items: bs.vector(u64), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "mysql");
     expect(schema).toContain('items: text("items")');
   });
 
-  test("option(vec(u64)) produces nullable array", () => {
+  test("bs.optional(bs.vector(u64)) produces nullable array", () => {
     const source = `import { program, account, u64, vec, option, p, u8 } from 'better-sol/program'
-const Data = account({ items: option(vec(u64)), bump: u8 })
-export const prog = program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
-  set: ix({ accounts: { data: p.mut(Data), authority: p.signer() }, run: () => {} })
+const Data = bs.account({ items: bs.optional(bs.vector(u64)), bump: u8 })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  set: ix({ accounts: { data: bs.mut(Data), authority: bs.signer() }, run: () => {} })
 }))`;
     const schema = parseAndGenerate(source, "postgres");
     expect(schema).toContain('items: bigint("items", { mode: "bigint" }).array()');

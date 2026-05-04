@@ -30,19 +30,23 @@ Current implementation state, identified issues, and prioritized improvements.
 | `toSnake` consecutive capitals fix | **Done** | `createATA` → `create_at_a` |
 | `idl.ts` rewritten for `bs.*` API | **Done** | All tests pass |
 | `index.ts` updated exports | **Done** | Exports `bs`, `cpi`, types |
+| CLI parser: `bs.*` / `cpi.*` support | **Done** | 7 new namespace tests |
+| CLI body transpiler: `cpi.*` / `cpi.sol.*` | **Done** | `isSolReference()`, CPI detection |
+| Token-2022 mint decimals fallback | **Done** | Tries both programs |
+| Client split into modules | **Done** | 6 modules in `src/client/` |
+| Instruction plan composability | **Done** | `.plan()` method on instructions |
+| Compute unit estimation | **Done** | `computeUnits` config, `withComputeBudget()` |
+| Event subscription API | **Done** | `onTransaction()` on client |
 
-**Total: 148 passing tests (67 SDK + 81 CLI). Zero lint/type/build errors.**
+**Total: 155 passing tests (67 SDK + 88 CLI). Zero lint/type/build errors.**
 
 ### Not Yet Complete
 
 | Feature | Status |
 |---|---|
 | On-chain deploy tx | Compiler produces `.so`, deploy tx not wired |
-| CLI parser: `bs.*` / `cpi.*` support | Not yet implemented (fixtures still use old API) |
-| Token-2022 mint decimals fetch fallback | P0 bug, not yet fixed |
-| Instruction plan composability | Not yet implemented |
-| Compute unit estimation | Not yet implemented |
-| Event subscription API | Not yet implemented |
+| Update CLI fixtures to use `bs`/`cpi` API | **Done** — all 21 fixtures migrated |
+| Old API rejection | **Done** — parser rejects old API with clear error |
 | Watch mode / hot reload | Not yet implemented |
 | VS Code extension or LSP | Not started |
 
@@ -56,8 +60,8 @@ Current implementation state, identified issues, and prioritized improvements.
 |---|---|---|---|
 | 1 | `encodeInstruction` accepts optional args, passes `undefined` to `encodeField` → silent garbage | `coder.ts:encodeInstruction()` | **Fixed** — args now required, throws on missing |
 | 2 | Discriminator recomputed on every instruction build (SHA-256) | `coder.ts:discriminator()` | **Fixed** — `Map<string, Uint8Array>` cache |
-| 3 | Token-2022 mint decimals fetch always queries Token program | `client.ts:fetchMintDecimals()` | Open |
-| 4 | `toSnake` incorrectly handles consecutive capitals (`createATA` → `create_a_t_a`) | `client.ts`, `cli/naming.ts` | **Fixed** in `client.ts` |
+| 3 | Token-2022 mint decimals fetch always queries Token program | `client.ts:fetchMintDecimals()` | **Fixed** — falls back to Token-2022 |
+| 4 | `toSnake` incorrectly handles consecutive capitals (`createATA` → `create_a_t_a`) | `client.ts`, `cli/naming.ts` | **Fixed** in both locations |
 
 ### P1 — Runtime Robustness
 
@@ -102,15 +106,15 @@ Current implementation state, identified issues, and prioritized improvements.
 
 5. ~~**Fix `toSnake` for consecutive capitals**~~ — **Done.** Proper regex in client.ts.
 
-6. **Fix Token-2022 mint decimals fetch** — Try Token program, fall back to Token-2022.
+6. ~~**Fix Token-2022 mint decimals fetch**~~ — **Done.** Falls back to Token-2022 when querying Token program.
 
 ### P1 — High Priority
 
-7. **Add instruction plan composability** — return `InstructionPlan` objects from `.plan()` method, composable with `@solana/kit` plans.
+7. ~~**Add instruction plan composability**~~ — **Done.** `.plan()` method returns composable `InstructionPlan`.
 
-8. **Add compute unit estimation** — `computeUnitLimit` and `computeUnitPrice` options on instruction calls.
+8. ~~**Add compute unit estimation**~~ — **Done.** `computeUnits` config in `betterSol()`, `withComputeBudget()` helper.
 
-9. **Add event subscription API** — `sol.<program>.events.<EventName>.subscribe(callback)`.
+9. ~~**Add event subscription API**~~ — **Done.** `onTransaction()` method on `BetterSolClient`.
 
 10. **Export standalone codec functions** — `encodeAccount()`, `decodeInstruction()`, `encodeInstructionData()` from a `better-sol/codec` subpath.
 
@@ -152,18 +156,16 @@ Current implementation state, identified issues, and prioritized improvements.
 
 ### Split `client.ts` into Concern-Specific Modules
 
-Current: `client.ts` (791 lines) handles RPC setup, signer resolution, program client building, token operations, transaction building, confirmation, simulation, account fetching.
-
-Target:
+Done. `client.ts` (791 lines) has been split into:
 ```
 client/
-  factory.ts          — betterSol() entry point, config resolution
-  program-client.ts   — buildProgramClient, instruction methods
-  token-client.ts     — TokenClient, Token-2022
-  transaction.ts      — buildAndSignTransaction, sendAndConfirm, runSimulation
-  account-meta.ts     — buildAccountMetas, resolveAccountMetaInput
-  types.ts            — extracted type definitions
-  signer.ts           — resolveSigner, requireSigner
+  types.ts          — All type definitions, config types, exported constants
+  signer.ts         — resolveSigner, requireSigner, keypair loading, seed encoding
+  transaction.ts    — buildAndSignTransaction, sendAndConfirm, runSimulation, buildAccountMetas, withComputeBudget
+  bound-account.ts  — BoundAccountImpl (derive, fetch, fetchMultiple)
+  token-client.ts   — buildTokenClient, fetchMintDecimals (with Token-2022 fallback)
+  factory.ts        — betterSol() entry point, buildClient, buildProgramClient
+  index.ts          — Barrel re-exports
 ```
 
 ### Extract Borsh Codec as Standalone Package
@@ -215,7 +217,7 @@ This enables:
 
 ## 8. Migration Plan (Old API → New API)
 
-Since we're in pre-1.0 development, breaking changes are acceptable. No backward compatibility layer needed.
+Since we're in pre-1.0 development, breaking changes are acceptable. No backward compatibility layer needed. **The parser now actively rejects old API patterns** with a clear error message pointing users to the `bs`/`cpi` namespace.
 
 ### Changes to `program.ts`
 

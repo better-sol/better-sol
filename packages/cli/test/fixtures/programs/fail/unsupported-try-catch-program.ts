@@ -1,18 +1,15 @@
-import {
-  program, account,
-  u64, pubkey, p,
-} from "../../../packages/better-sol/src/program";
+import { bs, cpi } from "better-sol/program";
 
-const Vault = account({ amount: u64, authority: pubkey }).derive((seed) => ["vault", seed.authority]);
+const Vault = bs.account({ amount: bs.u64(), authority: bs.pubkey() }).derive((seed) => ["vault", seed.authority]);
 
-export const unsupportedTryCatch = program({
+export const unsupportedTryCatch = bs.program({
   name: "unsupported_try_catch",
   address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
   errors: { Unauthorized: "Unauthorized" },
   }, ix => ({
     badTryCatch: ix({
-      accounts: { vault: p.mut(Vault), authority: p.signer() },
-      args: { amount: u64 },
+      accounts: { vault: bs.mut(Vault), authority: bs.signer() },
+      args: { amount: bs.u64() },
       run: ({ vault, authority }, { amount }, ctx) => {
         ctx.require(authority === vault.authority, "Unauthorized");
         try {

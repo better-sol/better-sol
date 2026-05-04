@@ -23,8 +23,11 @@ describe("config", () => {
 describe("naming", () => {
   test("toSnake converts camelCase", () => {
     expect(toSnake("myProgram")).toBe("my_program");
-    expect(toSnake("getATA")).toBe("get_a_t_a");
+    expect(toSnake("getATA")).toBe("get_ata");
+    expect(toSnake("createATA")).toBe("create_ata");
     expect(toSnake("Simple")).toBe("simple");
+    expect(toSnake("parseHTMLString")).toBe("parse_html_string");
+    expect(toSnake("XMLHttpRequest")).toBe("xml_http_request");
   });
 
   test("toSnake preserves already snake_case", () => {
