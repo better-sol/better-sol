@@ -9,50 +9,115 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as LayoutRouteImport } from './routes/_layout'
+import { Route as LayoutIndexRouteImport } from './routes/_layout.index'
+import { Route as LayoutDashIndexRouteImport } from './routes/_layout.dash.index'
+import { Route as LayoutDashKeysRouteImport } from './routes/_layout.dash.keys'
 
-const IndexRoute = IndexRouteImport.update({
+const LayoutRoute = LayoutRouteImport.update({
+  id: '/_layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutDashIndexRoute = LayoutDashIndexRouteImport.update({
+  id: '/dash/',
+  path: '/dash/',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutDashKeysRoute = LayoutDashKeysRouteImport.update({
+  id: '/dash/keys',
+  path: '/dash/keys',
+  getParentRoute: () => LayoutRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof LayoutIndexRoute
+  '/dash/keys': typeof LayoutDashKeysRoute
+  '/dash/': typeof LayoutDashIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/': typeof LayoutIndexRoute
+  '/dash/keys': typeof LayoutDashKeysRoute
+  '/dash': typeof LayoutDashIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/': typeof LayoutIndexRoute
+  '/_layout/dash/keys': typeof LayoutDashKeysRoute
+  '/_layout/dash/': typeof LayoutDashIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/dash/keys' | '/dash/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/dash/keys' | '/dash'
+  id:
+    | '__root__'
+    | '/_layout'
+    | '/_layout/'
+    | '/_layout/dash/keys'
+    | '/_layout/dash/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  LayoutRoute: typeof LayoutRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_layout': {
+      id: '/_layout'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof LayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_layout/': {
+      id: '/_layout/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof LayoutIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/dash/': {
+      id: '/_layout/dash/'
+      path: '/dash'
+      fullPath: '/dash/'
+      preLoaderRoute: typeof LayoutDashIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/dash/keys': {
+      id: '/_layout/dash/keys'
+      path: '/dash/keys'
+      fullPath: '/dash/keys'
+      preLoaderRoute: typeof LayoutDashKeysRouteImport
+      parentRoute: typeof LayoutRoute
     }
   }
 }
 
+interface LayoutRouteChildren {
+  LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutDashKeysRoute: typeof LayoutDashKeysRoute
+  LayoutDashIndexRoute: typeof LayoutDashIndexRoute
+}
+
+const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutIndexRoute: LayoutIndexRoute,
+  LayoutDashKeysRoute: LayoutDashKeysRoute,
+  LayoutDashIndexRoute: LayoutDashIndexRoute,
+}
+
+const LayoutRouteWithChildren =
+  LayoutRoute._addFileChildren(LayoutRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  LayoutRoute: LayoutRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

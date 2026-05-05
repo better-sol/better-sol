@@ -1,10 +1,19 @@
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
-
 import appCss from "../styles.css?url";
+import type { QueryClient } from "@tanstack/react-query";
+import { FormDevtoolsPanel } from "@tanstack/react-form-devtools";
+import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
+import { Toast } from "@heroui/react";
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+}>()({
   head: () => ({
     meta: [
       {
@@ -36,6 +45,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="antialiased bg-background">
         {children}
+        <Toast.Provider />
         <TanStackDevtools
           config={{
             position: "bottom-right",
@@ -44,6 +54,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             {
               name: "Tanstack Router",
               render: <TanStackRouterDevtoolsPanel />,
+            },
+            {
+              name: "TanStack Form",
+              render: <FormDevtoolsPanel />,
+            },
+            {
+              name: "TanStack Query",
+              render: <ReactQueryDevtoolsPanel />,
             },
           ]}
         />

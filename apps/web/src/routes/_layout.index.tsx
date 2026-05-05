@@ -1,20 +1,20 @@
-import { Button, buttonVariants, Surface, Tabs } from "@heroui/react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Button, Surface, Tabs } from "@heroui/react";
+import { createFileRoute } from "@tanstack/react-router";
 import SolarArrowRightLineDuotone from "~icons/solar/arrow-right-line-duotone";
 import SolarConfettiLineDuotone from "~icons/solar/confetti-line-duotone";
 import SolarPlayLineDuotone from "~icons/solar/play-line-duotone";
 import { HighlightCode } from "#/components/highlight-code";
 
-export const Route = createFileRoute("/")({ component: Home });
+export const Route = createFileRoute("/_layout/")({ component: Home });
 
-const programExample = `import { account, p, program, pubkey, u64 } from "better-sol/program";
+const programExample = `import { bs } from "better-sol/program";
 
-const Counter = account({
-  count: u64,
-  authority: pubkey,
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
 }).derive((seed) => ["counter", seed.authority]);
 
-export const counter = program(
+export const counter = bs.program(
   {
     name: "counter",
     address: "CoUnTeR11111111111111111111111111111111111",
@@ -26,8 +26,8 @@ export const counter = program(
   ix => ({
     initialize: ix({
       accounts: {
-        counter: p.create(Counter),
-        authority: p.signer(),
+        counter: bs.init(Counter),
+        authority: bs.signer(),
       },
       run: ({ counter, authority }) => {
         counter.count = 0n;
@@ -37,10 +37,10 @@ export const counter = program(
 
     increment: ix({
       accounts: {
-        counter: p.mut(Counter),
-        authority: p.signer(),
+        counter: bs.mut(Counter),
+        authority: bs.signer(),
       },
-      args: { amount: u64 },
+      args: { amount: bs.u64() },
       run: ({ counter, authority }, { amount }, ctx) => {
         ctx.require(authority === counter.authority, "Unauthorized");
         counter.count += amount;
@@ -91,31 +91,6 @@ function ExamplePanel({ title, description, code }: { readonly title: string; re
 function Home() {
   return (
     <>
-      <header className="fixed top-0 inset-x-0 border-b z-10 bg-background/60 backdrop-blur-3xl">
-        <div className="inner border-x px-8 h-14 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold tracking-tighter">
-            Better Sol
-          </Link>
-          <div className="flex items-center gap-1">
-            <Link to="/" className={buttonVariants({ variant: 'ghost' })}>
-              Home
-            </Link>
-            <Link to="/" className={buttonVariants({ variant: 'ghost' })}>
-              Documentation
-            </Link>
-            <Link to="/" className={buttonVariants({ variant: 'ghost' })}>
-              AI / Superstack
-            </Link>
-            <Link to="/" className={buttonVariants({ variant: 'ghost' })}>
-              Blog
-            </Link>
-            <Link to="/" className={buttonVariants({ variant: 'primary' })}>
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </header>
-
       <div className="relative min-h-lvh flex items-end">
         <div className="inner relative flex h-full flex-col gap-20 border-x">
           <div className="grid grid-cols-2 items-end gap-12 px-8 pt-20">

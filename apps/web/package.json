@@ -6,29 +6,40 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "dev": "vite dev --port 7000",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "deploy": "bun run build && wrangler deploy"
+    "deploy": "bun run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.26.0",
+    "@cloudflare/vite-plugin": "^1.35.0",
     "@heroui/react": "^3.0.3",
     "@heroui/styles": "^3.0.3",
+    "@neondatabase/serverless": "^1.1.0",
     "@paper-design/shaders-react": "^0.0.76",
+    "@reown/appkit": "^1.8.19",
+    "@reown/appkit-adapter-solana": "^1.8.19",
     "@tailwindcss/vite": "^4.1.18",
-    "@tanstack/react-devtools": "latest",
+    "@tanstack/react-devtools": "^0.10.2",
+    "@tanstack/react-form": "^1.29.1",
+    "@tanstack/react-form-devtools": "^0.2.22",
+    "@tanstack/react-form-start": "^1.29.1",
+    "@tanstack/react-query": "^5.100.9",
+    "@tanstack/react-query-devtools": "^5.100.9",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
     "@tanstack/router-plugin": "^1.132.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.545.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@iconify-json/solar": "^1.2.5",
@@ -38,16 +49,18 @@
     "@tanstack/devtools-vite": "latest",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.0",
-    "@types/node": "^22.10.2",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "drizzle-kit": "^0.31.10",
     "jsdom": "^28.1.0",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "unplugin-icons": "^23.0.1",
     "vite": "^8.0.0",
     "vitest": "^4.1.5",
-    "wrangler": "^4.70.0"
+    "wrangler": "^4.87.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
