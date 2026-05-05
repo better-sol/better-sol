@@ -143,15 +143,6 @@ export const counter = bs.program({
     expect(project.libRs).toContain("Incremented");
   });
 
-  test("rejects old API with clear error message", () => {
-    const source = `
-import { program, account, u64, p } from 'better-sol/program'
-const Counter = account({ count: u64 })
-export const counter = program({ name: 'counter', address: '11111111111111111111111111111111' }, ix => ({
-  init: ix({ accounts: { counter: p.create(Counter), authority: p.signer() }, run: () => {} })
-}))`;
-    expect(() => parseProgramsFromFile(source, "counter.ts")).toThrow("Old API detected");
-  });
 });
 
 describe("transpiler — latest features", () => {

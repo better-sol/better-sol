@@ -19,23 +19,6 @@ type RawAccount = {
   readonly seeds: readonly IrSeed[];
 };
 
-function assertBsonNamespace(node: Node): void {
-  if (node.getKind() !== SyntaxKind.CallExpression) return;
-  const call = node as CallExpression;
-  const expr = call.getExpression();
-  if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
-    const pa = expr as PropertyAccessExpression;
-    const obj = pa.getExpression();
-    if (obj.getKind() === SyntaxKind.Identifier && (obj as import("ts-morph").Identifier).getText() === "bs") return;
-  }
-  if (expr.getKind() === SyntaxKind.Identifier) {
-    const name = expr.getText();
-    if (["program", "account", "struct", "struct_zc", "p", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "f32", "f64", "bool", "pubkey", "string", "bytes", "option", "vec", "array", "event"].includes(name)) {
-      throw new Error(`Old API detected: '${name}' is no longer supported. Use the 'bs' namespace: import { bs, cpi } from "better-sol/program" and use bs.${name}() instead.`);
-    }
-  }
-}
-
 export function parseProgramsFromFile(source: string, filePath: string): readonly IrProgram[] {
   const project = new Project({ useInMemoryFileSystem: true });
   const sf = project.createSourceFile(filePath, source);
@@ -46,7 +29,6 @@ export function parseProgramsFromFile(source: string, filePath: string): readonl
 
   for (const decl of sf.getVariableDeclarations()) {
     const init = decl.getInitializer();
-    if (init !== undefined) assertBsonNamespace(init);
     if (!isBsCall(init, "program")) continue;
 
     const call = init as CallExpression;
