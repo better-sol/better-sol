@@ -250,7 +250,10 @@ function Home() {
                                     </FieldError>
                                   )}
                                   <DatePicker.Popover>
-                                    <Calendar aria-label="Select expiration date">
+                                    <Calendar
+                                      aria-label="Select expiration date"
+                                      minValue={today(getLocalTimeZone())}
+                                    >
                                       <Calendar.Header>
                                         <Calendar.YearPickerTrigger>
                                           <Calendar.YearPickerTriggerHeading />
