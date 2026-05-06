@@ -51,6 +51,7 @@ import { buildAndSignTransaction, buildAccountMetas, sendAndConfirm, runSimulati
 import { buildLookupTableIndex, type LookupTableIndex } from "./lookup-tables";
 import { BoundAccountImpl } from "./bound-account";
 import { buildTokenClient } from "./token-client";
+import { ProgramError, type ProgramErrorMap, buildErrorIndex, type ParsedEvent, buildEventDiscriminatorIndex, extractEventLogs, parseEventLog, decodeEventData } from "./events";
 
 export { secretKey, keypairFile } from "./signer";
 
@@ -130,8 +131,8 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
     payer,
     rpc: params.rpc,
     rpcSubscriptions: params.rpcSubscriptions,
-    token: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
-    token2022: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_2022_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
+    token: buildTokenClient(params.rpc, params.signer, params.rpcSubscriptions, params.commitment, TOKEN_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
+    token2022: buildTokenClient(params.rpc, params.signer, params.rpcSubscriptions, params.commitment, TOKEN_2022_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
     withSigner: async (signerInput: SignerInput): Promise<BetterSolClient<TPrograms, true>> => {
       const nextSigner = await resolveSigner(signerInput);
       return buildClientShape<TPrograms, true>({ ...params, signer: nextSigner }) as BetterSolClient<TPrograms, true>;
@@ -146,14 +147,14 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
       if (kitAddress(sourceAddress) !== signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
       const ix = getTransferSolInstruction({ source: signer, destination: kitAddress(transferParams.to), amount: transferParams.amount });
       const signedTx = await buildAndSignTransaction([ix], params.rpc, signer, params.commitment, nonceConfig);
-      return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
+      return await sendAndConfirm(signedTx, params.rpc, params.rpcSubscriptions, notifier.notify, params.commitment);
     },
     send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature> => {
       const signer = requireSigner(params.signer);
       const resolved = await Promise.all(instructions);
       const withBudget = withComputeBudget(resolved, params.computeUnits);
       const signedTx = await buildAndSignTransaction(withBudget, params.rpc, signer, params.commitment, nonceConfig);
-      return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
+      return await sendAndConfirm(signedTx, params.rpc, params.rpcSubscriptions, notifier.notify, params.commitment);
     },
     batch: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature> => {
       const signer = requireSigner(params.signer);
@@ -166,7 +167,7 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
         params.commitment,
         nonceConfig,
       );
-      return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
+      return await sendAndConfirm(signedTx, params.rpc, params.rpcSubscriptions, notifier.notify, params.commitment);
     },
     steps: async <const TOutputs extends readonly unknown[]>(stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<TOutputs> => {
       const results: unknown[] = [];
@@ -183,7 +184,7 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
 
   const programNamespace = {} as ProgramNamespace<TPrograms>;
   for (const [programName, programDef] of Object.entries(params.programs)) {
-    (programNamespace as Record<string, unknown>)[programName] = createProgramClient(programDef as AnyProgram, params.rpc, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
+    (programNamespace as Record<string, unknown>)[programName] = createProgramClient(programDef as AnyProgram, params.rpc, params.rpcSubscriptions, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
   }
 
   return { ...core, ...programNamespace } as BetterSolClientShape<TPrograms, THasSigner>;
@@ -192,11 +193,14 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
 interface ProgramClientImpl {
   readonly address: KitAddress;
   readonly accounts: Record<string, unknown>;
+  readonly parseErrors: (logs: readonly string[]) => ProgramError | undefined;
+  readonly parseEvents: (logs: readonly string[]) => Promise<readonly ParsedEvent[]>;
 }
 
 function createProgramClient(
   program: AnyProgram,
   rpc: KitRpc,
+  rpcSubscriptions: KitRpcSubscriptions | undefined,
   signer: TransactionSigner | undefined,
   commitment: "processed" | "confirmed" | "finalized",
   nonceConfig: NonceConfig | undefined,
@@ -204,6 +208,8 @@ function createProgramClient(
   onConfirmed: TransactionCallback,
 ): ProgramClientImpl {
   const programAddress = kitAddress(program.address);
+  const programName = program.name;
+  const errorIndex = buildErrorIndex(program.errors as Record<string, string>);
   const accounts: Record<string, unknown> = {};
   for (const [accountName, accountDef] of Object.entries(program.accounts)) {
     accounts[accountName] = new BoundAccountImpl(
@@ -215,10 +221,37 @@ function createProgramClient(
     );
   }
 
+  const parseErrors = (logs: readonly string[]): ProgramError | undefined => {
+    for (const log of logs) {
+      const parsed = tryParseAnchorError(log, errorIndex, programName);
+      if (parsed !== undefined) return parsed;
+    }
+    return undefined;
+  };
+
+  let eventDiscriminatorCache: Map<string, { readonly name: string; readonly fields: FieldSchema }> | undefined;
+  const parseEvents = async (logs: readonly string[]): Promise<readonly ParsedEvent[]> => {
+    if (Object.keys(program.events).length === 0) return [];
+    if (eventDiscriminatorCache === undefined) {
+      eventDiscriminatorCache = await buildEventDiscriminatorIndex(program.events as Record<string, FieldSchema>);
+    }
+    const eventLogs = extractEventLogs(logs);
+    const results: ParsedEvent[] = [];
+    for (const log of eventLogs) {
+      const parsed = parseEventLog(log, eventDiscriminatorCache);
+      if (parsed !== undefined) {
+        results.push({ name: parsed.name, data: decodeEventData(parsed.fields, parsed.data) });
+      }
+    }
+    return results;
+  };
+
   const handler: ProxyHandler<ProgramClientImpl> = {
     get(_target: ProgramClientImpl, property: string | symbol): unknown {
       if (property === "address") return programAddress;
       if (property === "accounts") return accounts;
+      if (property === "parseErrors") return parseErrors;
+      if (property === "parseEvents") return parseEvents;
       if (typeof property !== "string") return undefined;
       if (property === "then") return undefined;
       if (property === "toJSON") return undefined;
@@ -226,13 +259,13 @@ function createProgramClient(
       const ixDef = program.instructions[property];
       if (ixDef === undefined) return undefined;
 
-      return createInstructionProxy(ixDef, property, program.address, rpc, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed);
+      return createInstructionProxy(ixDef, property, program.address, rpc, rpcSubscriptions, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed);
     },
     ownKeys(): (string | symbol)[] {
-      return ["address", "accounts", ...Object.keys(program.instructions)];
+      return ["address", "accounts", "parseErrors", "parseEvents", ...Object.keys(program.instructions)];
     },
     has(_target: ProgramClientImpl, property: string | symbol): boolean {
-      if (property === "address" || property === "accounts") return true;
+      if (property === "address" || property === "accounts" || property === "parseErrors" || property === "parseEvents") return true;
       if (typeof property === "string") return property in program.instructions;
       return false;
     },
@@ -264,6 +297,7 @@ function createInstructionProxy(
   ixName: string,
   programId: string,
   rpc: KitRpc,
+  rpcSubscriptions: KitRpcSubscriptions | undefined,
   signer: TransactionSigner | undefined,
   commitment: "processed" | "confirmed" | "finalized",
   nonceConfig: NonceConfig | undefined,
@@ -280,7 +314,7 @@ function createInstructionProxy(
     const params = inputParams ?? {};
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
     const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-    return await sendAndConfirm(signedTx, rpc, onConfirmed);
+    return await sendAndConfirm(signedTx, rpc, rpcSubscriptions, onConfirmed, commitment);
   };
 
   const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction> => {
@@ -431,4 +465,15 @@ function describeToken(token: TypeToken<unknown, TypeKind>): string {
     }
   }
   return token.kind;
+}
+
+const ANCHOR_ERROR_LOG_PREFIX = "Program logged: \"Error: ";
+const ANCHOR_ERROR_LOG_SUFFIX = "\"";
+
+function tryParseAnchorError(logLine: string, errorIndex: ProgramErrorMap, programName: string): ProgramError | undefined {
+  if (!logLine.startsWith(ANCHOR_ERROR_LOG_PREFIX) || !logLine.endsWith(ANCHOR_ERROR_LOG_SUFFIX)) return undefined;
+  const errorName = logLine.slice(ANCHOR_ERROR_LOG_PREFIX.length, -ANCHOR_ERROR_LOG_SUFFIX.length);
+  const entry = errorIndex.find((e: { readonly name: string }) => e.name === errorName);
+  if (entry === undefined) return undefined;
+  return new ProgramError(programName, entry.name, entry.index, entry.message);
 }

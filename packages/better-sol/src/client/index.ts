@@ -11,3 +11,5 @@ export type {
   SimulateResult,
   PrepareResult,
 } from "./types";
+export { ProgramError } from "./events";
+export type { ParsedEvent, ProgramErrorMap } from "./events";

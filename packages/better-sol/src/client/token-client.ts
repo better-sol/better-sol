@@ -1,6 +1,6 @@
 import { address as kitAddress, type TransactionSigner, type Signature, type Address as KitAddress, flattenInstructionPlan } from "@solana/kit";
 import { findAssociatedTokenPda, fetchMaybeMint, fetchMaybeToken, getCreateAssociatedTokenIdempotentInstructionAsync, getCreateMintInstructionPlan, getMintToCheckedInstruction, getTransferCheckedInstruction, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import type { AddressInput, KitRpc, SignedTransaction, TokenClient } from "./types";
+import type { AddressInput, KitRpc, KitRpcSubscriptions, SignedTransaction, TokenClient } from "./types";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "./types";
 import { requireSigner, createGeneratedSigner } from "./signer";
 import { buildAndSignTransaction, sendAndConfirm, type NonceConfig, type TransactionCallback } from "./transaction";
@@ -8,6 +8,7 @@ import { buildAndSignTransaction, sendAndConfirm, type NonceConfig, type Transac
 export function buildTokenClient(
   rpc: KitRpc,
   signer: TransactionSigner | undefined,
+  rpcSubscriptions: KitRpcSubscriptions | undefined,
   commitment: "processed" | "confirmed" | "finalized",
   tokenProgramAddress: KitAddress,
   nonceConfig: NonceConfig | undefined,
@@ -18,7 +19,7 @@ export function buildTokenClient(
     return ata;
   };
   const sendFn = async (tx: SignedTransaction): Promise<Signature> => {
-    return await sendAndConfirm(tx, rpc, onConfirmed);
+    return await sendAndConfirm(tx, rpc, rpcSubscriptions, onConfirmed, commitment);
   };
   return {
     getATA: async (params) => await deriveAtaAddr(params.owner, params.mint),

@@ -1,5 +1,7 @@
 export { betterSol, secretKey, keypairFile } from "./client";
 export type { BetterSolClient, BetterSolConfig, BoundAccount, TokenClient, DeriveInput, AddressInput, StepChain, Cluster } from "./client";
+export { ProgramError } from "./client/events";
+export type { ParsedEvent, ProgramErrorMap } from "./client/events";
 
 export { bs, cpi } from "./program";
 export type {

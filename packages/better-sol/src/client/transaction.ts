@@ -30,10 +30,11 @@ import {
 import type {
   InstructionSigningMode,
   KitRpc,
+  KitRpcSubscriptions,
   SignedTransaction,
   SimulateResult,
 } from "./types";
-import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_RETRIES, CONFIRMATION_INTERVAL_MS, type ComputeUnitConfig } from "./types";
+import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_INTERVAL_MS, type ComputeUnitConfig } from "./types";
 import { type LookupTableIndex, type ResolvedAccountMeta, resolveWithLookupTables } from "./lookup-tables";
 
 export type NonceConfig = {
@@ -103,20 +104,70 @@ function toNonce(value: string): Parameters<typeof setTransactionMessageLifetime
 export async function sendAndConfirm(
   transaction: SignedTransaction,
   rpc: KitRpc,
+  rpcSubscriptions: KitRpcSubscriptions | undefined,
   onConfirmed?: TransactionCallback,
+  commitment: "processed" | "confirmed" | "finalized" = "confirmed",
 ): Promise<Signature> {
   const signature = getSignatureFromTransaction(transaction);
   await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
-  // eslint-disable-next-line no-await-in-loop
+
+  if (rpcSubscriptions !== undefined) {
+    return await confirmViaWebSocket(signature, rpcSubscriptions, onConfirmed, commitment);
+  }
+  return await confirmViaPolling(signature, rpc, onConfirmed, commitment);
+}
+
+async function confirmViaWebSocket(
+  signature: Signature,
+  rpcSubscriptions: KitRpcSubscriptions,
+  onConfirmed: TransactionCallback | undefined,
+  commitment: "processed" | "confirmed" | "finalized",
+): Promise<Signature> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CONFIRMATION_INTERVAL_MS * 30);
+
+  try {
+    const subscription = rpcSubscriptions.signatureNotifications(signature, { commitment, enableReceivedNotification: false });
+    const stream = await subscription.subscribe({ abortSignal: controller.signal });
+
+    for await (const notification of stream) {
+      if (notification.value !== undefined && "err" in notification.value && notification.value.err !== undefined && notification.value.err !== null) {
+        throw new Error(`Transaction ${String(signature)} failed: ${JSON.stringify(notification.value.err)}`);
+      }
+      if (notification.value !== undefined && notification.value.err === null) {
+        const slot = "slot" in notification ? (notification.slot as bigint) : 0n;
+        if (onConfirmed !== undefined) onConfirmed(signature, slot);
+        return signature;
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  throw new Error(`Transaction ${String(signature)} confirmation subscription closed without result`);
+}
+
+async function confirmViaPolling(
+  signature: Signature,
+  rpc: KitRpc,
+  onConfirmed: TransactionCallback | undefined,
+  commitment: "processed" | "confirmed" | "finalized",
+): Promise<Signature> {
+  const CONFIRMATION_RETRIES = 30;
   for (let attempt = 0; attempt < CONFIRMATION_RETRIES; attempt++) {
-    // eslint-disable-next-line no-await-in-loop
+    // oxlint-disable-next-line no-await-in-loop — intentional polling for confirmation
     const { value: statuses } = await rpc.getSignatureStatuses([signature], { searchTransactionHistory: true }).send();
     const status = statuses[0];
-    if (status !== null && status !== undefined && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
-      if (onConfirmed !== undefined) onConfirmed(signature, status.slot ?? 0n);
-      return signature;
+    if (status !== null && status !== undefined) {
+      if (status.err !== null && status.err !== undefined) {
+        throw new Error(`Transaction ${String(signature)} failed: ${JSON.stringify(status.err)}`);
+      }
+      if (status.confirmationStatus === commitment || status.confirmationStatus === "finalized") {
+        if (onConfirmed !== undefined) onConfirmed(signature, status.slot ?? 0n);
+        return signature;
+      }
     }
-    // oxlint-disable-next-line no-await-in-loop — intentional sleep between retries
+    // oxlint-disable-next-line no-await-in-loop — intentional sleep between polling retries
     await new Promise((resolve) => setTimeout(resolve, CONFIRMATION_INTERVAL_MS));
   }
   throw new Error(`Transaction ${String(signature)} not confirmed within ${CONFIRMATION_RETRIES * CONFIRMATION_INTERVAL_MS}ms`);
