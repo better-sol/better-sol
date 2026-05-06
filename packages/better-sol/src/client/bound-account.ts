@@ -14,6 +14,16 @@ export class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readon
   ) {}
 
   public async derive(values: DeriveInput<TFields, TSeeds>): Promise<KitAddress> {
+    for (const template of this.definition.seedValues) {
+      if (!template.startsWith("{")) continue;
+      const fieldName = template.slice(1, -1);
+      if (!(fieldName in (values as Record<string, unknown>))) {
+        throw new Error(
+          `better-sol: derive requires seed field "${fieldName}" for account "${this.accountName}"`,
+        );
+      }
+    }
+
     const seeds = this.definition.seedValues.map((template) => {
       if (!template.startsWith("{")) return new TextEncoder().encode(template);
       const fieldName = template.slice(1, -1);

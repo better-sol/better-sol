@@ -30,6 +30,7 @@ export type IrAccount = {
   readonly zeroCopy: boolean;
   readonly seeds: readonly IrSeed[];
   readonly space: number;
+  readonly hasOneFields: readonly string[];
 };
 
 export type IrSeed = {
@@ -65,6 +66,7 @@ type AccountConstraint =
   | { readonly kind: "initIfNeeded"; accountName: string }
   | { readonly kind: "mut"; accountName: string }
   | { readonly kind: "close"; accountName: string; refundTo: string }
+  | { readonly kind: "realloc"; accountName: string; space: number }
   | { readonly kind: "signer" }
   | { readonly kind: "mint"; mutable: boolean }
   | { readonly kind: "tokenAccount"; mutable: boolean }
@@ -90,6 +92,7 @@ export type IrInstruction = {
   readonly accounts: readonly IrInstructionAccount[];
   readonly args: readonly IrInstructionArg[];
   readonly body: string;
+  readonly returnType: IrType | undefined;
 };
 
 export type IrProgram = {

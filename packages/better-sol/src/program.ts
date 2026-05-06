@@ -132,15 +132,20 @@ export class AccountDefinition<TFields extends FieldSchema, TZeroCopy extends bo
     public readonly fields: TFields,
     public readonly seedValues: TSeeds,
     public readonly zeroCopyEnabled: TZeroCopy,
+    public readonly hasOneFields: readonly string[] = [],
   ) {}
 
   public derive<const TNextSeeds extends readonly PdaSeedInput<TFields>[]>(buildSeeds: (seed: PdaSeedBuilder<TFields>) => TNextSeeds): AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>> {
     const seedValues: readonly string[] = buildSeeds(createPdaSeedBuilder<TFields>()).map(normalizePdaSeed);
-    return new AccountDefinition(this.fields, seedValues, this.zeroCopyEnabled) as AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>>;
+    return new AccountDefinition(this.fields, seedValues, this.zeroCopyEnabled, this.hasOneFields) as AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>>;
   }
 
   public zeroCopy(this: AccountDefinition<ZeroCopyFields<TFields>, TZeroCopy, TSeeds>): AccountDefinition<TFields, true, TSeeds> {
-    return new AccountDefinition(this.fields, this.seedValues, true);
+    return new AccountDefinition(this.fields, this.seedValues, true, this.hasOneFields);
+  }
+
+  public hasOne<const TField extends string>(field: TField): AccountDefinition<TFields, TZeroCopy, TSeeds> {
+    return new AccountDefinition(this.fields, this.seedValues, this.zeroCopyEnabled, [...this.hasOneFields, field]);
   }
 }
 
@@ -150,7 +155,7 @@ export type AccountDefs = Readonly<Record<string, AccountDefinition<FieldSchema,
 export type ErrorMessages = Readonly<Record<string, string>>;
 export type EventSchema = Readonly<Record<string, FieldSchema>>;
 
-type AccountConstraintKind = "init" | "initIfNeeded" | "mut" | "close" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";
+type AccountConstraintKind = "init" | "initIfNeeded" | "mut" | "close" | "realloc" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";
 
 export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMutable extends boolean = false> {
   public declare readonly [constraintValue]: TValue;
@@ -160,6 +165,7 @@ export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMut
     public readonly accountDefinition: AccountDefinition<FieldSchema, boolean, readonly string[]> | undefined = undefined,
     public readonly refundTo: string | undefined = undefined,
     public readonly remainingItem: unknown = undefined,
+    public readonly reallocSpace: number | undefined = undefined,
   ) {}
 }
 
@@ -259,6 +265,7 @@ export class InstructionDefinition<TAccounts extends AccountInputs, TArgs extend
     public readonly accounts: TAccounts,
     public readonly args: TArgs,
     public readonly run: unknown,
+    public readonly returns: TypeToken<unknown, TypeKind> | undefined = undefined,
   ) {}
 }
 
@@ -271,12 +278,12 @@ type IxOverloads<TErrors extends ErrorMessages, TEvents extends EventSchema> = {
 
 function makeIx(): IxOverloads<ErrorMessages, EventSchema> {
   const fn = function ix<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined>(
-    config: IxConfig<TAccounts, TArgs, ErrorMessages, EventSchema>,
+    config: IxConfig<TAccounts, TArgs, ErrorMessages, EventSchema> & { readonly returns?: TypeToken<unknown, TypeKind> },
   ): InstructionDefinition<TAccounts | Record<string, never>, TArgs | undefined> {
     const accounts = "accounts" in config && config.accounts !== undefined ? config.accounts : {};
     const args = "args" in config ? config.args : undefined;
     assertDistinctAccountAndArgNames(accounts, args);
-    return new InstructionDefinition(accounts, args, config.run);
+    return new InstructionDefinition(accounts, args, config.run, config.returns);
   };
   return fn as unknown as IxOverloads<ErrorMessages, EventSchema>;
 }
@@ -414,6 +421,11 @@ export const bs = {
   },
   close: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount, refundTo: string): AccountConstraint<AccountData<TAccount> & { key: Address }, "close", true> => {
     return new AccountConstraint("close", true, accountDefinition, refundTo);
+  },
+  realloc: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount, space: number): AccountConstraint<AccountData<TAccount> & { key: Address }, "realloc", true> => {
+    const value = new AccountConstraint("realloc", true, accountDefinition) as unknown as AccountConstraint<AccountData<TAccount> & { key: Address }, "realloc", true>;
+    (value as unknown as { reallocSpace: number }).reallocSpace = space;
+    return value;
   },
   signer: (): AccountConstraint<SignerInfo, "signer", false> => {
     return new AccountConstraint("signer", false);

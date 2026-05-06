@@ -9,7 +9,6 @@ export const expectedDiagnostics: Readonly<Record<string, string>> = {
   "unsupported-mutable-conditional-alias-program.ts": "mutable conditional alias 'selected'",
   "unsupported-nested-function-program.ts": "nested functions",
   "unsupported-object-spread-program.ts": "object spread",
-  "unsupported-return-program.ts": "return statements",
   "unsupported-switch-program.ts": "switch statements",
   "unsupported-template-string-program.ts": "template string expressions",
   "unsupported-try-catch-program.ts": "try/catch/finally",

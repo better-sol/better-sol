@@ -76,6 +76,11 @@ export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, nev
   readonly programs?: TPrograms;
   readonly commitment?: "processed" | "confirmed" | "finalized";
   readonly computeUnits?: ComputeUnitConfig;
+  readonly addressLookupTables?: readonly import("@solana/kit").Address[];
+  readonly durableNonce?: {
+    readonly nonceAccountAddress: import("@solana/kit").Address;
+    readonly nonceAuthority: TransactionSigner;
+  };
 };
 
 export type StepChain<TOutputs extends readonly unknown[], TPrevious extends readonly unknown[] = readonly []> =

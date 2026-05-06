@@ -37,6 +37,11 @@ Current implementation state, identified issues, and prioritized improvements.
 | Instruction plan composability | **Done** | `.plan()` method on instructions |
 | Compute unit estimation | **Done** | `computeUnits` config, `withComputeBudget()` |
 | Event subscription API | **Done** | `onTransaction()` on client |
+| Runtime input validation | **Done** | `validateArgs()` with clear error messages |
+| `better-sol/codec` subpath | **Done** | Standalone codec exports |
+| `bs.realloc()` constraint | **Done** | SDK + CLI transpiler support |
+| PDA derivation input validation | **Done** | Validates seed fields before PDA compute |
+| `has_one` / `belongs_to` constraints | **Done** | `.hasOne("field")` on AccountDefinition + transpiler |
 
 **Total: 155 passing tests (67 SDK + 88 CLI). Zero lint/type/build errors.**
 
@@ -44,9 +49,8 @@ Current implementation state, identified issues, and prioritized improvements.
 
 | Feature | Status |
 |---|---|
-| On-chain deploy tx | Compiler produces `.so`, deploy tx not wired |
-| Update CLI fixtures to use `bs`/`cpi` API | **Done** — all 21 fixtures migrated |
-| Old API rejection | **Done** — parser rejects old API with clear error |
+| ALT support | **Done.** `resolveWithLookupTables` converts `AccountMeta` → `AccountLookupMeta` for addresses found in lookup tables. Index built at client creation via `fetchAddressesForLookupTables`. |
+| Durable nonce | **Done.** `fetchNonce` from `@solana-program/system` decodes nonce value. `setTransactionMessageLifetimeUsingDurableNonce` auto-prepends advance nonce instruction. |
 | Watch mode / hot reload | Not yet implemented |
 | VS Code extension or LSP | Not started |
 
@@ -116,25 +120,25 @@ Current implementation state, identified issues, and prioritized improvements.
 
 9. ~~**Add event subscription API**~~ — **Done.** `onTransaction()` method on `BetterSolClient`.
 
-10. **Export standalone codec functions** — `encodeAccount()`, `decodeInstruction()`, `encodeInstructionData()` from a `better-sol/codec` subpath.
+10. ~~**Export standalone codec functions**~~ — **Done.** `better-sol/codec` subpath exports `encodeField`, `decodeField`, `encodeAccount`, `decodeAccount`, `decodeZeroCopyAccount`, `encodeInstruction`, `anchorDiscriminator`, `accountDiscriminator`.
 
-11. **Add runtime input validation** — throw clear errors for wrong types (expected bigint, got string) instead of cryptic Borsh/RPC errors.
+11. ~~**Add runtime input validation**~~ — **Done.** `validateArgs()` in factory.ts throws clear type-mismatch errors (e.g. `better-sol: instruction "increment" arg "amount" expects u64 (bigint), got 42`) instead of cryptic Borsh/RPC errors.
 
 ### P2 — Medium Priority
 
-12. **Add `bs.realloc()` constraint** — for account resize operations.
+12. ~~**Add `bs.realloc()` constraint**~~ — **Done.** `bs.realloc(AccountDefinition, space)` returns `AccountConstraint<..., "realloc", true>`. CLI transpiles to `#[account(mut, realloc = N, realloc::payer = ..., realloc::zero = N)]`. System program auto-added when realloc is present.
 
-13. **Add instruction return value support** — extract return type from `run()` callback, transpile to `-> Result<ReturnType>`.
+13. ~~**Add instruction return value support**~~ — **Done.** `returns: bs.u64()` in `ix()` config. CLI: `parseReturnType()` extracts type from AST. Transpiler: `return <expr>` generates `return Ok(expr);`, instruction signature uses `-> Result<ReturnType>` instead of `-> Result<()>`. Body now supports return statements (was previously unsupported).
 
-14. **Add address lookup table support** — for versioned transactions with ALTs.
+14. ~~**Add address lookup table support**~~ — **Done.** New module `client/lookup-tables.ts`: `buildLookupTableIndex` fetches all lookup table contents via `fetchAddressesForLookupTables`, builds reverse map (`address → { lookupTableAddress, addressIndex }`). `resolveWithLookupTables` converts matching `AccountMeta` to `AccountLookupMeta` at instruction build time. The v0 transaction compiler automatically generates `addressTableLookups` in the wire format. Signer accounts are excluded from lookup table resolution (signers cannot be in lookup tables).
 
-15. **Add durable nonce transaction support** — for offline signing scenarios.
+15. ~~**Add durable nonce transaction support**~~ — **Done.** `fetchNonce` from `@solana-program/system` properly decodes the nonce account (returns `{ blockhash }` as the nonce value). `setTransactionMessageLifetimeUsingDurableNonce` auto-prepends the `AdvanceNonceAccount` instruction. Threaded through `buildAndSignTransaction` and all instruction methods. Nonce value fetched fresh per transaction.
 
-16. **Split `client.ts` (791 LOC) into modules** — factory, program-client, token-client, transaction, account-meta.
+16. ~~**Split `client.ts` into modules**~~ — **Done.**
 
-17. **Add PDA derivation input validation** — throw if required seed fields are missing.
+17. ~~**Add PDA derivation input validation**~~ — **Done.** `BoundAccountImpl.derive()` now validates that all seed field names are present in the input before computing the PDA.
 
-18. **Add `has_one` / `belongs_to` constraints** — `bs.hasOne("owner")` on AccountDefinition, verified at transpile time.
+18. ~~**Add `has_one` / `belongs_to` constraints**~~ — **Done.** `AccountDefinition.hasOne("field")` adds a has-one constraint. CLI parser extracts `.hasOne()` from chain text, transpiler generates `has_one = field` in account attributes for init, mut, bare, and realloc constraints.
 
 ### P3 — Lower Priority
 

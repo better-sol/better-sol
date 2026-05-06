@@ -174,7 +174,9 @@ function generateInstructionFn(ix: IrInstruction, program: IrProgram): string {
   const argList = args.length > 0 ? `, ${args}` : "";
   const body = transpileBody(ix, program);
   const contextName = body.trim().length === 0 ? "_ctx" : "ctx";
-  return `    pub fn ${toSnake(ix.name)}(${contextName}: Context<${toPascal(ix.name)}>${argList}) -> Result<()> {\n${body}        Ok(())\n    }`;
+  const returnType = ix.returnType !== undefined ? rustType(ix.returnType) : "()";
+  const trailingOk = ix.returnType !== undefined ? "" : "        Ok(())\n";
+  return `    pub fn ${toSnake(ix.name)}(${contextName}: Context<${toPascal(ix.name)}>${argList}) -> Result<${returnType}> {\n${body}${trailingOk}    }`;
 }
 
 function generateAccountsStruct(ix: IrInstruction, accounts: readonly IrAccount[]): string {
@@ -223,6 +225,7 @@ function generateAccountAttrs(
       lines.push(`    ${initKind},`);
       lines.push(`    payer = ${toSnake(payer)},`);
       lines.push(`    space = ${space},`);
+      for (const attr of hasOneConstraints(accountDef)) lines.push(`    ${attr},`);
       if (seeds !== undefined) {
         lines.push(`    seeds = [${seeds}],`);
         lines.push("    bump");
@@ -233,11 +236,16 @@ function generateAccountAttrs(
     case "mut": {
       const accountDef = findAccountDef(c.accountName, accounts);
       const seeds = accountDef !== undefined ? formatSeedsForAttr(accountDef, accounts, ixAccounts, ixArgs, acc.name) : undefined;
-      if (seeds !== undefined) {
+      const hasOneAttrs = hasOneConstraints(accountDef);
+      const hasExtraAttrs = seeds !== undefined || hasOneAttrs.length > 0;
+      if (hasExtraAttrs) {
         lines.push("#[account(");
         lines.push("    mut,");
-        lines.push(`    seeds = [${seeds}],`);
-        lines.push("    bump");
+        for (const attr of hasOneAttrs) lines.push(`    ${attr},`);
+        if (seeds !== undefined) {
+          lines.push(`    seeds = [${seeds}],`);
+          lines.push("    bump");
+        }
         lines.push(")]");
       } else {
         lines.push("#[account(mut)]");
@@ -247,6 +255,22 @@ function generateAccountAttrs(
     case "close":
       lines.push(`#[account(mut, close = ${toSnake(c.refundTo)})]`);
       break;
+    case "realloc": {
+      const accountDef = findAccountDef(c.accountName, accounts);
+      const seeds = accountDef !== undefined ? formatSeedsForAttr(accountDef, accounts, ixAccounts, ixArgs, acc.name) : undefined;
+      const payer = findPayer(ixAccounts);
+      lines.push("#[account(");
+      lines.push("    mut,");
+      lines.push(`    realloc = ${c.space},`);
+      lines.push(`    realloc::payer = ${toSnake(payer)},`);
+      lines.push(`    realloc::zero = ${c.space},`);
+      if (seeds !== undefined) {
+        lines.push(`    seeds = [${seeds}],`);
+        lines.push("    bump");
+      }
+      lines.push(")]");
+      break;
+    }
     case "signer":
       lines.push("#[account(mut)]");
       break;
@@ -259,10 +283,14 @@ function generateAccountAttrs(
     case "bare": {
       const accountDef = findAccountDef(c.accountName, accounts);
       const seeds = accountDef !== undefined ? formatSeedsForAttr(accountDef, accounts, ixAccounts, ixArgs, acc.name) : undefined;
-      if (seeds !== undefined) {
+      const hasOneAttrs = hasOneConstraints(accountDef);
+      if (seeds !== undefined || hasOneAttrs.length > 0) {
         lines.push("#[account(");
-        lines.push(`    seeds = [${seeds}],`);
-        lines.push("    bump");
+        for (const attr of hasOneAttrs) lines.push(`    ${attr},`);
+        if (seeds !== undefined) {
+          lines.push(`    seeds = [${seeds}],`);
+          lines.push("    bump");
+        }
         lines.push(")]");
       }
       break;
@@ -286,7 +314,7 @@ function resolveAccountsStructType(acc: IrInstructionAccount, accounts: readonly
   if (c.kind === "clock") return "Sysvar<'info, Clock>";
   if (c.kind === "remaining") return "/* remaining_accounts */";
 
-  const accountName = c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "mut" || c.kind === "close" || c.kind === "bare"
+  const accountName = c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "mut" || c.kind === "close" || c.kind === "realloc" || c.kind === "bare"
     ? c.accountName
     : acc.name;
 
@@ -308,20 +336,25 @@ function findAccountDef(name: string, accounts: readonly IrAccount[]): IrAccount
   );
 }
 
+function hasOneConstraints(accountDef: IrAccount | undefined): readonly string[] {
+  if (accountDef === undefined || accountDef.hasOneFields.length === 0) return [];
+  return accountDef.hasOneFields.map((field) => `has_one = ${toSnake(field)}`);
+}
+
 function findPayer(allAccounts: readonly IrInstructionAccount[]): string {
   const signer = allAccounts.find((acc) => acc.constraint.kind === "signer");
   return signer !== undefined ? toSnake(signer.name) : "authority";
 }
 
 function needsSystemProgram(ix: IrInstruction): boolean {
-  const hasInit = ix.accounts.some((acc) => acc.constraint.kind === "init" || acc.constraint.kind === "initIfNeeded");
+  const hasInit = ix.accounts.some((acc) => acc.constraint.kind === "init" || acc.constraint.kind === "initIfNeeded" || acc.constraint.kind === "realloc");
   const hasSystemProgram = ix.accounts.some((acc) => acc.constraint.kind === "systemProgram");
   return hasInit && !hasSystemProgram;
 }
 
 function isMutable(acc: IrInstructionAccount): boolean {
   const c = acc.constraint;
-  return c.kind === "mut" || c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "close" ||
+  return c.kind === "mut" || c.kind === "init" || c.kind === "initIfNeeded" || c.kind === "close" || c.kind === "realloc" ||
     (c.kind === "tokenAccount" && c.mutable) ||
     (c.kind === "mint" && c.mutable);
 }

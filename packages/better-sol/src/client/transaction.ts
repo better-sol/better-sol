@@ -8,6 +8,7 @@ import {
   pipe,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
+  setTransactionMessageLifetimeUsingDurableNonce,
   signTransactionMessageWithSigners,
   type AccountMeta,
   type AccountSignerMeta,
@@ -30,6 +31,12 @@ import type {
   SimulateResult,
 } from "./types";
 import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_RETRIES, CONFIRMATION_INTERVAL_MS } from "./types";
+import { type LookupTableIndex, type ResolvedAccountMeta, resolveWithLookupTables } from "./lookup-tables";
+
+export type NonceConfig = {
+  readonly nonceAccountAddress: string;
+  readonly nonceAuthority: TransactionSigner;
+};
 
 export function toSnake(name: string): string {
   return name.replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/^_/, "");
@@ -40,7 +47,22 @@ export async function buildAndSignTransaction(
   rpc: KitRpc,
   signer: TransactionSigner,
   commitment: "processed" | "confirmed" | "finalized",
+  nonceConfig?: NonceConfig,
 ): Promise<SignedTransaction> {
+  if (nonceConfig !== undefined) {
+    const nonceValue = await fetchNonceFromAccount(rpc, nonceConfig.nonceAccountAddress);
+    const message = pipe(
+      createTransactionMessage({ version: 0 }),
+      (tx) => setTransactionMessageFeePayerSigner(signer, tx),
+      (tx) => setTransactionMessageLifetimeUsingDurableNonce(
+        { nonce: nonceValue as never, nonceAccountAddress: kitAddress(nonceConfig.nonceAccountAddress), nonceAuthorityAddress: nonceConfig.nonceAuthority.address },
+        tx,
+      ),
+      (tx) => appendTransactionMessageInstructions(instructions, tx),
+    );
+    return await signTransactionMessageWithSigners(message);
+  }
+
   const { value: latestBlockhash } = await rpc.getLatestBlockhash({ commitment }).send();
   const message = pipe(
     createTransactionMessage({ version: 0 }),
@@ -49,6 +71,12 @@ export async function buildAndSignTransaction(
     (tx) => appendTransactionMessageInstructions(instructions, tx),
   );
   return await signTransactionMessageWithSigners(message);
+}
+
+async function fetchNonceFromAccount(rpc: KitRpc, nonceAccountAddress: string): Promise<string> {
+  const { fetchNonce } = await import("@solana-program/system");
+  const { data: { blockhash } } = await fetchNonce(rpc, kitAddress(nonceAccountAddress));
+  return blockhash;
 }
 
 export async function sendAndConfirm(
@@ -93,7 +121,8 @@ export function buildAccountMetas(
   params: Record<string, unknown>,
   signer: TransactionSigner | undefined,
   mode: InstructionSigningMode,
-): readonly (AccountMeta | AccountSignerMeta)[] {
+  lookupTableIndex?: LookupTableIndex,
+): readonly ResolvedAccountMeta[] {
   const accountMetas: (AccountMeta | AccountSignerMeta)[] = [];
   const accountEntries = Object.entries(ixDef.accounts);
 
@@ -121,6 +150,10 @@ export function buildAccountMetas(
     accountMetas.push({ address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY });
   }
 
+  if (lookupTableIndex !== undefined) {
+    return resolveWithLookupTables(accountMetas, lookupTableIndex);
+  }
+
   return accountMetas;
 }
 
@@ -137,7 +170,7 @@ function resolveAccountMetaInput(
   }
 
   const kind = input.constraintKind;
-  const isWritable = kind === "init" || kind === "initIfNeeded" || kind === "close" || input.mutable;
+  const isWritable = kind === "init" || kind === "initIfNeeded" || kind === "close" || kind === "realloc" || input.mutable;
   const role = accountRole(kind === "signer", isWritable);
 
   if (kind === "systemProgram") return fixedProgramMeta(name, value, SYSTEM_PROGRAM_ADDRESS, role);
@@ -172,7 +205,7 @@ function signerMeta(
   if (typeof value !== "string") throw new Error(`Signer account '${name}' must be an address`);
   const accountAddress = kitAddress(value);
   if (signer !== undefined && accountAddress === signer.address) return { address: accountAddress, role, signer };
-  if (mode === "signed") throw new Error(`Signer '${name}' must match the active signer. Use sol.withSigner() for another signer.`);
+  if (mode === "signed") throw new Error(`Signer '${name}' must match the active signer. Use sol.withSigner() for a different signer.`);
   return { address: accountAddress, role };
 }
 

@@ -39,6 +39,7 @@ type RawAccount = {
   readonly fields: readonly IrAccountField[];
   readonly zeroCopy: boolean;
   readonly seeds: readonly IrSeed[];
+  readonly hasOneFields: readonly string[];
 };
 
 export function parseProgramsFromFile(source: string, filePath: string): readonly IrProgram[] {
@@ -100,8 +101,9 @@ function collectAccounts(sf: TsSourceFile, rawStructZCs: readonly IrStructZC[]):
     const zeroCopy = chainText.includes(".zeroCopy");
     if (zeroCopy) validateZeroCopyFields(name, fields, rawStructZCs);
     const seeds = parseSeeds(chainText);
+    const hasOneFields = parseHasOneFields(chainText);
 
-    accounts.push({ name, fields, zeroCopy, seeds });
+    accounts.push({ name, fields, zeroCopy, seeds, hasOneFields });
   }
 
   return accounts;
@@ -185,7 +187,8 @@ function parseInstructionDefinitions(instructionsObj: ObjectLiteralExpression, r
     const args = parseIxArgs(obj);
     assertDistinctAccountAndArgNames(name, accounts, args);
     const body = extractBody(obj);
-    instructions.push({ name, accounts, args, body });
+    const returnType = parseReturnType(obj);
+    instructions.push({ name, accounts, args, body, returnType });
   }
 
   return instructions;
@@ -258,6 +261,10 @@ function resolveConstraint(prop: Node, accountName: string, rawAccounts: readonl
       const refundTo = callArgId(call, 1) ?? callArgStr(call, 1) ?? "authority";
       return { kind: "close", accountName: callArgId(call, 0) ?? accountName, refundTo };
     }
+    case "realloc": {
+      const reallocSpace = parseInt(call.getArguments()[1]?.getText() ?? "0", 10);
+      return { kind: "realloc", accountName: callArgId(call, 0) ?? accountName, space: isNaN(reallocSpace) ? 0 : reallocSpace };
+    }
     case "remaining": {
       const argText = call.getArguments()[0]?.getText() ?? "";
       if (argText.includes("tokenAccount")) return { kind: "remaining", itemType: "tokenAccount" };
@@ -299,6 +306,14 @@ function extractBody(ixObj: ObjectLiteralExpression): string {
   const arrow = init as ArrowFunction;
   const body = arrow.getBody();
   return body.getText();
+}
+
+function parseReturnType(ixObj: ObjectLiteralExpression): IrType | undefined {
+  const returnsProp = ixObj.getProperty("returns");
+  if (returnsProp === undefined || !isPropAssign(returnsProp)) return undefined;
+  const init = (returnsProp as PropertyAssignment).getInitializer();
+  if (init === undefined) return undefined;
+  return resolveType(init);
 }
 
 function parseFields(obj: ObjectLiteralExpression): readonly IrAccountField[] {
@@ -374,6 +389,16 @@ function parseLiteralSeed(value: string): IrSeed {
   return { kind: "literal", value };
 }
 
+function parseHasOneFields(chainText: string): readonly string[] {
+  const fields: string[] = [];
+  const regex = /\.hasOne\(["']([^"']+)["']\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(chainText)) !== null) {
+    fields.push(match[1]!);
+  }
+  return fields;
+}
+
 function extractPdaArgs(chainText: string): string | undefined {
   const start = chainText.indexOf(".derive(");
   if (start === -1) return undefined;
@@ -403,7 +428,7 @@ function computeSpace(raw: RawAccount, structs: readonly IrStructZC[]): IrAccoun
   const space = raw.zeroCopy
     ? 8 + structLayout(raw.fields, structs).size
     : 8 + raw.fields.reduce((sum, field) => sum + borshFieldSize(field.type, structs), 0);
-  return { name: raw.name, fields: raw.fields, zeroCopy: raw.zeroCopy, seeds: raw.seeds, space };
+  return { name: raw.name, fields: raw.fields, zeroCopy: raw.zeroCopy, seeds: raw.seeds, space, hasOneFields: raw.hasOneFields };
 }
 
 function borshFieldSize(type: IrType, structs: readonly IrStructZC[]): number {

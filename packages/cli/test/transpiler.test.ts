@@ -201,8 +201,26 @@ describe("Transpiler diagnostics", () => {
     expectDiagnostic("{ counter.count = Math.max(counter.count, amount) }", "Supported calls are ctx.require");
   });
 
-  test("rejects return statements", () => {
-    expectDiagnostic("{ return; }", "return statements");
+  test("supports return statements with values", () => {
+    expect(() => generateAnchorProject(parseProgramsFromFile(
+      "import { bs, cpi } from 'better-sol/program'\n" +
+      "const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((seed) => ['counter', seed.authority])\n" +
+      "export const counter = bs.program({\n" +
+      "  name: 'counter',\n" +
+      "  address: '91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs',\n" +
+      "  errors: { Unauthorized: 'Unauthorized' },\n" +
+      "}, ix => ({\n" +
+      "    bad: ix({\n" +
+      "      accounts: { counter: bs.mut(Counter), authority: bs.signer() },\n" +
+      "      args: { amount: bs.u64() },\n" +
+      "      returns: bs.u64(),\n" +
+      "      run: ({ counter, authority }, { amount }, ctx) => {\n" +
+      "        ctx.require(authority === counter.authority, 'Unauthorized');\n" +
+      "        counter.count += amount;\n" +
+      "        return counter.count;\n" +
+      "      },\n" +
+      "    }),\n" +
+      "}))", "ret.ts")[0]!)).not.toThrow();
   });
 
   test("rejects template string expressions", () => {

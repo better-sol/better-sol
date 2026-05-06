@@ -275,7 +275,15 @@ class BodyContext {
       return;
     }
 
-    if (Node.isReturnStatement(statement)) this.unsupported("return statements", statement, "Instruction handlers must complete normally; remove return statements and assign values directly.");
+    if (Node.isReturnStatement(statement)) {
+      const returnExpr = statement.getExpression();
+      if (returnExpr !== undefined) {
+        cw.line(`return Ok(${this.renderExpression(returnExpr, "value")});`);
+      } else {
+        cw.line("return Ok(());");
+      }
+      return;
+    }
     if (Node.isForOfStatement(statement) || Node.isForInStatement(statement)) this.unsupported("for...of/for...in loops", statement, "Use a bounded index loop: for (let i = 0; i < limit; i++). On-chain programs need explicit bounds.");
     if (Node.isWhileStatement(statement) || Node.isDoStatement(statement)) this.unsupported("while/do loops", statement, "Use a bounded for loop: for (let i = 0; i < limit; i++). On-chain programs need explicit bounds.");
     if (Node.isSwitchStatement(statement)) this.unsupported("switch statements", statement, "Use explicit if/else branches.");
@@ -1087,7 +1095,7 @@ class BodyContext {
 
   private isMutableAccount(account: IrInstructionAccount): boolean {
     const constraint = account.constraint;
-    return constraint.kind === "mut" || constraint.kind === "init" || constraint.kind === "close" ||
+    return constraint.kind === "mut" || constraint.kind === "init" || constraint.kind === "initIfNeeded" || constraint.kind === "close" || constraint.kind === "realloc" ||
       (constraint.kind === "tokenAccount" && constraint.mutable) ||
       (constraint.kind === "mint" && constraint.mutable);
   }
