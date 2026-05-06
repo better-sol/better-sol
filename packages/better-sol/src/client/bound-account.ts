@@ -1,4 +1,4 @@
-import { address as kitAddress, fetchEncodedAccount, type Address as KitAddress } from "@solana/kit";
+import { address as kitAddress, fetchEncodedAccount, getProgramDerivedAddress, type Address as KitAddress } from "@solana/kit";
 import { accountDiscriminator, decodeAccount, decodeZeroCopyAccount } from "../coder";
 import { type AccountDefinition, type FieldSchema, type InferFields } from "../program";
 import type { AddressInput, DeriveInput, KitRpc, BoundAccount } from "./types";
@@ -31,7 +31,6 @@ export class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readon
       const raw = (values as Record<string, unknown>)[fieldName];
       return seedToBytes(token, raw, kitAddress);
     });
-    const { getProgramDerivedAddress } = await import("@solana/kit");
     const [pda] = await getProgramDerivedAddress({ programAddress: kitAddress(this.programAddress), seeds });
     return pda;
   }

@@ -2,6 +2,7 @@ import {
   address as kitAddress,
   createSolanaRpc,
   createSolanaRpcSubscriptions,
+  type Address as KitAddress,
   type Instruction,
   type TransactionSigner,
   type Signature,
@@ -35,6 +36,14 @@ import type {
   KitRpcSubscriptions,
   AddressInput,
   InstructionSigningMode,
+  SignerInput,
+  TokenClient,
+  ComputeUnitConfig,
+  SignedTransaction,
+  SimulateResult,
+  PrepareResult,
+  InstructionPlanResult,
+  StepChain,
 } from "./types";
 import { CLUSTER_URLS, CLUSTER_WS_URLS, TOKEN_2022_PROGRAM_ADDRESS } from "./types";
 import { resolveSigner, requireSigner } from "./signer";
@@ -46,15 +55,15 @@ import { buildTokenClient } from "./token-client";
 export { secretKey, keypairFile } from "./signer";
 
 interface ClientCore<TPrograms extends ProgramInputs, THasSigner extends boolean> {
-  readonly payer: THasSigner extends true ? import("@solana/kit").Address : import("@solana/kit").Address | null;
+  readonly payer: THasSigner extends true ? KitAddress : KitAddress | null;
   readonly rpc: KitRpc;
   readonly rpcSubscriptions: KitRpcSubscriptions;
-  readonly token: import("./types").TokenClient;
-  readonly token2022: import("./types").TokenClient;
-  withSigner(signer: import("./types").SignerInput): Promise<BetterSolClient<TPrograms, true>>;
+  readonly token: TokenClient;
+  readonly token2022: TokenClient;
+  withSigner(signer: SignerInput): Promise<BetterSolClient<TPrograms, true>>;
   send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
   batch(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
-  steps<const TOutputs extends readonly unknown[]>(steps: import("./types").StepChain<TOutputs>): Promise<TOutputs>;
+  steps<const TOutputs extends readonly unknown[]>(steps: StepChain<TOutputs>): Promise<TOutputs>;
   getBalance(address: AddressInput): Promise<bigint>;
   transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<Signature>;
   onTransaction(callback: (signature: Signature, result: bigint) => void): () => void;
@@ -67,7 +76,7 @@ type ProgramNamespace<TPrograms extends ProgramInputs> = {
 type BetterSolClientShape<TPrograms extends ProgramInputs, THasSigner extends boolean> = ClientCore<TPrograms, THasSigner> & ProgramNamespace<TPrograms>;
 
 export async function betterSol<const TPrograms extends ProgramInputs = Record<string, never>>(
-  config: BetterSolConfig<TPrograms> & { readonly payer: import("./types").SignerInput },
+  config: BetterSolConfig<TPrograms> & { readonly payer: SignerInput },
 ): Promise<BetterSolClient<TPrograms, true>>;
 export async function betterSol<const TPrograms extends ProgramInputs = Record<string, never>>(
   config: BetterSolConfig<TPrograms>,
@@ -105,7 +114,7 @@ interface ClientParams<TPrograms extends ProgramInputs> {
   readonly rpcSubscriptions: KitRpcSubscriptions;
   readonly signer: TransactionSigner | undefined;
   readonly commitment: "processed" | "confirmed" | "finalized";
-  readonly computeUnits?: import("./types").ComputeUnitConfig;
+  readonly computeUnits?: ComputeUnitConfig;
   readonly nonceConfig?: NonceConfig;
   readonly lookupTableIndex?: LookupTableIndex;
   readonly notifier: ReturnType<typeof createTransactionNotifier>;
@@ -115,7 +124,7 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
   params: ClientParams<TPrograms>,
 ): BetterSolClientShape<TPrograms, THasSigner> {
   const { nonceConfig, lookupTableIndex, notifier } = params;
-  const payer = (params.signer?.address ?? null) as THasSigner extends true ? import("@solana/kit").Address : import("@solana/kit").Address | null;
+  const payer = (params.signer?.address ?? null) as THasSigner extends true ? KitAddress : KitAddress | null;
 
   const core: ClientCore<TPrograms, THasSigner> = {
     payer,
@@ -123,9 +132,9 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
     rpcSubscriptions: params.rpcSubscriptions,
     token: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
     token2022: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_2022_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
-    withSigner: async (signerInput: import("./types").SignerInput): Promise<import("./types").BetterSolClient<TPrograms, true>> => {
+    withSigner: async (signerInput: SignerInput): Promise<BetterSolClient<TPrograms, true>> => {
       const nextSigner = await resolveSigner(signerInput);
-      return buildClientShape<TPrograms, true>({ ...params, signer: nextSigner }) as import("./types").BetterSolClient<TPrograms, true>;
+      return buildClientShape<TPrograms, true>({ ...params, signer: nextSigner }) as BetterSolClient<TPrograms, true>;
     },
     getBalance: async (addressValue: AddressInput): Promise<bigint> => {
       const { value } = await params.rpc.getBalance(kitAddress(addressValue), { commitment: params.commitment }).send();
@@ -181,7 +190,7 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
 }
 
 interface ProgramClientImpl {
-  readonly address: import("@solana/kit").Address;
+  readonly address: KitAddress;
   readonly accounts: Record<string, unknown>;
 }
 
@@ -242,10 +251,10 @@ interface InstructionFn {
   (params?: Record<string, unknown>): Promise<Signature>;
   send(params?: Record<string, unknown>): Promise<Signature>;
   instruction(params?: Record<string, unknown>): Promise<Instruction>;
-  transaction(params?: Record<string, unknown>): Promise<import("./types").SignedTransaction>;
-  simulate(params?: Record<string, unknown>): Promise<import("./types").SimulateResult>;
-  prepare(params?: Record<string, unknown>): Promise<import("./types").PrepareResult>;
-  plan(params?: Record<string, unknown>): Promise<import("./types").InstructionPlanResult>;
+  transaction(params?: Record<string, unknown>): Promise<SignedTransaction>;
+  simulate(params?: Record<string, unknown>): Promise<SimulateResult>;
+  prepare(params?: Record<string, unknown>): Promise<PrepareResult>;
+  plan(params?: Record<string, unknown>): Promise<InstructionPlanResult>;
 }
 
 const instructionCache = new WeakMap<InstructionDefinition<AccountInputs, ArgsSchema | undefined>, InstructionFn>();
@@ -279,14 +288,14 @@ function createInstructionProxy(
     return await buildInstruction(ixDef, params, programId, snakeName, signer, "unsigned", lookupTableIndex);
   };
 
-  const transactionFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").SignedTransaction> => {
+  const transactionFn = async (inputParams?: Record<string, unknown>): Promise<SignedTransaction> => {
     const params = inputParams ?? {};
     const activeSigner = requireSigner(signer);
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
     return await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
   };
 
-  const simulateFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").SimulateResult> => {
+  const simulateFn = async (inputParams?: Record<string, unknown>): Promise<SimulateResult> => {
     const params = inputParams ?? {};
     const activeSigner = requireSigner(signer);
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
@@ -294,16 +303,16 @@ function createInstructionProxy(
     return await runSimulation(signedTx, rpc, commitment);
   };
 
-  const prepareFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").PrepareResult> => {
+  const prepareFn = async (inputParams?: Record<string, unknown>): Promise<PrepareResult> => {
     const params = inputParams ?? {};
     const activeSigner = requireSigner(signer);
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
-    const pubkeys: Record<string, import("@solana/kit").Address> = {};
+    const pubkeys: Record<string, KitAddress> = {};
     if (ix.accounts !== undefined) for (const meta of ix.accounts) pubkeys[meta.address] = meta.address;
     return { instruction: ix, signers: [activeSigner], pubkeys };
   };
 
-  const planFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").InstructionPlanResult> => {
+  const planFn = async (inputParams?: Record<string, unknown>): Promise<InstructionPlanResult> => {
     const params = inputParams ?? {};
     const activeSigner = requireSigner(signer);
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
