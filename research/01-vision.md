@@ -23,13 +23,14 @@ programs/counter.ts                ← single TypeScript source of truth
         ├── ▶ better-sol (runtime library, ships to browsers)
         │      typed client SDK: instruction calls, PDA derivation,
         │      account fetching (Borsh + zero-copy), token operations,
-        │      wallet adapters (Wallet Adapter, Reown, Privy, Dynamic)
+        │      wallet adapters (Wallet Adapter, Reown, Privy, Dynamic),
+        │      WebSocket confirmation, typed error parsing, event decoding
         │
         ├── ▶ @better-sol/cli transpiler (dev dependency only)
         │      ts-morph AST parser → IR → Anchor Rust generator
         │      → lib.rs + Cargo.toml + idl.json
         │
-        ├── ▶ apps/compiler-api (Rust + Axum cloud compiler)
+        ├── ▶ apps/compiler-api (Bun cloud compiler)
         │      Receives generated Rust → runs cargo build-sbf
         │      → returns .so binary
         │
@@ -42,24 +43,34 @@ programs/counter.ts                ← single TypeScript source of truth
 
 ```
 packages/better-sol/          Runtime library (ships to browsers)
-  src/program.ts              Program definition DSL (bs namespace)
-  src/client.ts               Client factory + program client
-  src/coder.ts                Borsh + zero-copy encode/decode
-  src/idl.ts                  fromIdl() Anchor IDL import
+  src/program.ts              Program definition DSL (bs namespace, 497 LOC)
+  src/client/                 Client SDK modules (1,475 LOC total)
+    factory.ts                betterSol() entry, Proxy-based program client (478 LOC)
+    transaction.ts            Build/sign/send with WebSocket confirmation (332 LOC)
+    events.ts                 Typed error parsing + Anchor event decoding (129 LOC)
+    bound-account.ts          PDA derivation + account fetch (57 LOC)
+    token-client.ts           Token + Token-2022 operations (79 LOC)
+    lookup-tables.ts          Address lookup table resolution (63 LOC)
+    signer.ts                 Keypair loading, seed encoding (70 LOC)
+    types.ts                  All type definitions, config types (252 LOC)
+    index.ts                  Barrel re-exports
+  src/coder.ts                Borsh + zero-copy encode/decode (416 LOC)
+  src/idl.ts                  fromIdl() Anchor IDL import (223 LOC)
+  src/codec.ts                Standalone codec subpath exports (12 LOC)
   src/wallets/                Wallet adapter subpaths
 
 packages/cli/                 CLI tool (never shipped to browsers)
-  src/parser/ast.ts           ts-morph AST parser (565 LOC)
+  src/parser/ast.ts           ts-morph AST parser
   src/parser/discover.ts      Glob-based file discovery
-  src/generator/rust.ts       Anchor Rust + Cargo.toml + IDL (574 LOC)
-  src/generator/body.ts       run() body → Rust transpiler (1154 LOC)
+  src/generator/rust.ts       Anchor Rust + Cargo.toml + IDL
+  src/generator/body.ts       run() body → Rust transpiler
   src/generator/db.ts         Drizzle schema generator
-  src/ir/types.ts             Intermediate representation (103 LOC)
+  src/ir/types.ts             Intermediate representation
   src/commands/               create, deploy, login, verify, generate
 
-apps/compiler-api/            Rust cloud compiler (optional, self-hostable)
-  src/main.rs                 Axum server
-  src/compiler.rs             cargo build-sbf runner
+apps/compiler-api/            Bun cloud compiler (optional, self-hostable)
+  src/index.ts                Bun HTTP server
+  src/compile.ts              cargo build-sbf runner
 ```
 
 ## Design Principles
@@ -68,8 +79,8 @@ apps/compiler-api/            Rust cloud compiler (optional, self-hostable)
 No config files. No code generation step for the client. No boilerplate. One import, one definition, immediate use. Every beloved TypeScript library (Zod, Drizzle, tRPC) follows this pattern.
 
 ```typescript
-import { bs } from "better-sol/program"  // ← one import
-const Counter = bs.account({ ... })      // ← define
+import { bs } from "better-sol/program"
+const Counter = bs.account({ ... })
 // Counter is immediately usable as a type and runtime value
 ```
 
@@ -86,14 +97,6 @@ const counter = bs.program({ ... }, ix => ({ ... }))
 ### 3. Types Are Inferred, Never Written
 Account fields, instruction parameters, PDA seed inputs, error names, event payloads — all inferred from the definition via TypeScript's type-level programming. The developer never writes a type annotation for Solana data structures.
 
-```typescript
-// These types are INFERRED, never written by hand:
-type CounterData = bs.InferFields<typeof Counter.fields>
-// → { count: bigint; authority: Address; isActive: boolean }
-type IncrementAccounts = bs.InferAccounts<typeof counter, "increment">
-// → { counter: { count: bigint; ... }; authority: Address }
-```
-
 ### 4. One Namespace
 All program definition primitives live under `bs`. No flat export soup of 18 cryptic names. Autocomplete shows everything by typing `bs.`. This follows Zod's `z.string()` pattern.
 
@@ -109,6 +112,9 @@ The transpiler rejects 18 categories of unsupported TypeScript patterns with spe
 
 ### 7. Conservative Target
 The transpiler targets Anchor Rust 1.0.x specifically, not raw `solana-program`. This is the right choice: Anchor is the most widely used Solana program framework, its IDL format is the ecosystem standard, and its account constraint model covers the vast majority of use cases.
+
+### 8. Zero Unsafe Casts
+The codebase enforces strict type safety: zero `as any`, zero `as never`, and only 3 irreducible `as unknown as` casts (all proven impossible to eliminate via attempted alternatives). Named imports replace all inline `import()` type references. Type guards replace dynamic `instanceof` checks on branded types.
 
 ## The 5-Step Flow
 
@@ -146,3 +152,6 @@ Zero Rust. Zero config files. Zero code generation for the client. Zero dependen
 | No `any`, no `@ts-ignore` | Strict type safety throughout | Caught design bugs at type-check time |
 | Node.js + Bun for CLI | `npx` compat via Node.js target | Users don't need Bun installed |
 | Runtime schema = transpiler source | Same `bs.program()` object used by both | Single source of truth, no sync drift |
+| Proxy-based program client | tRPC `createRecursiveProxy` pattern | Eliminates `Record<string, unknown>` intermediate, preserves reference equality via `WeakMap` cache |
+| WebSocket-first confirmation | `signatureNotifications` subscription over polling | ~400ms confirmation latency vs 1-5s polling |
+| Instance methods for error/event parsing | `sol.counter.parseErrors(logs)`, not standalone | Discoverability, consistency, cached discriminator index |

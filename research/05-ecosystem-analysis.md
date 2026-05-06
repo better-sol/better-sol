@@ -6,241 +6,122 @@ Analysis of official Solana SDKs, Anchor, and competing approaches. Used to info
 
 ## 1. Official Solana SDK (`@solana/kit`)
 
-### Architecture
-
-The official TypeScript SDK (v6.8.0) is organized into layered, composable primitives:
-
-```
-@solana/kit
-  ├── RPC layer: createSolanaRpc(), createSolanaRpcSubscriptions()
-  ├── Transaction layer: createTransactionMessage(), signTransactionMessageWithSigners()
-  ├── Instruction plans: parallelInstructionPlan(), sequentialInstructionPlan()
-  ├── Codec layer: getAddressEncoder(), getU64Encoder(), getStructEncoder()
-  ├── Program SDKs: @solana-program/token, @solana-program/system
-  └── Reactive stores: createReactiveStoreWithInitialValueAndSlotTracking()
-```
-
 ### What better-sol Adopts
 
-- Uses `@solana/kit` as the foundation for RPC, transactions, subscriptions, and address encoding
+- Uses `@solana/kit` as foundation for RPC, transactions, subscriptions, and address encoding
 - Uses `@solana-program/token` and `@solana-program/system` for token and SOL operations
 - Follows the `TransactionSigner` interface for wallet integration
 - Uses `Instruction` type as the return type for `.instruction()` method
+- Re-exports instruction plan utilities (`sequentialInstructionPlan`, `parallelInstructionPlan`, etc.)
 
 ### What better-sol Abstracts Away
 
-- Manual transaction message building (`createTransactionMessage` → `setFeePayer` → `setLifetime` → `appendInstructions`)
-- Explicit signing (`signTransactionMessageWithSigners`)
-- Manual confirmation polling
+- Manual transaction message building (create → setFeePayer → setLifetime → append)
+- Explicit signing
+- Confirmation polling (WebSocket-first, polling fallback)
 - Account meta construction (role: writable/signer determination)
+- Compute budget instruction management
 
-### What better-sol Is Missing
+### What better-sol Has That @solana/kit Doesn't
 
-The official SDK's instruction plan system is more sophisticated:
-
-| Feature | @solana/kit | better-sol |
+| Feature | better-sol | @solana/kit |
 |---|---|---|
-| Sequential plans | `sequentialInstructionPlan()` | `sol.send([...])` |
-| Parallel plans | `parallelInstructionPlan()` | ❌ Not yet |
-| Non-divisible sequences | `nonDivisibleSequentialInstructionPlan()` | ❌ Not yet |
-| Message packer (large txs) | `getLinearMessagePackerInstructionPlan()` | ❌ Not yet |
-| Reallocation packer | `getReallocMessagePackerInstructionPlan()` | ❌ Not yet |
-| Transaction planner | `createTransactionPlanner()` | ❌ Implicit only |
-| Compute unit estimation | `estimateComputeUnitLimitFactory()` | ❌ Not yet |
-| Durable nonce transactions | `sendAndConfirmDurableNonceTransactionFactory()` | ❌ Not yet |
-| Reactive stores | `createReactiveStoreWithInitialValueAndSlotTracking()` | ❌ Out of scope |
-
-### Design Conflict: Instruction Lifecycle Conflation
-
-The official SDK intentionally separates: instruction building → transaction planning → signing → sending → confirming. better-sol combines these into a single `.send()` method by default, with individual steps available via `.instruction()`, `.transaction()`, `.simulate()`, `.prepare()`.
-
-**Risk**: Developers who learn better-sol may not understand the Solana transaction lifecycle, making debugging harder when things go wrong.
-
-**Mitigation**: The individual step methods are available and documented. The convenience API is a progressive enhancement, not a replacement for understanding.
+| Program definition DSL | `bs.program()` | None |
+| Typed instruction methods | Auto from definition | Manual per-program SDKs |
+| PDA derivation from seeds | `accounts.Counter.derive({...})` | Manual `getProgramDerivedAddress()` |
+| Account fetching with decode | `accounts.Counter.fetch(addr)` | Manual codec + RPC |
+| Error parsing | `sol.counter.parseErrors(logs)` | Manual |
+| Event parsing | `sol.counter.parseEvents(logs)` | Manual |
+| Token convenience API | `sol.token.createMint({...})` | Manual instruction composition |
 
 ---
 
 ## 2. Anchor Framework
 
-### Architecture
-
-Anchor is the most widely used Solana program framework. Four major components:
-
-1. **`anchor-lang`** — Rust eDSL for onchain programs
-   - `#[program]` — instruction module with auto-generated dispatch
-   - `#[derive(Accounts)]` — account validation, serialization, constraint checking
-   - `#[account]` / `#[account(zero_copy)]` — account data structures
-   - `#[event]` + `emit!()` — structured event logging
-   - `#[error_code]` — custom error types
-   - `declare_id!()` — program ID constant
-   - `declare_program!()` (v1.0+) — import external programs from IDL
-
-2. **`anchor-syn`** — proc-macro codegen backend
-   - Parses `#[program]` module into IR
-   - Generates dispatch logic, account validation, CPI clients, IDL
-
-3. **Anchor TypeScript SDK** (`@coral-xyz/anchor`)
-   - `Program<IDL>` class with methods builder
-   - `program.methods.instructionName(args).accounts({...}).rpc()`
-   - BorshCoder for encode/decode
-   - Account resolution (PDA derivation from IDL seeds)
-   - Provider (Wallet + Connection) abstraction
-   - Workspace (auto-load IDL + program from config)
-   - Event listener (`program.addEventListener()`)
-
-4. **Anchor CLI** (`anchor`)
-   - `anchor init/build/deploy/test`
-   - `anchor idl init/fetch/upgrade/close`
-   - `anchor keys list/sync`
-
 ### What better-sol Adopts from Anchor
 
-- **Account constraint model** — `bs.init()`, `bs.mut()`, `bs.close()`, `bs.signer()`, etc. map directly to Anchor's `#[derive(Accounts)]` attributes
-- **Instruction discriminators** — 8-byte SHA256 prefix, matching Anchor's `DISCRIMINATOR` convention
-- **Borsh serialization** — account data and instruction args use Anchor-compatible Borsh encoding
-- **IDL format** — generated IDL is Anchor-compatible for ecosystem tooling compatibility
-- **Error codes** — `#[error_code]` enum with `#[msg()]` attributes
-- **Event system** — `#[event]` + `emit!()` pattern
-- **Zero-copy accounts** — `#[account(zero_copy)]` with `AccountLoader`
+- Account constraint model (`bs.init()`, `bs.mut()`, etc. → Anchor's `#[derive(Accounts)]`)
+- Instruction discriminators (8-byte SHA256 prefix)
+- Borsh serialization
+- IDL format compatibility
+- Error codes with named messages
+- Event system (`#[event]` + `emit!()`)
+- Zero-copy accounts (`#[account(zero_copy)]` with `AccountLoader`)
 
 ### What better-sol Improves Over Anchor
 
 | Aspect | Anchor | better-sol |
 |---|---|---|
-| **Program language** | Rust (steep learning curve for TS devs) | TypeScript (familiar) |
-| **Client SDK** | Separate IDL → codegen step | Same definition = client, zero codegen |
-| **Single source of truth** | Rust + IDL + separate TS client | One `.ts` file |
-| **Local toolchain** | Rust, Cargo, Solana CLI, BPF target | None (cloud compilation) |
-| **TypeScript idioms** | Wraps Rust concepts | Namespaced factories, chained builders |
-| **Wallet adapters** | Roll your own | Built-in for 4 major providers |
-| **Token-2022** | Separate package, manual config | First-class parallel API (`sol.token2022.*`) |
-| **DB schema** | Not provided | Drizzle ORM generation |
-| **Error messages** | `AnchorError: 0x1` (cryptic) | Named errors with messages at transpile time |
+| Program language | Rust | TypeScript (transpiled to Anchor Rust) |
+| Client SDK | Separate IDL → codegen step | Same definition = client, zero codegen |
+| Single source of truth | Rust + IDL + separate TS client | One `.ts` file |
+| Local toolchain | Rust, Cargo, Solana CLI | None (cloud compilation) |
+| Error messages | `AnchorError: 0x1` | Named errors with human messages |
+| Token-2022 | Separate package | First-class parallel API |
 
 ### What Anchor Does Better
 
-- **Production maturity** — battle-tested across thousands of programs
-- **Full Rust expressiveness** — can use any Rust library, macro, or pattern
-- **Account validation** — richer constraint model (`has_one`, `belongs_to`, `constraint`)
-- **Multiple program types** — programs, interfaces, associated token
-- **Instruction return values** — `-> Result<ReturnType>` supported
-- **CPI composition** — `declare_program!()` for importing external programs
-- **Ecosystem tooling** — IDL explorers, verified builds, security auditors familiar with the format
+- Production maturity (battle-tested)
+- Full Rust expressiveness
+- `declare_program!()` for external program imports
+- Ecosystem tooling (IDL explorers, verified builds)
 
-### Key Insight: Anchor Compatibility = Ecosystem Compatibility
+### Key Insight
 
-By targeting Anchor Rust as the transpiler output, better-sol programs are:
-- Auditable by any Anchor-familiar security auditor
-- Verifiable via OtterSec and Sec3 verified-builds
-- Interoperable with Anchor-based frontends and indexers
-- Deployable via standard Solana CLI as a fallback
-
-This is the right trade-off: better-sol innovates on the development experience while maintaining full compatibility with the Anchor ecosystem.
+By targeting Anchor Rust as transpiler output, better-sol programs are auditable by Anchor-familiar auditors, verifiable via OtterSec/Sec3, and interoperable with the Anchor ecosystem.
 
 ---
 
-## 3. Competitor Landscape
+## 3. DX Principles (from Library Analysis)
 
-### shank + Codama (Metaplex)
-
-- Shank: Rust IDL extraction from native Solana programs
-- Codama: Autogenerated TypeScript clients from IDL specs
-- **Difference from better-sol**: Rust-first, code generation required, no TypeScript → Rust path
-
-### Solana Playground
-
-- Browser-based IDE for Solana development
-- Supports Anchor and native Rust
-- **Difference from better-sol**: Browser-only, Rust-only, no TypeScript DSL
-
-### Seahorse (by Solana Foundation)
-
-- Python → Anchor Rust transpiler
-- **Difference from better-sol**: Python, not TypeScript; different target audience
-
-### Neptune (by Triton)
-
-- TypeScript-based Solana program framework
-- **Difference from better-sol**: Programs run in a modified SVM runtime, not standard Solana
-
----
-
-## 4. DX Principles (from Library Analysis)
-
-Analysis of Zod, Drizzle, Better Auth, tRPC, and ElysiaJS informed the SDK design:
-
-| Principle | Source | Application in better-sol |
+| Principle | Source | Application |
 |---|---|---|
 | Import → define → use | All | `import { bs }` → `bs.account({...})` → use |
 | Types inferred, never written | Zod | `InferFields`, `InferAccounts`, `InferArgs` |
 | No code generation | Drizzle | Definition = client SDK at runtime |
-| Single import namespace | Zod | `bs.*` contains everything |
-| Plugin-based composition | Better Auth | `programs: { counter, amm }` in `betterSol()` |
-| Scoped type inference | ElysiaJS | `ix()` callback inherits error/event types from `bs.program()` config |
-| Errors name the exact field | Zod | 18 transpiler diagnostics name the line and pattern |
+| Single import namespace | Zod | `bs.*` |
+| Proxy-based client | tRPC | `createProgramClient()` with Proxy traps |
+| Errors name the exact field | Zod | 18 transpiler diagnostics + runtime validation errors |
 
-### Anti-Patterns Avoided
+---
 
-1. **Setup > coding** — no config files, no toolchain installs (cloud compilation)
-2. **Code generation required** — client works without any generation step
-3. **Magic strings** — error names and event names are typed from the definition
-4. **Framework lock-in** — programs are plain TypeScript; the transpiler is a separate tool
+## 4. Completed Ecosystem Features
+
+All P1 and P2 features from the original ecosystem analysis are now implemented:
+
+| Feature | Status |
+|---|---|
+| Instruction plan composability | **Done** — `.plan()` method, re-exported Kit plan utilities |
+| Compute unit estimation | **Done** — `computeUnits` config, `withComputeBudget()` |
+| Event subscription API | **Done** — `onTransaction()` pub/sub |
+| Runtime input validation | **Done** — `validateArgs()` with clear error messages |
+| Address lookup tables | **Done** — `addressLookupTables` config, `resolveWithLookupTables()` |
+| Durable nonce transactions | **Done** — `durableNonce` config, `fetchNonce` + auto-prepend |
+| `has_one` / `belongs_to` constraints | **Done** |
+| `bs.realloc()` constraint | **Done** |
+| Instruction return values | **Done** — `returns:` config, `return <expr>` in body |
+| WebSocket transaction confirmation | **Done** — `signatureNotifications` subscription |
+| Typed program error parsing | **Done** — `ProgramError` class, `parseErrors()` on program client |
+| Anchor event parsing | **Done** — `parseEvents()` on program client, discriminator matching |
 
 ---
 
 ## 5. Key Design Trade-Offs
 
-### Trade-off: Anchor Compatibility vs. Higher-Level Abstraction
+### Instance Methods vs Standalone Functions
 
-**Chosen**: Target Anchor Rust directly. The DSL maps constraints, accounts, and instructions to Anchor equivalents with minimal abstraction.
+**Decision**: Error parsing (`parseErrors`) and event parsing (`parseEvents`) are instance methods on the program client, not standalone functions.
 
-**Alternative considered**: Create a higher-level abstraction that generates Anchor Rust indirectly. Rejected because:
-- Every abstraction layer adds potential for generated code that doesn't compile
-- Anchor is the ecosystem standard; compatibility is more valuable than novelty
-- Security auditors need to understand the generated code
-- The "Anchor but in TypeScript" value proposition is already compelling enough
+**Rationale**: Consistency (every program interaction goes through `sol.counter.X()`), discoverability (autocomplete shows everything), caching (discriminator index lives on the instance), and encapsulation (user doesn't need a separate program reference). The internal module boundary (`events.ts`) exports standalone functions for direct testing.
 
-### Trade-off: Single `bs` Namespace vs. Separate Type/Constraint Imports
+### Proxy vs Static Object
 
-**Chosen**: Single `bs` namespace containing types, constraints, and definitions.
+**Decision**: JavaScript Proxy for program client (tRPC pattern).
 
-**Alternative considered**: Separate imports for types (`bs.u64()`), constraints (`cs.mut()`), and definitions (`def.account()`). Rejected because:
-- Three imports for one task is worse than one
-- Zod proves that one namespace works for diverse primitives
-- The boundary between "type" and "constraint" is not always clear to users
+**Rationale**: Eliminates `Record<string, unknown>` intermediate type that required unsafe casts. Proxy traps (`ownKeys`, `has`, `getOwnPropertyDescriptor`) ensure transparency. `WeakMap` cache preserves reference equality. `then`/`toJSON` guards prevent Promise confusion.
 
-### Trade-off: `cpi` as Separate Import vs. Under `bs`
+### WebSocket-First Confirmation
 
-**Chosen**: Separate `cpi` import for transpiler-only stubs.
+**Decision**: `signatureNotifications` WebSocket subscription with polling fallback.
 
-**Alternative considered**: `bs.cpi.token.transfer()`. Rejected because:
-- CPI stubs are never used outside `run()` bodies
-- A separate import makes the transpiler boundary explicit
-- Tree-shaking is simpler with a separate module
-- Avoids confusion with client-side `sol.token.transfer()`
-
-### Trade-off: `run()` as Function Body vs. Template Literal
-
-**Chosen**: `run()` as a regular arrow function with typed parameters.
-
-**Alternative considered**: Tagged template literal or separate `.behavior()` method. Rejected because:
-- Arrow functions provide TypeScript autocomplete and type checking
-- Template literals don't offer the same type inference
-- A separate method would require a different API shape for the same concept
-- The "transpiler-only" nature is communicated by the `cpi` import and documentation, not forced by syntax
-
----
-
-## 6. Missing Ecosystem Features (Priority)
-
-| Feature | Priority | Source of truth |
-|---|---|---|
-| Instruction plan composability (parallel, messagePacker) | P1 | @solana/kit |
-| Compute unit estimation and priority fees | P1 | @solana/kit |
-| Event subscription API | P1 | Anchor |
-| Reallocation support (`bs.realloc()`) | P2 | Anchor |
-| `has_one` / `belongs_to` constraints | P2 | Anchor |
-| Durable nonce transactions | P2 | @solana/kit |
-| Address lookup tables | P2 | @solana/kit |
-| Instruction return values | P2 | Anchor |
-| Reactive stores for UI frameworks | Out of scope | @solana/kit |
+**Rationale**: ~400ms confirmation vs 1-5s polling. Kit's built-in `sendAndConfirmTransactionFactory` is cluster-branded and doesn't work with custom RPC URLs, so we implement the subscription directly. Polling fallback ensures compatibility with any RPC endpoint.
