@@ -1,0 +1,70 @@
+---
+title: Installation
+description: Set up better-sol and prepare for your first deploy.
+---
+
+## Prerequisites
+
+You need **Node.js 22** or later. That is the only hard requirement.
+
+If you plan to deploy programs to a real cluster (devnet, testnet, or mainnet), the CLI will automatically install the Solana CLI for you when you run `deploy`. You do not need to set it up ahead of time.
+
+## Install the SDK
+
+```bash
+npm install better-sol
+```
+
+This gives you the runtime library: the program definition DSL, the typed client, token operations, wallet adapters, and the Borsh codec.
+
+## Install the CLI
+
+The CLI is a dev dependency. You run it with `npx`, so there is no global install.
+
+```bash
+npm install -D @better-sol/cli
+```
+
+You can also run it directly without installing:
+
+```bash
+npx @better-sol/cli --help
+```
+
+## API Key (optional)
+
+The CLI compiles your program by sending the generated Rust to a cloud compiler at `better-sol.dev`. An API key is **not required**. You can deploy right away without one.
+
+### Rate limits
+
+Without an API key, you are limited to **5 compiles per hour**. This is fine for learning and prototyping.
+
+With an API key, the limit is **100 compiles per hour**. If you are actively developing and deploying often, get a key.
+
+### Getting your API key
+
+Go to the [better-sol dashboard](/dash) and open the **API Keys** page. Create a new key and copy it.
+
+Then save it to your machine:
+
+```bash
+npx @better-sol/cli login
+```
+
+The CLI will ask you to paste your key. It gets stored at `~/.better-sol/auth.json` so you never have to enter it again.
+
+<Callout type="info">
+The API key is only used by the CLI for cloud compilation. The runtime SDK (`better-sol`) never sends anything to our servers. Your program definitions, account data, and private keys stay on your machine.
+</Callout>
+
+## Verify the setup
+
+Run the CLI with no arguments to confirm it works:
+
+```bash
+npx @better-sol/cli --help
+```
+
+You should see the list of commands: `create`, `login`, `deploy`, `generate`, `verify`.
+
+Next, [create your first program](/docs/getting-started/your-first-program).

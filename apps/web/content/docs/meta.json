@@ -1,0 +1,8 @@
+{
+  "pages": [
+    "---Getting Started---",
+    "getting-started/installation",
+    "getting-started/your-first-program",
+    "getting-started/project-structure"
+  ]
+}

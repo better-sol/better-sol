@@ -1,0 +1,55 @@
+---
+title: better-sol
+description: TypeScript-first Solana development. Write programs in TypeScript, deploy to Solana.
+---
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+better-sol is a TypeScript-first Solana development toolchain. You write your program definition in TypeScript, and it produces both the on-chain program and a fully typed client SDK from the same source.
+
+No Rust toolchain. No code generation step. No IDL files to keep in sync.
+
+## The idea
+
+```typescript
+import { bs } from "better-sol/program"
+
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+}).derive((seed) => ["counter", seed.authority])
+
+export const counter = bs.program({
+  name: "counter",
+  address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
+  accounts: { Counter },
+  errors: {
+    Unauthorized: "Only the authority can update this counter",
+  },
+}, ix => ({
+  increment: ix({
+    accounts: {
+      counter: bs.mut(Counter),
+      authority: bs.signer(),
+    },
+    args: { amount: bs.u64() },
+    run: ({ counter, authority }, { amount }, ctx) => {
+      ctx.require(authority === counter.authority, "Unauthorized")
+      counter.count += amount
+    },
+  }),
+}))
+```
+
+That one file does three jobs:
+
+1. **The transpiler source.** The CLI converts it to Anchor Rust, compiles it, and deploys the bytecode to Solana.
+2. **The typed client.** Pass it to `betterSol()` and you get `sol.counter.increment({ counter, amount })` with full type inference.
+3. **The source of truth.** Account layouts, PDA seeds, instruction parameters, error names, all in one place.
+
+## Quick start
+
+<Cards>
+  <Card title="Installation" href="/docs/getting-started/installation" description="Set up the SDK and CLI in under a minute." />
+  <Card title="Your First Program" href="/docs/getting-started/your-first-program" description="Build, deploy, and interact with a counter on devnet." />
+</Cards>
