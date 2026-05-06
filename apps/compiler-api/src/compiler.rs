@@ -1,14 +1,10 @@
 use crate::error::ApiError;
-use crate::idl::IdlDocument;
-use crate::storage::StoredArtifact;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
 use tokio::process::Command;
 use tokio::time::timeout;
-use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct CompileRequest {
@@ -17,23 +13,13 @@ pub struct CompileRequest {
     pub version: String,
     pub lib_rs: String,
     pub cargo_toml: Option<String>,
-    pub idl: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct CompileResponse {
-    pub id: String,
-    pub name: String,
-    pub program_id: String,
-    pub source_hash: String,
-    pub bytecode_hash: Option<String>,
+pub struct CompileOutput {
     pub bytecode: Option<String>,
-    pub size_bytes: Option<u64>,
-    pub compile_time_ms: i64,
+    pub cargo_toml: String,
     pub logs: String,
-    pub idl_url: String,
-    pub artifact_url: String,
-    pub source_url: String,
 }
 
 impl CompileRequest {
@@ -59,76 +45,33 @@ pub async fn compile(
     request: CompileRequest,
     enable_build: bool,
     build_timeout: Duration,
-) -> Result<(CompileResponse, StoredArtifact), ApiError> {
-    let start = std::time::Instant::now();
+) -> Result<CompileOutput, ApiError> {
     request.validate()?;
-
-    let id = Uuid::new_v4().to_string();
-    let source_hash = hash_hex(request.lib_rs.as_bytes());
-    let idl = request.idl.map_or_else(
-        || IdlDocument::placeholder(&request.name, &request.version, &request.program_id),
-        |document| IdlDocument {
-            name: request.name.clone(),
-            version: request.version.clone(),
-            program_id: request.program_id.clone(),
-            document,
-        },
-    );
 
     let cargo_toml = request
         .cargo_toml
         .unwrap_or_else(|| default_cargo_toml(&request.name));
 
-    let build = if enable_build {
-        run_build(&request.lib_rs, &cargo_toml, build_timeout).await?
+    let (bytecode, logs) = if enable_build {
+        let output = run_build(&request.lib_rs, &cargo_toml, build_timeout).await?;
+        (output.bytecode, output.logs)
     } else {
-        BuildOutput {
-            bytecode: None,
-            logs:
-                "Build execution disabled. Set COMPILER_ENABLE_BUILD=true to run cargo build-sbf."
-                    .to_string(),
-        }
+        (
+            None,
+            "Build execution disabled. Set COMPILER_ENABLE_BUILD=true to run cargo build-sbf."
+                .to_string(),
+        )
     };
 
-    let bytecode_hash = build.bytecode.as_ref().map(|bytes| hash_hex(bytes));
-    let bytecode_base64 = build.bytecode.as_ref().map(|bytes| bytes_to_base64(bytes));
-    let size_bytes = build.bytecode.as_ref().map(|bytes| bytes.len() as u64);
-    let compile_time_ms = start.elapsed().as_millis() as i64;
-
-    let response = CompileResponse {
-        id: id.clone(),
-        name: request.name.clone(),
-        program_id: request.program_id.clone(),
-        source_hash: source_hash.clone(),
-        bytecode_hash: bytecode_hash.clone(),
-        bytecode: bytecode_base64.clone(),
-        size_bytes,
-        compile_time_ms,
-        logs: build.logs.clone(),
-        idl_url: format!("/v1/idl/{}/latest", request.program_id),
-        artifact_url: format!("/v1/artifacts/{}", id),
-        source_url: format!("/v1/artifacts/{}/source", id),
-    };
-
-    let artifact = StoredArtifact {
-        id,
-        name: request.name,
-        program_id: request.program_id,
-        source_hash,
-        bytecode_hash,
-        bytecode_base64,
-        size_bytes,
-        logs: build.logs,
-        idl,
-        rust_source: Some(request.lib_rs),
-        cargo_toml: Some(cargo_toml),
-    };
-
-    Ok((response, artifact))
+    Ok(CompileOutput {
+        bytecode,
+        cargo_toml,
+        logs,
+    })
 }
 
 struct BuildOutput {
-    bytecode: Option<Vec<u8>>,
+    bytecode: Option<String>,
     logs: String,
 }
 
@@ -170,7 +113,7 @@ async fn run_build(
         Some(path) => Some(
             fs::read(&path)
                 .await
-                .map_err(|error| ApiError::Internal(error.to_string()))?,
+                .map(|bytes| bytes_to_base64(&bytes))?,
         ),
         None => None,
     };
@@ -239,12 +182,6 @@ fn validate_program_id(value: &str) -> Result<(), ApiError> {
             "program_id must be a base58-like public key".to_string(),
         ))
     }
-}
-
-fn hash_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
 }
 
 fn bytes_to_base64(bytes: &[u8]) -> String {
