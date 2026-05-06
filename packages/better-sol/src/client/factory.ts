@@ -10,13 +10,16 @@ import {
 } from "@solana/kit";
 import { getTransferSolInstruction } from "@solana-program/system";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { anchorDiscriminator, encodeInstruction } from "../coder";
 import {
-  type AccountInputs,
-  type ArgsSchema,
+  anchorDiscriminator,
+  encodeInstruction,
+} from "../coder";
+import {
   type AccountDefinition,
   type FieldSchema,
   type InstructionDefinition,
+  type AccountInputs,
+  type ArgsSchema,
   type TypeToken,
   type TypeKind,
   hasInnerToken,
@@ -32,8 +35,6 @@ import type {
   KitRpcSubscriptions,
   AddressInput,
   InstructionSigningMode,
-  SimulateResult,
-  PrepareResult,
 } from "./types";
 import { CLUSTER_URLS, CLUSTER_WS_URLS, TOKEN_2022_PROGRAM_ADDRESS } from "./types";
 import { resolveSigner, requireSigner } from "./signer";
@@ -43,6 +44,27 @@ import { BoundAccountImpl } from "./bound-account";
 import { buildTokenClient } from "./token-client";
 
 export { secretKey, keypairFile } from "./signer";
+
+interface ClientCore<TPrograms extends ProgramInputs, THasSigner extends boolean> {
+  readonly payer: THasSigner extends true ? import("@solana/kit").Address : import("@solana/kit").Address | null;
+  readonly rpc: KitRpc;
+  readonly rpcSubscriptions: KitRpcSubscriptions;
+  readonly token: import("./types").TokenClient;
+  readonly token2022: import("./types").TokenClient;
+  withSigner(signer: import("./types").SignerInput): Promise<BetterSolClient<TPrograms, true>>;
+  send(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
+  batch(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
+  steps<const TOutputs extends readonly unknown[]>(steps: import("./types").StepChain<TOutputs>): Promise<TOutputs>;
+  getBalance(address: AddressInput): Promise<bigint>;
+  transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<Signature>;
+  onTransaction(callback: (signature: Signature, result: bigint) => void): () => void;
+}
+
+type ProgramNamespace<TPrograms extends ProgramInputs> = {
+  [K in keyof TPrograms]: TPrograms[K] extends AnyProgram ? ProgramClientImpl : never;
+};
+
+type BetterSolClientShape<TPrograms extends ProgramInputs, THasSigner extends boolean> = ClientCore<TPrograms, THasSigner> & ProgramNamespace<TPrograms>;
 
 export async function betterSol<const TPrograms extends ProgramInputs = Record<string, never>>(
   config: BetterSolConfig<TPrograms> & { readonly payer: import("./types").SignerInput },
@@ -74,7 +96,7 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
 
   const notifier = createTransactionNotifier();
 
-  return buildClient({ programs, rpc, rpcSubscriptions, signer, commitment, computeUnits, nonceConfig, lookupTableIndex, notifier });
+  return buildClientShape({ programs, rpc, rpcSubscriptions, signer, commitment, computeUnits, nonceConfig, lookupTableIndex, notifier }) as BetterSolClient<TPrograms, typeof config.payer extends undefined ? false : true>;
 }
 
 interface ClientParams<TPrograms extends ProgramInputs> {
@@ -89,19 +111,21 @@ interface ClientParams<TPrograms extends ProgramInputs> {
   readonly notifier: ReturnType<typeof createTransactionNotifier>;
 }
 
-function buildClient<const TPrograms extends ProgramInputs, THasSigner extends boolean = boolean>(
+function buildClientShape<const TPrograms extends ProgramInputs, THasSigner extends boolean = boolean>(
   params: ClientParams<TPrograms>,
-): BetterSolClient<TPrograms, THasSigner> {
+): BetterSolClientShape<TPrograms, THasSigner> {
   const { nonceConfig, lookupTableIndex, notifier } = params;
-  const client: Record<string, unknown> = {
-    payer: params.signer?.address ?? null,
+  const payer = (params.signer?.address ?? null) as THasSigner extends true ? import("@solana/kit").Address : import("@solana/kit").Address | null;
+
+  const core: ClientCore<TPrograms, THasSigner> = {
+    payer,
     rpc: params.rpc,
     rpcSubscriptions: params.rpcSubscriptions,
     token: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
     token2022: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_2022_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
-    withSigner: async (signerInput: import("./types").SignerInput): Promise<BetterSolClient<TPrograms, true>> => {
+    withSigner: async (signerInput: import("./types").SignerInput): Promise<import("./types").BetterSolClient<TPrograms, true>> => {
       const nextSigner = await resolveSigner(signerInput);
-      return buildClient<TPrograms, true>({ ...params, signer: nextSigner });
+      return buildClientShape<TPrograms, true>({ ...params, signer: nextSigner }) as import("./types").BetterSolClient<TPrograms, true>;
     },
     getBalance: async (addressValue: AddressInput): Promise<bigint> => {
       const { value } = await params.rpc.getBalance(kitAddress(addressValue), { commitment: params.commitment }).send();
@@ -135,27 +159,33 @@ function buildClient<const TPrograms extends ProgramInputs, THasSigner extends b
       );
       return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
     },
-    steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {
+    steps: async <const TOutputs extends readonly unknown[]>(stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<TOutputs> => {
       const results: unknown[] = [];
       await stepFns.reduce<Promise<void>>(async (previous, fn) => {
         await previous;
         results.push(await fn(...results));
       }, Promise.resolve());
-      return results;
+      return results as unknown as TOutputs;
     },
     onTransaction: (callback: TransactionCallback): (() => void) => {
       return notifier.subscribe(callback);
     },
   };
 
+  const programNamespace = {} as ProgramNamespace<TPrograms>;
   for (const [programName, programDef] of Object.entries(params.programs)) {
-    client[programName] = buildProgramClient(programDef as AnyProgram, params.rpc, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
+    (programNamespace as Record<string, unknown>)[programName] = createProgramClient(programDef as AnyProgram, params.rpc, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
   }
 
-  return client as unknown as BetterSolClient<TPrograms, THasSigner>;
+  return { ...core, ...programNamespace } as BetterSolClientShape<TPrograms, THasSigner>;
 }
 
-function buildProgramClient(
+interface ProgramClientImpl {
+  readonly address: import("@solana/kit").Address;
+  readonly accounts: Record<string, unknown>;
+}
+
+function createProgramClient(
   program: AnyProgram,
   rpc: KitRpc,
   signer: TransactionSigner | undefined,
@@ -163,71 +193,11 @@ function buildProgramClient(
   nonceConfig: NonceConfig | undefined,
   lookupTableIndex: LookupTableIndex | undefined,
   onConfirmed: TransactionCallback,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { address: kitAddress(program.address) };
-
-  for (const [ixName, ixDef] of Object.entries(program.instructions)) {
-    const def = ixDef as InstructionDefinition<AccountInputs, ArgsSchema | undefined>;
-    const snakeName = toSnake(ixName);
-    const programId = program.address;
-
-    const sendFn = async (inputParams?: Record<string, unknown>): Promise<Signature> => {
-      const activeSigner = requireSigner(signer);
-      const params = inputParams ?? {};
-      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
-      const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-      return await sendAndConfirm(signedTx, rpc, onConfirmed);
-    };
-
-    const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction> => {
-      const params = inputParams ?? {};
-      return await buildInstruction(def, params, programId, snakeName, signer, "unsigned", lookupTableIndex);
-    };
-
-    const transactionFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").SignedTransaction> => {
-      const params = inputParams ?? {};
-      const activeSigner = requireSigner(signer);
-      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
-      return await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-    };
-
-    const simulateFn = async (inputParams?: Record<string, unknown>): Promise<SimulateResult> => {
-      const params = inputParams ?? {};
-      const activeSigner = requireSigner(signer);
-      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
-      const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-      return await runSimulation(signedTx, rpc, commitment);
-    };
-
-    const prepareFn = async (inputParams?: Record<string, unknown>): Promise<PrepareResult> => {
-      const params = inputParams ?? {};
-      const activeSigner = requireSigner(signer);
-      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
-      const pubkeys: Record<string, import("@solana/kit").Address> = {};
-      if (ix.accounts !== undefined) for (const meta of ix.accounts) pubkeys[meta.address] = meta.address;
-      return { instruction: ix, signers: [activeSigner], pubkeys };
-    };
-
-    const planFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").InstructionPlanResult> => {
-      const params = inputParams ?? {};
-      const activeSigner = requireSigner(signer);
-      const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
-      return { instruction: ix, plan: { kind: "single", instruction: ix, planType: "instructionPlan" } };
-    };
-
-    result[ixName] = Object.assign(sendFn, {
-      send: sendFn,
-      instruction: instructionFn,
-      transaction: transactionFn,
-      simulate: simulateFn,
-      prepare: prepareFn,
-      plan: planFn,
-    });
-  }
-
-  const accountNamespace: Record<string, unknown> = {};
+): ProgramClientImpl {
+  const programAddress = kitAddress(program.address);
+  const accounts: Record<string, unknown> = {};
   for (const [accountName, accountDef] of Object.entries(program.accounts)) {
-    accountNamespace[accountName] = new BoundAccountImpl(
+    accounts[accountName] = new BoundAccountImpl(
       accountDef as AccountDefinition<FieldSchema, boolean, readonly string[]>,
       program.address,
       rpc,
@@ -235,9 +205,122 @@ function buildProgramClient(
       commitment,
     );
   }
-  result["accounts"] = accountNamespace;
 
-  return result;
+  const handler: ProxyHandler<ProgramClientImpl> = {
+    get(_target: ProgramClientImpl, property: string | symbol): unknown {
+      if (property === "address") return programAddress;
+      if (property === "accounts") return accounts;
+      if (typeof property !== "string") return undefined;
+      if (property === "then") return undefined;
+      if (property === "toJSON") return undefined;
+
+      const ixDef = program.instructions[property];
+      if (ixDef === undefined) return undefined;
+
+      return createInstructionProxy(ixDef, property, program.address, rpc, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed);
+    },
+    ownKeys(): (string | symbol)[] {
+      return ["address", "accounts", ...Object.keys(program.instructions)];
+    },
+    has(_target: ProgramClientImpl, property: string | symbol): boolean {
+      if (property === "address" || property === "accounts") return true;
+      if (typeof property === "string") return property in program.instructions;
+      return false;
+    },
+    getOwnPropertyDescriptor(_target: ProgramClientImpl, property: string | symbol): PropertyDescriptor | undefined {
+      if (property === "address" || property === "accounts" || (typeof property === "string" && property in program.instructions)) {
+        return { configurable: true, enumerable: true, value: this.get!(_target, property, _target as never) };
+      }
+      return undefined;
+    },
+  };
+
+  return new Proxy({ address: programAddress, accounts } as ProgramClientImpl, handler);
+}
+
+interface InstructionFn {
+  (params?: Record<string, unknown>): Promise<Signature>;
+  send(params?: Record<string, unknown>): Promise<Signature>;
+  instruction(params?: Record<string, unknown>): Promise<Instruction>;
+  transaction(params?: Record<string, unknown>): Promise<import("./types").SignedTransaction>;
+  simulate(params?: Record<string, unknown>): Promise<import("./types").SimulateResult>;
+  prepare(params?: Record<string, unknown>): Promise<import("./types").PrepareResult>;
+  plan(params?: Record<string, unknown>): Promise<import("./types").InstructionPlanResult>;
+}
+
+const instructionCache = new WeakMap<InstructionDefinition<AccountInputs, ArgsSchema | undefined>, InstructionFn>();
+
+function createInstructionProxy(
+  ixDef: InstructionDefinition<AccountInputs, ArgsSchema | undefined>,
+  ixName: string,
+  programId: string,
+  rpc: KitRpc,
+  signer: TransactionSigner | undefined,
+  commitment: "processed" | "confirmed" | "finalized",
+  nonceConfig: NonceConfig | undefined,
+  lookupTableIndex: LookupTableIndex | undefined,
+  onConfirmed: TransactionCallback,
+): InstructionFn {
+  const cached = instructionCache.get(ixDef);
+  if (cached !== undefined) return cached;
+
+  const snakeName = toSnake(ixName);
+
+  const sendFn = async (inputParams?: Record<string, unknown>): Promise<Signature> => {
+    const activeSigner = requireSigner(signer);
+    const params = inputParams ?? {};
+    const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
+    const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
+    return await sendAndConfirm(signedTx, rpc, onConfirmed);
+  };
+
+  const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction> => {
+    const params = inputParams ?? {};
+    return await buildInstruction(ixDef, params, programId, snakeName, signer, "unsigned", lookupTableIndex);
+  };
+
+  const transactionFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").SignedTransaction> => {
+    const params = inputParams ?? {};
+    const activeSigner = requireSigner(signer);
+    const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
+    return await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
+  };
+
+  const simulateFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").SimulateResult> => {
+    const params = inputParams ?? {};
+    const activeSigner = requireSigner(signer);
+    const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
+    const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
+    return await runSimulation(signedTx, rpc, commitment);
+  };
+
+  const prepareFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").PrepareResult> => {
+    const params = inputParams ?? {};
+    const activeSigner = requireSigner(signer);
+    const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
+    const pubkeys: Record<string, import("@solana/kit").Address> = {};
+    if (ix.accounts !== undefined) for (const meta of ix.accounts) pubkeys[meta.address] = meta.address;
+    return { instruction: ix, signers: [activeSigner], pubkeys };
+  };
+
+  const planFn = async (inputParams?: Record<string, unknown>): Promise<import("./types").InstructionPlanResult> => {
+    const params = inputParams ?? {};
+    const activeSigner = requireSigner(signer);
+    const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
+    return { instruction: ix, plan: { kind: "single", instruction: ix, planType: "instructionPlan" } };
+  };
+
+  const fn = Object.assign(sendFn, {
+    send: sendFn,
+    instruction: instructionFn,
+    transaction: transactionFn,
+    simulate: simulateFn,
+    prepare: prepareFn,
+    plan: planFn,
+  }) as InstructionFn;
+
+  instructionCache.set(ixDef, fn);
+  return fn;
 }
 
 async function buildInstruction(
@@ -262,7 +345,6 @@ async function buildInstructionData(
   if (ixDef.args === undefined || Object.keys(ixDef.args).length === 0) return await anchorDiscriminator(snakeName);
   return await encodeInstruction(snakeName, ixDef.args, params);
 }
-
 
 function validateArgs(
   argsSchema: ArgsSchema | undefined,
