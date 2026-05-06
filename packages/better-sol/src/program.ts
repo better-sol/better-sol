@@ -425,9 +425,7 @@ export const bs = {
     return new AccountConstraint("close", true, accountDefinition, refundTo);
   },
   realloc: <TAccount extends AnyAccountDefinition>(accountDefinition: TAccount, space: number): AccountConstraint<AccountData<TAccount> & { key: Address }, "realloc", true> => {
-    const value = new AccountConstraint("realloc", true, accountDefinition) as unknown as AccountConstraint<AccountData<TAccount> & { key: Address }, "realloc", true>;
-    (value as unknown as { reallocSpace: number }).reallocSpace = space;
-    return value;
+    return new AccountConstraint("realloc", true, accountDefinition, undefined, undefined, space);
   },
   signer: (): AccountConstraint<SignerInfo, "signer", false> => {
     return new AccountConstraint("signer", false);
@@ -445,6 +443,23 @@ export const bs = {
 
 export type { bs as BsNamespace };
 
+export function hasInnerToken(token: TypeToken<unknown, TypeKind>): token is TypeToken<unknown, TypeKind> & { readonly inner: TypeToken<unknown, TypeKind> } {
+  return "inner" in token;
+}
+
+export function hasInnerAndSizeToken(token: TypeToken<unknown, TypeKind>): token is TypeToken<unknown, TypeKind> & { readonly inner: TypeToken<unknown, TypeKind>; readonly size: number } {
+  return "inner" in token && "size" in token;
+}
+
+export function innerOfToken(token: TypeToken<unknown, TypeKind>): TypeToken<unknown, TypeKind> {
+  if (!hasInnerToken(token)) throw new Error(`Token of kind '${token.kind}' has no inner`);
+  return token.inner;
+}
+
+export function sizeOfToken(token: TypeToken<unknown, TypeKind>): number | undefined {
+  if (!hasInnerAndSizeToken(token)) return undefined;
+  return token.size;
+}
 export const cpi = {
   token: {
     transfer(_params: TransferParams): void {},

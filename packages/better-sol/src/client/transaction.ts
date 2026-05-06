@@ -19,6 +19,7 @@ import {
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { getSetComputeUnitLimitInstruction, getSetComputeUnitPriceInstruction } from "@solana-program/compute-budget";
+import { fetchNonce } from "@solana-program/system";
 import {
   AccountConstraint,
   type AccountInputs,
@@ -90,14 +91,12 @@ export async function buildAndSignTransaction(
 }
 
 async function fetchNonceFromAccount(rpc: KitRpc, nonceAccountAddress: string): Promise<string> {
-  const { fetchNonce } = await import("@solana-program/system");
   const { data: { blockhash } } = await fetchNonce(rpc, kitAddress(nonceAccountAddress));
   return blockhash;
 }
 
-type NonceBrand = string & { readonly "__brand:@solana/kit": "Nonce" };
-function toNonce(value: string): NonceBrand {
-  return value as NonceBrand;
+function toNonce(value: string): Parameters<typeof setTransactionMessageLifetimeUsingDurableNonce>[0]["nonce"] {
+  return value as Parameters<typeof setTransactionMessageLifetimeUsingDurableNonce>[0]["nonce"];
 }
 
 export async function sendAndConfirm(
@@ -119,7 +118,7 @@ export async function sendAndConfirm(
     // oxlint-disable-next-line no-await-in-loop — intentional sleep between retries
     await new Promise((resolve) => setTimeout(resolve, CONFIRMATION_INTERVAL_MS));
   }
-  throw new Error(`Transaction ${signature as unknown as string} not confirmed within ${CONFIRMATION_RETRIES * CONFIRMATION_INTERVAL_MS}ms`);
+  throw new Error(`Transaction ${String(signature)} not confirmed within ${CONFIRMATION_RETRIES * CONFIRMATION_INTERVAL_MS}ms`);
 }
 
 export async function runSimulation(

@@ -1,4 +1,4 @@
-import { createKeyPairSignerFromBytes, getAddressEncoder, type Address as KitAddress, type TransactionSigner } from "@solana/kit";
+import { createKeyPairSignerFromBytes, generateKeyPairSigner, getAddressEncoder, type Address as KitAddress, type TransactionSigner } from "@solana/kit";
 import { encodeField } from "../coder";
 import { type TypeKind, type TypeToken } from "../program";
 import type { SignerInput } from "./types";
@@ -23,6 +23,8 @@ function isTransactionSignerInput(value: SignerInput): value is TransactionSigne
   return "address" in value && ("signTransactions" in value || "modifyAndSignTransactions" in value || "signAndSendTransactions" in value);
 }
 
+type KeypairFile = { readonly publicKey: string; readonly secretKey: readonly number[] };
+
 async function loadKeypairFile(path: string): Promise<TransactionSigner> {
   if (typeof globalThis.process === "undefined") {
     throw new Error("File-based keypairs require Node.js. Use secretKey() or a Kit TransactionSigner in browsers.");
@@ -30,18 +32,18 @@ async function loadKeypairFile(path: string): Promise<TransactionSigner> {
   const fs = await import("node:fs/promises");
   const pathModule = await import("node:path");
   const resolved = pathModule.resolve(path);
-  const parsed = JSON.parse(await fs.readFile(resolved, "utf8")) as unknown;
+  const parsed: unknown = JSON.parse(await fs.readFile(resolved, "utf8"));
   const bytes = readSecretKeyBytes(parsed);
   return await createKeyPairSignerFromBytes(bytes, false);
 }
 
 function readSecretKeyBytes(value: unknown): Uint8Array {
-  if (Array.isArray(value) && value.every((item) => typeof item === "number")) return new Uint8Array(value);
-  if (typeof value === "object" && value !== null && "secretKey" in value) {
-    const keyBytes = (value as { readonly secretKey: unknown }).secretKey;
-    if (Array.isArray(keyBytes) && keyBytes.every((item) => typeof item === "number")) return new Uint8Array(keyBytes);
-  }
+  if (isKeypairFile(value)) return new Uint8Array(value.secretKey);
   throw new Error("Invalid keypair file");
+}
+
+function isKeypairFile(value: unknown): value is KeypairFile {
+  return typeof value === "object" && value !== null && "publicKey" in value && "secretKey" in value && Array.isArray((value as KeypairFile).secretKey) && (value as KeypairFile).secretKey.every((item) => typeof item === "number");
 }
 
 export function seedToBytes(token: TypeToken<unknown, TypeKind> | undefined, value: unknown, kitAddress: (addr: string) => KitAddress): Uint8Array {
@@ -65,6 +67,5 @@ function encodeU64Seed(value: bigint): Uint8Array {
 }
 
 export async function createGeneratedSigner(): Promise<TransactionSigner> {
-  const { generateKeyPairSigner } = await import("@solana/kit");
   return await generateKeyPairSigner();
 }

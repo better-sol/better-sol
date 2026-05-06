@@ -116,7 +116,7 @@ function idlPrimitiveToToken(type: IdlTypePrimitive): TypeToken<unknown, TypeKin
 }
 
 function fieldsToSchema(fields: readonly IdlField[] | undefined): FieldSchema {
-  if (fields === undefined || fields.length === 0) return {} as FieldSchema;
+  if (fields === undefined || fields.length === 0) return {};
   const result: Record<string, TypeToken<unknown, TypeKind>> = {};
   for (const field of fields) {
     result[field.name] = idlTypeToToken(field.type);
@@ -141,27 +141,27 @@ export function fromIdl(idl: AnchorIdl): IdlProgram {
     programAddress,
     buildErrors(idl.errors),
     buildEvents(idl.events),
-    buildInstructions(idl.instructions),
+    buildInstructions(idl.instructions) as Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>,
     buildAccounts(idl.accounts),
-  ) as unknown as IdlProgram;
+  ) as IdlProgram;
 }
 
 function buildErrors(errors: readonly IdlErrorDef[] | undefined): Record<string, string> {
-  if (errors === undefined) return {} as Record<string, string>;
+  if (errors === undefined) return {};
   const result: Record<string, string> = {};
   for (const error of errors) {
     result[error.name] = error.msg ?? error.name;
   }
-  return result as Record<string, string>;
+  return result;
 }
 
 function buildEvents(events: readonly { readonly name: string }[] | undefined): Record<string, FieldSchema> {
-  if (events === undefined) return {} as Record<string, FieldSchema>;
+  if (events === undefined) return {};
   const result: Record<string, FieldSchema> = {};
   for (const event of events) {
     result[event.name] = {} as FieldSchema;
   }
-  return result as Record<string, FieldSchema>;
+  return result;
 }
 
 function buildInstructions(

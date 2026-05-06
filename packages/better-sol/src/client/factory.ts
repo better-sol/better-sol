@@ -19,6 +19,9 @@ import {
   type InstructionDefinition,
   type TypeToken,
   type TypeKind,
+  hasInnerToken,
+  hasInnerAndSizeToken,
+  innerOfToken,
 } from "../program";
 import type {
   AnyProgram,
@@ -260,6 +263,7 @@ async function buildInstructionData(
   return await encodeInstruction(snakeName, ixDef.args, params);
 }
 
+
 function validateArgs(
   argsSchema: ArgsSchema | undefined,
   params: Record<string, unknown>,
@@ -309,12 +313,11 @@ function validateToken(
       break;
     case "option": {
       if (value === null || value === undefined) return;
-      const inner = (token as unknown as { readonly inner: TypeToken<unknown, TypeKind> }).inner;
-      return validateToken(name, inner, value, ixName);
+      return validateToken(name, innerOfToken(token), value, ixName);
     }
     case "vec": case "array": {
-      const inner = (token as unknown as { readonly inner: TypeToken<unknown, TypeKind> }).inner;
-      if (!Array.isArray(value)) err(`array of ${describeToken({ ...token, inner } as unknown as TypeToken<unknown, TypeKind>)}`);
+      const inner = innerOfToken(token);
+      if (!Array.isArray(value)) err(`array of ${describeToken(token)}`);
       for (let i = 0; i < (value as unknown[]).length; i++) {
         validateToken(`${name}[${i}]`, inner, (value as unknown[])[i], ixName);
       }
@@ -324,12 +327,17 @@ function validateToken(
 }
 
 function describeToken(token: TypeToken<unknown, TypeKind>): string {
-  const inner = (token as unknown as { readonly inner?: TypeToken<unknown, TypeKind> }).inner;
-  const size = (token as unknown as { readonly size?: number }).size;
-  switch (token.kind) {
-    case "option": return `${describeToken(inner!)} | null`;
-    case "vec": return `${describeToken(inner!)}[]`;
-    case "array": return `${describeToken(inner!)}[${size}]`;
-    default: return token.kind;
+  if (hasInnerAndSizeToken(token)) {
+    switch (token.kind) {
+      case "vec": return `${describeToken(token.inner)}[]`;
+      case "array": return `${describeToken(token.inner)}[${token.size}]`;
+    }
   }
+  if (hasInnerToken(token)) {
+    switch (token.kind) {
+      case "option": return `${describeToken(token.inner)} | null`;
+      case "vec": return `${describeToken(token.inner)}[]`;
+    }
+  }
+  return token.kind;
 }
