@@ -34,7 +34,7 @@ import type {
 } from "./types";
 import { CLUSTER_URLS, CLUSTER_WS_URLS, TOKEN_2022_PROGRAM_ADDRESS } from "./types";
 import { resolveSigner, requireSigner } from "./signer";
-import { buildAndSignTransaction, buildAccountMetas, sendAndConfirm, runSimulation, toSnake, withComputeBudget, type NonceConfig } from "./transaction";
+import { buildAndSignTransaction, buildAccountMetas, sendAndConfirm, runSimulation, toSnake, withComputeBudget, createTransactionNotifier, type NonceConfig, type TransactionCallback } from "./transaction";
 import { buildLookupTableIndex, type LookupTableIndex } from "./lookup-tables";
 import { BoundAccountImpl } from "./bound-account";
 import { buildTokenClient } from "./token-client";
@@ -69,7 +69,9 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
     ? { nonceAccountAddress: config.durableNonce.nonceAccountAddress, nonceAuthority: config.durableNonce.nonceAuthority }
     : undefined;
 
-  return buildClient({ programs, rpc, rpcSubscriptions, signer, commitment, computeUnits, nonceConfig, lookupTableIndex });
+  const notifier = createTransactionNotifier();
+
+  return buildClient({ programs, rpc, rpcSubscriptions, signer, commitment, computeUnits, nonceConfig, lookupTableIndex, notifier });
 }
 
 interface ClientParams<TPrograms extends ProgramInputs> {
@@ -81,18 +83,19 @@ interface ClientParams<TPrograms extends ProgramInputs> {
   readonly computeUnits?: import("./types").ComputeUnitConfig;
   readonly nonceConfig?: NonceConfig;
   readonly lookupTableIndex?: LookupTableIndex;
+  readonly notifier: ReturnType<typeof createTransactionNotifier>;
 }
 
 function buildClient<const TPrograms extends ProgramInputs, THasSigner extends boolean = boolean>(
   params: ClientParams<TPrograms>,
 ): BetterSolClient<TPrograms, THasSigner> {
-  const { nonceConfig, lookupTableIndex } = params;
+  const { nonceConfig, lookupTableIndex, notifier } = params;
   const client: Record<string, unknown> = {
     payer: params.signer?.address ?? null,
     rpc: params.rpc,
     rpcSubscriptions: params.rpcSubscriptions,
-    token: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_PROGRAM_ADDRESS),
-    token2022: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_2022_PROGRAM_ADDRESS),
+    token: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
+    token2022: buildTokenClient(params.rpc, params.signer, params.commitment, TOKEN_2022_PROGRAM_ADDRESS, nonceConfig, notifier.notify),
     withSigner: async (signerInput: import("./types").SignerInput): Promise<BetterSolClient<TPrograms, true>> => {
       const nextSigner = await resolveSigner(signerInput);
       return buildClient<TPrograms, true>({ ...params, signer: nextSigner });
@@ -107,14 +110,14 @@ function buildClient<const TPrograms extends ProgramInputs, THasSigner extends b
       if (kitAddress(sourceAddress) !== signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
       const ix = getTransferSolInstruction({ source: signer, destination: kitAddress(transferParams.to), amount: transferParams.amount });
       const signedTx = await buildAndSignTransaction([ix], params.rpc, signer, params.commitment, nonceConfig);
-      return await sendAndConfirm(signedTx, params.rpc);
+      return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
     },
     send: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature> => {
       const signer = requireSigner(params.signer);
       const resolved = await Promise.all(instructions);
       const withBudget = withComputeBudget(resolved, params.computeUnits);
       const signedTx = await buildAndSignTransaction(withBudget, params.rpc, signer, params.commitment, nonceConfig);
-      return await sendAndConfirm(signedTx, params.rpc);
+      return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
     },
     batch: async (instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature> => {
       const signer = requireSigner(params.signer);
@@ -127,7 +130,7 @@ function buildClient<const TPrograms extends ProgramInputs, THasSigner extends b
         params.commitment,
         nonceConfig,
       );
-      return await sendAndConfirm(signedTx, params.rpc);
+      return await sendAndConfirm(signedTx, params.rpc, notifier.notify);
     },
     steps: async (stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<unknown[]> => {
       const results: unknown[] = [];
@@ -137,13 +140,13 @@ function buildClient<const TPrograms extends ProgramInputs, THasSigner extends b
       }, Promise.resolve());
       return results;
     },
-    onTransaction: (_callback: (signature: import("@solana/kit").Signature, result: import("@solana/kit").Slot) => void): (() => void) => {
-      return () => {};
+    onTransaction: (callback: TransactionCallback): (() => void) => {
+      return notifier.subscribe(callback);
     },
   };
 
   for (const [programName, programDef] of Object.entries(params.programs)) {
-    client[programName] = buildProgramClient(programDef as AnyProgram, params.rpc, params.signer, params.commitment, nonceConfig, lookupTableIndex);
+    client[programName] = buildProgramClient(programDef as AnyProgram, params.rpc, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
   }
 
   return client as unknown as BetterSolClient<TPrograms, THasSigner>;
@@ -156,6 +159,7 @@ function buildProgramClient(
   commitment: "processed" | "confirmed" | "finalized",
   nonceConfig: NonceConfig | undefined,
   lookupTableIndex: LookupTableIndex | undefined,
+  onConfirmed: TransactionCallback,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { address: kitAddress(program.address) };
 
@@ -169,7 +173,7 @@ function buildProgramClient(
       const params = inputParams ?? {};
       const ix = await buildInstruction(def, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
       const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-      return await sendAndConfirm(signedTx, rpc);
+      return await sendAndConfirm(signedTx, rpc, onConfirmed);
     };
 
     const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction> => {

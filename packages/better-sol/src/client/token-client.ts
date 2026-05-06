@@ -3,20 +3,22 @@ import { findAssociatedTokenPda, fetchMaybeMint, fetchMaybeToken, getCreateAssoc
 import type { AddressInput, KitRpc, SignedTransaction, TokenClient } from "./types";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "./types";
 import { requireSigner, createGeneratedSigner } from "./signer";
-import { buildAndSignTransaction, sendAndConfirm } from "./transaction";
+import { buildAndSignTransaction, sendAndConfirm, type NonceConfig, type TransactionCallback } from "./transaction";
 
 export function buildTokenClient(
   rpc: KitRpc,
   signer: TransactionSigner | undefined,
   commitment: "processed" | "confirmed" | "finalized",
   tokenProgramAddress: import("@solana/kit").Address,
+  nonceConfig: NonceConfig | undefined,
+  onConfirmed: TransactionCallback,
 ): TokenClient {
   const deriveAtaAddr = async (owner: AddressInput, mint: AddressInput): Promise<import("@solana/kit").Address> => {
     const [ata] = await findAssociatedTokenPda({ owner: kitAddress(owner), tokenProgram: kitAddress(tokenProgramAddress), mint: kitAddress(mint) });
     return ata;
   };
   const sendFn = async (tx: SignedTransaction): Promise<Signature> => {
-    return await sendAndConfirm(tx, rpc);
+    return await sendAndConfirm(tx, rpc, onConfirmed);
   };
   return {
     getATA: async (params) => await deriveAtaAddr(params.owner, params.mint),
@@ -31,7 +33,7 @@ export function buildTokenClient(
         freezeAuthority: params.freezeAuthority === undefined ? null : params.freezeAuthority === null ? null : kitAddress(params.freezeAuthority),
       }, { tokenProgram: kitAddress(tokenProgramAddress) });
       const instructions = flattenInstructionPlan(plan).flatMap((leaf) => leaf.kind === "single" ? [leaf.instruction] : []);
-      const signedTx = await buildAndSignTransaction(instructions, rpc, activeSigner, commitment);
+      const signedTx = await buildAndSignTransaction(instructions, rpc, activeSigner, commitment, nonceConfig);
       const sig = await sendFn(signedTx);
       return { mint: mint.address, mintSigner: mint, signature: sig };
     },
@@ -43,7 +45,7 @@ export function buildTokenClient(
       const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
       const createAtaIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: activeSigner, owner, mint, tokenProgram: kitAddress(tokenProgramAddress) });
       const mintIx = getMintToCheckedInstruction({ mint, token: ata, mintAuthority: activeSigner, amount: params.amount, decimals }, { programAddress: kitAddress(tokenProgramAddress) });
-      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, activeSigner, commitment);
+      const signedTx = await buildAndSignTransaction([createAtaIx, mintIx], rpc, activeSigner, commitment, nonceConfig);
       return await sendFn(signedTx);
     },
     transfer: async (params) => {
@@ -56,7 +58,7 @@ export function buildTokenClient(
       const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
       const createDestinationIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: activeSigner, owner: kitAddress(params.to), mint, tokenProgram: kitAddress(tokenProgramAddress) });
       const transferIx = getTransferCheckedInstruction({ source, mint, destination, authority: activeSigner, amount: params.amount, decimals }, { programAddress: kitAddress(tokenProgramAddress) });
-      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, activeSigner, commitment);
+      const signedTx = await buildAndSignTransaction([createDestinationIx, transferIx], rpc, activeSigner, commitment, nonceConfig);
       return await sendFn(signedTx);
     },
     getBalance: async (params) => {

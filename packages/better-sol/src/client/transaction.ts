@@ -18,6 +18,7 @@ import {
 } from "@solana/kit";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { getSetComputeUnitLimitInstruction, getSetComputeUnitPriceInstruction } from "@solana-program/compute-budget";
 import {
   AccountConstraint,
   type AccountInputs,
@@ -38,6 +39,21 @@ export type NonceConfig = {
   readonly nonceAuthority: TransactionSigner;
 };
 
+export type TransactionCallback = (signature: Signature, slot: bigint) => void;
+
+export function createTransactionNotifier(): { readonly notify: TransactionCallback; readonly subscribe: (cb: TransactionCallback) => () => void } {
+  let callback: TransactionCallback | undefined;
+  return {
+    notify: (signature: Signature, slot: bigint) => {
+      if (callback !== undefined) callback(signature, slot);
+    },
+    subscribe: (cb: TransactionCallback): (() => void) => {
+      callback = cb;
+      return () => { callback = undefined; };
+    },
+  };
+}
+
 export function toSnake(name: string): string {
   return name.replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/^_/, "");
 }
@@ -55,7 +71,7 @@ export async function buildAndSignTransaction(
       createTransactionMessage({ version: 0 }),
       (tx) => setTransactionMessageFeePayerSigner(signer, tx),
       (tx) => setTransactionMessageLifetimeUsingDurableNonce(
-        { nonce: nonceValue as never, nonceAccountAddress: kitAddress(nonceConfig.nonceAccountAddress), nonceAuthorityAddress: nonceConfig.nonceAuthority.address },
+        { nonce: toNonce(nonceValue), nonceAccountAddress: kitAddress(nonceConfig.nonceAccountAddress), nonceAuthorityAddress: nonceConfig.nonceAuthority.address },
         tx,
       ),
       (tx) => appendTransactionMessageInstructions(instructions, tx),
@@ -79,18 +95,28 @@ async function fetchNonceFromAccount(rpc: KitRpc, nonceAccountAddress: string): 
   return blockhash;
 }
 
+type NonceBrand = string & { readonly "__brand:@solana/kit": "Nonce" };
+function toNonce(value: string): NonceBrand {
+  return value as NonceBrand;
+}
+
 export async function sendAndConfirm(
   transaction: SignedTransaction,
   rpc: KitRpc,
+  onConfirmed?: TransactionCallback,
 ): Promise<Signature> {
   const signature = getSignatureFromTransaction(transaction);
   await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
+  // eslint-disable-next-line no-await-in-loop
   for (let attempt = 0; attempt < CONFIRMATION_RETRIES; attempt++) {
+    // eslint-disable-next-line no-await-in-loop
     const { value: statuses } = await rpc.getSignatureStatuses([signature], { searchTransactionHistory: true }).send();
     const status = statuses[0];
     if (status !== null && status !== undefined && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
+      if (onConfirmed !== undefined) onConfirmed(signature, status.slot ?? 0n);
       return signature;
     }
+    // oxlint-disable-next-line no-await-in-loop — intentional sleep between retries
     await new Promise((resolve) => setTimeout(resolve, CONFIRMATION_INTERVAL_MS));
   }
   throw new Error(`Transaction ${signature as unknown as string} not confirmed within ${CONFIRMATION_RETRIES * CONFIRMATION_INTERVAL_MS}ms`);
@@ -246,12 +272,10 @@ export function withComputeBudget(
   if (config === undefined) return instructions;
   const budgetInstructions: Instruction[] = [];
   if (config.computeUnitLimit !== undefined) {
-    const { createSetComputeUnitLimitInstruction } = require("@solana-program/compute-budget");
-    budgetInstructions.push(createSetComputeUnitLimitInstruction({ units: config.computeUnitLimit }));
+    budgetInstructions.push(getSetComputeUnitLimitInstruction({ units: Number(config.computeUnitLimit) }));
   }
   if (config.computeUnitPrice !== undefined) {
-    const { createSetComputeUnitPriceInstruction } = require("@solana-program/compute-budget");
-    budgetInstructions.push(createSetComputeUnitPriceInstruction({ microLamports: config.computeUnitPrice }));
+    budgetInstructions.push(getSetComputeUnitPriceInstruction({ microLamports: config.computeUnitPrice }));
   }
   return [...budgetInstructions, ...instructions];
 }

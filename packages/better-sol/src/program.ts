@@ -230,29 +230,31 @@ type IxRunWithArgs<TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEve
 type IxRunWithoutAccountsOrArgs<TErrors extends ErrorMessages, TEvents extends EventSchema> =
   (ctx: InstructionContext<TErrors, TEvents>) => void;
 
+type IxReturns = { readonly returns?: TypeToken<unknown, TypeKind> };
+
 type IxConfigWithAccountsAndArgs<TAccounts extends AccountInputs, TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   readonly accounts: TAccounts;
   readonly args: TArgs;
   readonly run: IxRunWithAccountsAndArgs<TAccounts, TArgs, TErrors, TEvents>;
-};
+} & IxReturns;
 
 type IxConfigWithAccounts<TAccounts extends AccountInputs, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   readonly accounts: TAccounts;
   readonly args?: undefined;
   readonly run: IxRunWithAccounts<TAccounts, TErrors, TEvents>;
-};
+} & IxReturns;
 
 type IxConfigWithArgs<TArgs extends ArgsSchema, TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   readonly accounts?: undefined;
   readonly args: TArgs;
   readonly run: IxRunWithArgs<TArgs, TErrors, TEvents>;
-};
+} & IxReturns;
 
 type IxConfigWithoutAccountsOrArgs<TErrors extends ErrorMessages, TEvents extends EventSchema> = {
   readonly accounts?: undefined;
   readonly args?: undefined;
   readonly run: IxRunWithoutAccountsOrArgs<TErrors, TEvents>;
-};
+} & IxReturns;
 
 type IxConfig<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined, TErrors extends ErrorMessages, TEvents extends EventSchema> =
   | IxConfigWithAccountsAndArgs<TAccounts, TArgs & ArgsSchema, TErrors, TEvents>
@@ -278,7 +280,7 @@ type IxOverloads<TErrors extends ErrorMessages, TEvents extends EventSchema> = {
 
 function makeIx(): IxOverloads<ErrorMessages, EventSchema> {
   const fn = function ix<TAccounts extends AccountInputs, TArgs extends ArgsSchema | undefined>(
-    config: IxConfig<TAccounts, TArgs, ErrorMessages, EventSchema> & { readonly returns?: TypeToken<unknown, TypeKind> },
+    config: IxConfig<TAccounts, TArgs, ErrorMessages, EventSchema>,
   ): InstructionDefinition<TAccounts | Record<string, never>, TArgs | undefined> {
     const accounts = "accounts" in config && config.accounts !== undefined ? config.accounts : {};
     const args = "args" in config ? config.args : undefined;
