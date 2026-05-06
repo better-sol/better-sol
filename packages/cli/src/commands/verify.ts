@@ -24,7 +24,6 @@ export async function verify(programArg: string | undefined, options: VerifyOpti
   const libName = options.libName ?? (programArg !== undefined ? programArg : programId);
   const mountPath = options.mountPath ?? `generated/${libName}`;
 
-  log.info("");
   log.info("Submission parameters:");
   log.step(`Program ID:  ${programId}`);
   log.step(`Repository:  ${repository}`);
