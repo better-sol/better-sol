@@ -238,7 +238,7 @@ function createProgramClient(
     },
     getOwnPropertyDescriptor(_target: ProgramClientImpl, property: string | symbol): PropertyDescriptor | undefined {
       if (property === "address" || property === "accounts" || (typeof property === "string" && property in program.instructions)) {
-        return { configurable: true, enumerable: true, value: this.get!(_target, property, _target as never) };
+        return { configurable: true, enumerable: true, value: this.get!(_target, property, _target) };
       }
       return undefined;
     },
