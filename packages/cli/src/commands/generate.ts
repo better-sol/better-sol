@@ -2,8 +2,8 @@ import { intro, outro, spinner } from "@clack/prompts";
 import { loadConfig } from "../config";
 import { cwdPath } from "../path";
 import type { GenerateDbOptions } from "../types";
-import { discoverPrograms } from "../parser/discover";
 import { isDbDialect, writeDrizzleSchema } from "../generator/db";
+import { discoverProgramsWithSpinner } from "./shared";
 
 export async function generateDb(options: GenerateDbOptions): Promise<void> {
   intro("better-sol generate db");
@@ -15,14 +15,9 @@ export async function generateDb(options: GenerateDbOptions): Promise<void> {
   const src = options.src ?? config.programs;
   const out = cwdPath(options.out ?? "src/db/better-sol.ts");
 
-  const s = spinner();
-  s.start(`Discovering programs from ${src}`);
-  const programs = await discoverPrograms(src);
-  if (programs.length === 0) {
-    s.stop("No programs found");
-    throw new Error(`No program() definitions found in ${src}`);
-  }
+  const programs = await discoverProgramsWithSpinner(src);
 
+  const s = spinner();
   s.message(`Generating Drizzle schema for ${programs.length} program${programs.length === 1 ? "" : "s"}`);
   await writeDrizzleSchema(out, programs, dialect);
   s.stop("Schema generated");

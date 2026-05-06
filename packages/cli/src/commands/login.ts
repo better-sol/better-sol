@@ -1,5 +1,6 @@
 import { intro, outro, text, isCancel, cancel } from "@clack/prompts";
 import { storeApiKey } from "../auth";
+import { CLI_COMMAND } from "./shared";
 
 export async function login(): Promise<void> {
   intro("better-sol login");
@@ -16,5 +17,5 @@ export async function login(): Promise<void> {
 
   await storeApiKey(String(apiKey));
 
-  outro("API key saved to ~/.better-sol/auth.json\nRun `better-sol deploy` to compile and deploy.");
+  outro(`API key saved to ~/.better-sol/auth.json\nNext: ${CLI_COMMAND} deploy`);
 }

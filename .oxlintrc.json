@@ -3,6 +3,8 @@
     "node_modules/**",
     "dist/**",
     "packages/*/dist/**",
+    "packages/*/docs/**",
+    "packages/*/test/fixtures/**",
     "research/examples/*.rs"
   ],
   "categories": {

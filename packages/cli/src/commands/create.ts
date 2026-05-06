@@ -1,8 +1,7 @@
 import { intro, outro, spinner, text, confirm, isCancel, cancel } from "@clack/prompts";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { createProgramKeypair } from "../keypair";
-import { ensureDirectory, fileExists } from "../path";
+import { BETTER_SOL_DIR, cwdJoin, ensureDirectory, fileExists } from "../path";
 import type { CreateOptions } from "../types";
 
 export async function create(nameArg: string | undefined, options: CreateOptions): Promise<void> {
@@ -13,8 +12,8 @@ export async function create(nameArg: string | undefined, options: CreateOptions
 
   const programName = String(name);
   const directory = options.dir ?? "programs";
-  const programPath = join(process.cwd(), directory, `${programName}.ts`);
-  const keypairPath = join(process.cwd(), ".better-sol", `${programName}.json`);
+  const programPath = cwdJoin(directory, `${programName}.ts`);
+  const keypairPath = cwdJoin(BETTER_SOL_DIR, `${programName}.json`);
 
   if (fileExists(programPath) && !options.force) {
     const overwrite = await confirm({ message: `${directory}/${programName}.ts already exists. Overwrite?`, initialValue: false });
@@ -25,11 +24,11 @@ export async function create(nameArg: string | undefined, options: CreateOptions
   s.start("Generating program keypair");
   const keypair = await createProgramKeypair(keypairPath, options.force);
   s.message("Writing program template");
-  await ensureDirectory(join(process.cwd(), directory));
+  await ensureDirectory(cwdJoin(directory));
   await writeFile(programPath, template(programName, keypair.publicKey));
   s.stop("Program created");
 
-  outro(`Created ${directory}/${programName}.ts\nProgram: ${keypair.publicKey}\nKeypair: .better-sol/${programName}.json`);
+  outro(`Created ${directory}/${programName}.ts\n  Program:  ${keypair.publicKey}\n  Keypair:  ${BETTER_SOL_DIR}/${programName}.json`);
 }
 
 function validateName(value: string | undefined): string | undefined {

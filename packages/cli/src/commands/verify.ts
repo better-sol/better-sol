@@ -1,6 +1,7 @@
 import { intro, log, outro, spinner } from "@clack/prompts";
 import { execSync } from "node:child_process";
 import type { VerifyOptions } from "../types";
+import { CLI_COMMAND } from "./shared";
 
 const OTTERSEC_API = "https://verify.osec.io";
 
@@ -32,13 +33,8 @@ export async function verify(programArg: string | undefined, options: VerifyOpti
   log.step(`Mount path:  ${mountPath}`);
 
   s.start("Submitting to OtterSec verification API");
-  try {
-    await submitToOtterSec(programId, repository, commitHash, libName, mountPath);
-    s.stop("Verification submitted");
-  } catch (error) {
-    s.stop("Verification failed");
-    throw error;
-  }
+  await submitToOtterSec(programId, repository, commitHash, libName, mountPath);
+  s.stop("Verification submitted");
 
   log.info("");
   log.success("Verification pending — OtterSec will clone your repository and build the program in a deterministic Docker container.");
@@ -46,14 +42,16 @@ export async function verify(programArg: string | undefined, options: VerifyOpti
   log.step(`View logs:    ${OTTERSEC_API}/logs/${programId}`);
   log.info("Results are typically available within 5 minutes. Once verified, a badge appears in Solana Explorer and SolanaFM.");
 
-  outro("Verification submitted. Status updates are served by the OtterSec API.");
+  outro("Verification submitted. OtterSec will process the build and publish results when ready.");
 }
 
 function resolveProgramId(programArg: string | undefined, options: VerifyOptions): string {
   if (options.programId !== undefined) return options.programId.trim();
   if (programArg !== undefined) return programArg.trim();
   throw new Error(
-    "Program ID is required. Pass it as an argument or via --program-id.",
+    "Program ID is required.\n" +
+      `Usage: ${CLI_COMMAND} verify <program-id>\n` +
+      `       ${CLI_COMMAND} verify --program-id <id>`,
   );
 }
 

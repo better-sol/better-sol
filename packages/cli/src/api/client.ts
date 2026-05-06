@@ -31,7 +31,6 @@ export async function compileProgram(params: {
       "x-api-key": params.apiKey,
     },
     body: JSON.stringify({
-      apiKey: params.apiKey,
       name: params.program.name,
       programId: params.program.address,
       version: "0.1.0",

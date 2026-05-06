@@ -18,7 +18,7 @@ const cli = new Command();
 
 cli
   .name("better-sol")
-  .description("TypeScript-first Solana program tooling")
+  .description("TypeScript-first Solana program tooling — run with npx @better-sol/cli")
   .version("0.0.0");
 
 cli

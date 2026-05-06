@@ -1,37 +1,33 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
-import { confirm, intro, log, outro, spinner } from "@clack/prompts";
+import { intro, log, outro, spinner } from "@clack/prompts";
 import { execSync } from "node:child_process";
 import { getStoredApiKey } from "../auth";
 import { loadConfig, parseCluster } from "../config";
-import { ensureDirectory } from "../path";
+import { BETTER_SOL_DIR, cwdJoin, cwdPath, ensureDirectory } from "../path";
 import type { DeployOptions } from "../types";
-import { discoverPrograms } from "../parser/discover";
 import { compileProgram, getApiUrl } from "../api/client";
 import { generateAnchorProject } from "../generator/rust";
+import { discoverProgramsWithSpinner, CLI_COMMAND } from "./shared";
 
 export async function deploy(options: DeployOptions): Promise<void> {
   intro("better-sol deploy");
 
   const apiKey = await getStoredApiKey();
   if (!options.dryRun && !apiKey) {
-    throw new Error("No API key found. Run `better-sol login` first.");
+    throw new Error(`No API key found. Run \`${CLI_COMMAND} login\` first.`);
   }
 
   const config = await loadConfig();
   const cluster = parseCluster(options.cluster, config.cluster);
   const src = options.src ?? config.programs;
   const out = options.output ?? config.out;
-  const outDir = out.startsWith("/") ? out : join(process.cwd(), out);
+  const outDir = cwdPath(out);
+
+  const programs = await discoverProgramsWithSpinner(src);
 
   const s = spinner();
-  s.start(`Discovering programs from ${src}`);
-  const programs = await discoverPrograms(src);
-  if (programs.length === 0) {
-    s.stop("No programs found");
-    throw new Error(`No program() definitions found in ${src}`);
-  }
-
   const matched =
     options.program !== undefined
       ? programs.filter((p) => p.name === options.program)
@@ -53,8 +49,8 @@ export async function deploy(options: DeployOptions): Promise<void> {
       projects.map(async (project) => {
         const dir = join(outDir, project.program.name);
         await ensureDirectory(join(dir, "src"));
-        await writeFile(join(dir, "Cargo.toml"), project.cargoToml);
-        await writeFile(join(dir, "src", "lib.rs"), project.libRs);
+        writeFileSync(join(dir, "Cargo.toml"), project.cargoToml);
+        writeFileSync(join(dir, "src", "lib.rs"), project.libRs);
       }),
     );
   }
@@ -63,7 +59,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
     s.stop("Dry run complete");
     for (const project of projects)
       printProgramSummary(project.program, cluster, outDir, true);
-    outro("Generated Anchor Rust only. No compile or deploy performed.");
+    outro("Dry run complete — Rust written to disk. No compilation or deployment performed.");
     return;
   }
 
@@ -100,58 +96,17 @@ export async function deploy(options: DeployOptions): Promise<void> {
     if (result.status === "success" && result.bytecode !== null) {
       const soDir = join(outDir, project.program.name, "target", "deploy");
       const soPath = join(soDir, `${project.program.name}.so`);
-      const keypairPath = join(process.cwd(), ".better-sol", `${project.program.name}.json`);
+      const keypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
 
-      await mkdir(soDir, { recursive: true });
-      await writeFile(soPath, Buffer.from(result.bytecode, "base64"));
+      mkdirSync(soDir, { recursive: true });
+      writeFileSync(soPath, Buffer.from(result.bytecode, "base64"));
 
       s.message(`Deploying ${project.program.name} to ${cluster}`);
-
-      if (!solanaCliInstalled()) {
-        s.stop("solana CLI not found");
-
-        const shouldInstall = await confirm({
-          message: "Install Solana CLI automatically?",
-          initialValue: true,
-        });
-
-        if (shouldInstall) {
-          s.start("Installing Solana CLI");
-          try {
-            execSync(
-              "sh -c \"$(curl -sSfL https://release.anza.xyz/stable/install)\"",
-              { encoding: "utf8", timeout: 300_000, stdio: "pipe" },
-            );
-            s.stop("Solana CLI installed");
-            log.warn(
-              "Restart your terminal or run `source ~/.zshrc` (or `source ~/.bashrc`) for PATH to take effect, then re-run deploy.",
-            );
-            outro("PATH updated — re-run deploy after restarting your terminal.");
-            return;
-          } catch {
-            s.stop("Installation failed");
-            log.warn("Install manually:");
-            log.step(
-              "sh -c \"$(curl -sSfL https://release.anza.xyz/stable/install)\"",
-            );
-          }
-        } else {
-          log.info("Install Solana CLI manually:");
-          log.step(
-            "sh -c \"$(curl -sSfL https://release.anza.xyz/stable/install)\"",
-          );
-        }
-
-        log.info("Then deploy:");
-        log.step(
-          `solana program deploy "${soPath}" --program-id "${keypairPath}" --url ${cluster}`,
-        );
-        continue;
-      }
+      const solanaPath = ensureSolanaCli(s);
 
       try {
         execSync(
-          `solana program deploy "${soPath}" --program-id "${keypairPath}" --url ${cluster}`,
+          `"${solanaPath}" program deploy "${soPath}" --program-id "${keypairPath}" --url ${cluster}`,
           { encoding: "utf8", timeout: 120_000, stdio: "pipe" },
         );
         s.stop(`Deployed to ${cluster}`);
@@ -162,7 +117,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
           error instanceof Error && "stderr" in error
             ? (error as { readonly stderr: string }).stderr.trim()
             : String(error);
-        throw new Error(`Deployment failed: ${message}`);
+        throw new Error(`Deployment failed: ${message}`, { cause: error });
       }
     }
   }
@@ -171,22 +126,70 @@ export async function deploy(options: DeployOptions): Promise<void> {
     log.info("");
     log.info("To verify this build on-chain:");
     log.step(
-      "1. Commit and push the generated/ directory to a public repository",
+      `1. Commit and push the ${out} directory to a public repository`,
     );
     log.step(
-      `2. Run \`better-sol verify ${matched[0]?.address ?? "<program-id>"}\``,
+      `2. Run \`${CLI_COMMAND} verify ${matched[0]?.address ?? "<program-id>"}\``,
     );
   }
 
-  outro("Compile completed.");
+  outro("Deploy complete.");
 }
 
-function solanaCliInstalled(): boolean {
+const SOLANA_INSTALL_DIR = join(
+  homedir(),
+  ".local",
+  "share",
+  "solana",
+  "install",
+  "active_release",
+  "bin",
+);
+
+function resolveSolanaBinary(): string | null {
   try {
     execSync("solana --version", { stdio: "ignore", timeout: 5000 });
-    return true;
+    return "solana";
   } catch {
-    return false;
+    const installed = join(SOLANA_INSTALL_DIR, "solana");
+    try {
+      execSync(`"${installed}" --version`, { stdio: "ignore", timeout: 5000 });
+      return installed;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function ensureSolanaCli(s: ReturnType<typeof spinner>): string {
+  const existing = resolveSolanaBinary();
+  if (existing) return existing;
+
+  s.message("Installing Solana CLI");
+  try {
+    execSync(
+      "sh -c \"$(curl -sSfL https://release.anza.xyz/stable/install)\"",
+      { encoding: "utf8", timeout: 300_000, stdio: "pipe" },
+    );
+  } catch {
+    s.stop("Installation failed");
+    throw new Error(
+      "Failed to install Solana CLI.\n" +
+        "Install manually with: curl -sSfL https://release.anza.xyz/stable/install | sh",
+    );
+  }
+
+  const installed = join(SOLANA_INSTALL_DIR, "solana");
+  try {
+    execSync(`"${installed}" --version`, { stdio: "ignore", timeout: 5000 });
+    s.message("Solana CLI ready — deploying");
+    return installed;
+  } catch {
+    s.stop("Binary not found after install");
+    throw new Error(
+      `Solana CLI installed but binary not found at: ${installed}\n` +
+        "Try restarting your terminal, then re-run deploy.",
+    );
   }
 }
 
@@ -196,14 +199,7 @@ function printProgramSummary(
   out: string,
   wroteRust: boolean,
 ): void {
-  log.info(
-    [
-      `${program.name}`,
-      `Program: ${program.address}`,
-      `Cluster: ${cluster}`,
-      wroteRust ? `Generated Rust: ${out}/${program.name}/` : null,
-    ]
-      .filter((line): line is string => line !== null)
-      .join("\n"),
-  );
+  log.step(`Program:  ${program.address}`);
+  log.step(`Cluster:  ${cluster}`);
+  if (wroteRust) log.step(`Rust:     ${out}/${program.name}/`);
 }

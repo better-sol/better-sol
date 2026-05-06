@@ -1,9 +1,15 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+
+export const BETTER_SOL_DIR = ".better-sol";
 
 export function cwdPath(path: string): string {
   return isAbsolute(path) ? path : resolve(process.cwd(), path);
+}
+
+export function cwdJoin(...segments: readonly string[]): string {
+  return join(process.cwd(), ...segments);
 }
 
 export async function ensureParent(path: string): Promise<void> {

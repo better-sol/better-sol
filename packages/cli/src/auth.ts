@@ -1,9 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { ensureParent, fileExists } from "./path";
+import { BETTER_SOL_DIR, ensureParent, fileExists } from "./path";
 
-const AUTH_DIR = join(homedir(), ".better-sol");
+const AUTH_DIR = join(homedir(), BETTER_SOL_DIR);
 const AUTH_PATH = join(AUTH_DIR, "auth.json");
 
 type StoredAuth = {
