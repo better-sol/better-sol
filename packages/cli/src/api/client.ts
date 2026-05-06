@@ -8,13 +8,13 @@ export function getApiUrl(): string {
 
 export type CompileResponse = {
   readonly id: string;
-  readonly status: "success" | "failed" | "timeout";
+  readonly status: "success" | "failed";
   readonly compileTimeMs: number;
   readonly bytecode: string | null;
 };
 
 export async function compileProgram(params: {
-  readonly apiKey: string;
+  readonly apiKey?: string;
   readonly program: IrProgram;
   readonly libRs: string;
   readonly cargoToml: string;
@@ -24,12 +24,12 @@ export async function compileProgram(params: {
     throw new Error(`${params.program.name} is missing address`);
 
   const url = getApiUrl();
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (params.apiKey) headers["x-api-key"] = params.apiKey;
+
   const response = await fetch(`${url}/api/compile`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": params.apiKey,
-    },
+    headers,
     body: JSON.stringify({
       name: params.program.name,
       programId: params.program.address,

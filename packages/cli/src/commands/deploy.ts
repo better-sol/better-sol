@@ -15,9 +15,6 @@ export async function deploy(options: DeployOptions): Promise<void> {
   intro("better-sol deploy");
 
   const apiKey = await getStoredApiKey();
-  if (!options.dryRun && !apiKey) {
-    throw new Error(`No API key found. Run \`${CLI_COMMAND} login\` first.`);
-  }
 
   const config = await loadConfig();
   const cluster = parseCluster(options.cluster, config.cluster);
@@ -67,7 +64,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const compileResults = await Promise.all(
     projects.map((project) =>
       compileProgram({
-        apiKey: apiKey!,
+        apiKey,
         program: project.program,
         libRs: project.libRs,
         cargoToml: project.cargoToml,
@@ -78,8 +75,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
   s.stop("Compilation completed");
 
   for (const [i, project] of projects.entries()) {
-    const result = compileResults[i];
-    if (result === undefined) continue;
+    const result = compileResults[i]!;
 
     printProgramSummary(project.program, cluster, outDir, options.verify);
 
