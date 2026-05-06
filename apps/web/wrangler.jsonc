@@ -2,10 +2,18 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "better-sol",
   "compatibility_date": "2026-05-05",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "keep_vars": true,
   "main": "@tanstack/react-start/server-entry",
   "observability": {
     "enabled": true,
   },
+  "r2_buckets": [
+    {
+      "binding": "BETTER_SOL_BUCKET",
+      "bucket_name": "better-sol",
+    },
+  ],
 }

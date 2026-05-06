@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout.index'
+import { Route as ApiCompileRouteImport } from './routes/api/compile'
 import { Route as LayoutDashIndexRouteImport } from './routes/_layout.dash.index'
 import { Route as LayoutDashKeysRouteImport } from './routes/_layout.dash.keys'
 
@@ -22,6 +23,11 @@ const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => LayoutRoute,
+} as any)
+const ApiCompileRoute = ApiCompileRouteImport.update({
+  id: '/api/compile',
+  path: '/api/compile',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const LayoutDashIndexRoute = LayoutDashIndexRouteImport.update({
   id: '/dash/',
@@ -36,10 +42,12 @@ const LayoutDashKeysRoute = LayoutDashKeysRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/api/compile': typeof ApiCompileRoute
   '/dash/keys': typeof LayoutDashKeysRoute
   '/dash/': typeof LayoutDashIndexRoute
 }
 export interface FileRoutesByTo {
+  '/api/compile': typeof ApiCompileRoute
   '/': typeof LayoutIndexRoute
   '/dash/keys': typeof LayoutDashKeysRoute
   '/dash': typeof LayoutDashIndexRoute
@@ -47,18 +55,20 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/api/compile': typeof ApiCompileRoute
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/dash/keys': typeof LayoutDashKeysRoute
   '/_layout/dash/': typeof LayoutDashIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dash/keys' | '/dash/'
+  fullPaths: '/' | '/api/compile' | '/dash/keys' | '/dash/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dash/keys' | '/dash'
+  to: '/api/compile' | '/' | '/dash/keys' | '/dash'
   id:
     | '__root__'
     | '/_layout'
+    | '/api/compile'
     | '/_layout/'
     | '/_layout/dash/keys'
     | '/_layout/dash/'
@@ -66,6 +76,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
+  ApiCompileRoute: typeof ApiCompileRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -83,6 +94,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof LayoutIndexRouteImport
       parentRoute: typeof LayoutRoute
+    }
+    '/api/compile': {
+      id: '/api/compile'
+      path: '/api/compile'
+      fullPath: '/api/compile'
+      preLoaderRoute: typeof ApiCompileRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_layout/dash/': {
       id: '/_layout/dash/'
@@ -118,6 +136,7 @@ const LayoutRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
+  ApiCompileRoute: ApiCompileRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

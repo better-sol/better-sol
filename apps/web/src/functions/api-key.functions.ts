@@ -1,7 +1,7 @@
 import { db } from "#/db/db.server.ts";
 import { apiKeysTable } from "#/db/schema.ts";
 import { createServerFn } from "@tanstack/react-start";
-import { and, eq, lte, sql } from "drizzle-orm";
+import { and, eq, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { decryptValue, encryptValue, generateToken } from "./crypto.functions";
 
@@ -55,15 +55,16 @@ export const listApiKeys = createServerFn({ method: "POST" })
     const address = requireAccountAddress(accountAddress);
 
     await db
-      .delete(apiKeysTable)
+      .update(apiKeysTable)
+      .set({ deletedAt: sql`now()` })
       .where(
         and(
-          eq(apiKeysTable.accountAddress, address),
           lte(apiKeysTable.expiresAt, sql`now()`),
+          isNull(apiKeysTable.deletedAt),
         ),
       );
 
-    return db
+    const activeKeys = await db
       .select({
         id: apiKeysTable.id,
         name: apiKeysTable.name,
@@ -73,7 +74,14 @@ export const listApiKeys = createServerFn({ method: "POST" })
         createdAt: apiKeysTable.createdAt,
       })
       .from(apiKeysTable)
-      .where(eq(apiKeysTable.accountAddress, address));
+      .where(
+        and(
+          eq(apiKeysTable.accountAddress, address),
+          isNull(apiKeysTable.deletedAt),
+        ),
+      );
+
+    return activeKeys;
   });
 
 export const revealApiKey = createServerFn({ method: "POST" })
@@ -102,7 +110,8 @@ export const revokeApiKey = createServerFn({ method: "POST" })
   .handler(async ({ data: { id, accountAddress } }) => {
     const address = requireAccountAddress(accountAddress);
     const [row] = await db
-      .delete(apiKeysTable)
+      .update(apiKeysTable)
+      .set({ deletedAt: sql`now()` })
       .where(
         and(eq(apiKeysTable.id, id), eq(apiKeysTable.accountAddress, address)),
       )
@@ -119,8 +128,14 @@ export const validateApiKey = createServerFn({ method: "POST" })
     const keyPrefix = rawKey.slice(0, 12);
 
     await db
-      .delete(apiKeysTable)
-      .where(lte(apiKeysTable.expiresAt, sql`now()`));
+      .update(apiKeysTable)
+      .set({ deletedAt: sql`now()` })
+      .where(
+        and(
+          lte(apiKeysTable.expiresAt, sql`now()`),
+          isNull(apiKeysTable.deletedAt),
+        ),
+      );
 
     const candidates = await db
       .select({
@@ -129,7 +144,12 @@ export const validateApiKey = createServerFn({ method: "POST" })
         keyEncrypted: apiKeysTable.keyEncrypted,
       })
       .from(apiKeysTable)
-      .where(eq(apiKeysTable.keyPrefix, keyPrefix));
+      .where(
+        and(
+          eq(apiKeysTable.keyPrefix, keyPrefix),
+          isNull(apiKeysTable.deletedAt),
+        ),
+      );
 
     for (const candidate of candidates) {
       const decrypted = await decryptValue({
