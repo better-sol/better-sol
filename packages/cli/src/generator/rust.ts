@@ -5,6 +5,7 @@ import type {
 import { CodeWriter } from "./code-writer";
 import { toSnake, toPascal } from "../naming";
 import { transpileBody } from "./body";
+import { paddingFor } from "./layout";
 
 export function generateAnchorProject(program: IrProgram): AnchorProject {
   const libRs = generateLibRs(program);
@@ -452,11 +453,6 @@ function layoutRustFields(fields: readonly { readonly name: string; readonly typ
   const tailPadding = paddingFor(offset, maxAlign);
   if (tailPadding > 0) lines.push(`pub _padding_${paddingIndex}: [u8; ${tailPadding}],`);
   return lines;
-}
-
-function paddingFor(offset: number, align: number): number {
-  const remainder = offset % align;
-  return remainder === 0 ? 0 : align - remainder;
 }
 
 function typeLayout(type: IrType, structs: readonly IrStructZC[], zeroCopy: boolean): { readonly size: number; readonly align: number } {
