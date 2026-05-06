@@ -7,6 +7,10 @@ import {
   type RpcSubscriptions,
   type SolanaRpcSubscriptionsApi,
   type TransactionSigner,
+  type Signature as KitSignature,
+  type Instruction as KitInstruction,
+  type InstructionPlan as KitInstructionPlan,
+  type Slot as KitSlot,
 } from "@solana/kit";
 import {
   type AccountConstraint,
@@ -76,9 +80,9 @@ export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, nev
   readonly programs?: TPrograms;
   readonly commitment?: "processed" | "confirmed" | "finalized";
   readonly computeUnits?: ComputeUnitConfig;
-  readonly addressLookupTables?: readonly import("@solana/kit").Address[];
+  readonly addressLookupTables?: readonly KitAddress[];
   readonly durableNonce?: {
-    readonly nonceAccountAddress: import("@solana/kit").Address;
+    readonly nonceAccountAddress: KitAddress;
     readonly nonceAuthority: TransactionSigner;
   };
 };
@@ -144,14 +148,14 @@ export type ComputeUnitConfig = {
 };
 
 export type PrepareResult = {
-  readonly instruction: import("@solana/kit").Instruction;
+  readonly instruction: KitInstruction;
   readonly signers: readonly TransactionSigner[];
   readonly pubkeys: Record<string, KitAddress>;
 };
 
 export type InstructionPlanResult = {
-  readonly instruction: import("@solana/kit").Instruction;
-  readonly plan: import("@solana/kit").InstructionPlan;
+  readonly instruction: KitInstruction;
+  readonly plan: KitInstructionPlan;
 };
 
 export type InstructionSigningMode = "signed" | "unsigned";
@@ -159,18 +163,18 @@ export type InstructionSigningMode = "signed" | "unsigned";
 export type InstructionMethod<TIx> = TIx extends InstructionDefinition<AccountInputs, ArgsSchema | undefined>
   ? RequiredKeys<InstructionParams<TIx>> extends never
     ? {
-        (params?: InstructionParams<TIx>): Promise<import("@solana/kit").Signature>;
-        send(params?: InstructionParams<TIx>): Promise<import("@solana/kit").Signature>;
-        instruction(params?: InstructionParams<TIx>): Promise<import("@solana/kit").Instruction>;
+        (params?: InstructionParams<TIx>): Promise<KitSignature>;
+        send(params?: InstructionParams<TIx>): Promise<KitSignature>;
+        instruction(params?: InstructionParams<TIx>): Promise<KitInstruction>;
         transaction(params?: InstructionParams<TIx>): Promise<SignedTransaction>;
         simulate(params?: InstructionParams<TIx>): Promise<SimulateResult>;
         prepare(params?: InstructionParams<TIx>): Promise<PrepareResult>;
         plan(params?: InstructionParams<TIx>): Promise<InstructionPlanResult>;
       }
     : {
-        (params: InstructionParams<TIx>): Promise<import("@solana/kit").Signature>;
-        send(params: InstructionParams<TIx>): Promise<import("@solana/kit").Signature>;
-        instruction(params: InstructionParams<TIx>): Promise<import("@solana/kit").Instruction>;
+        (params: InstructionParams<TIx>): Promise<KitSignature>;
+        send(params: InstructionParams<TIx>): Promise<KitSignature>;
+        instruction(params: InstructionParams<TIx>): Promise<KitInstruction>;
         transaction(params: InstructionParams<TIx>): Promise<SignedTransaction>;
         simulate(params: InstructionParams<TIx>): Promise<SimulateResult>;
         prepare(params: InstructionParams<TIx>): Promise<PrepareResult>;
@@ -222,13 +226,13 @@ type ProgramClient<TProgram> = {
 
 export type TokenClient = {
   getATA(params: { readonly owner: AddressInput; readonly mint: AddressInput }): Promise<KitAddress>;
-  createMint(params: { readonly decimals: number; readonly authority?: AddressInput; readonly freezeAuthority?: AddressInput | null }): Promise<{ readonly mint: KitAddress; readonly mintSigner: TransactionSigner; readonly signature: import("@solana/kit").Signature }>;
-  mintTo(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly decimals?: number }): Promise<import("@solana/kit").Signature>;
-  transfer(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput; readonly decimals?: number }): Promise<import("@solana/kit").Signature>;
+  createMint(params: { readonly decimals: number; readonly authority?: AddressInput; readonly freezeAuthority?: AddressInput | null }): Promise<{ readonly mint: KitAddress; readonly mintSigner: TransactionSigner; readonly signature: KitSignature }>;
+  mintTo(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly decimals?: number }): Promise<KitSignature>;
+  transfer(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput; readonly decimals?: number }): Promise<KitSignature>;
   getBalance(params: { readonly owner: AddressInput; readonly mint: AddressInput }): Promise<bigint>;
 };
 
-export type EventCallback<TEvent extends Record<string, unknown> = Record<string, unknown>> = (event: TEvent, slot: bigint, signature: import("@solana/kit").Signature) => void;
+export type EventCallback<TEvent extends Record<string, unknown> = Record<string, unknown>> = (event: TEvent, slot: bigint, signature: KitSignature) => void;
 
 export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, never>, THasSigner extends boolean = boolean> = {
   readonly payer: THasSigner extends true ? KitAddress : KitAddress | null;
@@ -237,12 +241,12 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   readonly token: TokenClient;
   readonly token2022: TokenClient;
   withSigner(signer: SignerInput): Promise<BetterSolClient<TPrograms, true>>;
-  send(instructions: readonly (import("@solana/kit").Instruction | Promise<import("@solana/kit").Instruction>)[]): Promise<import("@solana/kit").Signature>;
-  batch(instructions: readonly (import("@solana/kit").Instruction | Promise<import("@solana/kit").Instruction>)[]): Promise<import("@solana/kit").Signature>;
+  send(instructions: readonly (KitInstruction | Promise<KitInstruction>)[]): Promise<KitSignature>;
+  batch(instructions: readonly (KitInstruction | Promise<KitInstruction>)[]): Promise<KitSignature>;
   steps<const TOutputs extends readonly unknown[]>(steps: StepChain<TOutputs>): Promise<TOutputs>;
   getBalance(address: AddressInput): Promise<bigint>;
-  transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<import("@solana/kit").Signature>;
-  onTransaction(callback: (signature: import("@solana/kit").Signature, result: import("@solana/kit").Slot) => void): () => void;
+  transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<KitSignature>;
+  onTransaction(callback: (signature: KitSignature, result: KitSlot) => void): () => void;
 } & {
   [K in keyof TPrograms]: TPrograms[K] extends AnyProgram ? ProgramClient<TPrograms[K]> : never;
 };

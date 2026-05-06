@@ -15,6 +15,7 @@ import {
   type Instruction,
   type TransactionSigner,
   type Signature,
+  type Address as KitAddress,
 } from "@solana/kit";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
@@ -32,7 +33,7 @@ import type {
   SignedTransaction,
   SimulateResult,
 } from "./types";
-import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_RETRIES, CONFIRMATION_INTERVAL_MS } from "./types";
+import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_RETRIES, CONFIRMATION_INTERVAL_MS, type ComputeUnitConfig } from "./types";
 import { type LookupTableIndex, type ResolvedAccountMeta, resolveWithLookupTables } from "./lookup-tables";
 
 export type NonceConfig = {
@@ -208,7 +209,7 @@ function resolveAccountMetaInput(
   return { address: kitAddress(value), role };
 }
 
-function fixedProgramMeta(name: string, value: unknown, expected: import("@solana/kit").Address, role: AccountRole): AccountMeta {
+function fixedProgramMeta(name: string, value: unknown, expected: KitAddress, role: AccountRole): AccountMeta {
   if (value !== undefined && (typeof value !== "string" || kitAddress(value) !== expected)) {
     throw new Error(`Account '${name}' must be ${expected}`);
   }
@@ -266,7 +267,7 @@ function decodeBase64Data(data: readonly [string, string]): Uint8Array {
 
 export function withComputeBudget(
   instructions: readonly Instruction[],
-  config: import("./types").ComputeUnitConfig | undefined,
+  config: ComputeUnitConfig | undefined,
 ): readonly Instruction[] {
   if (config === undefined) return instructions;
   const budgetInstructions: Instruction[] = [];

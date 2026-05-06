@@ -1,4 +1,4 @@
-import { address as kitAddress, type TransactionSigner, type Signature, flattenInstructionPlan } from "@solana/kit";
+import { address as kitAddress, type TransactionSigner, type Signature, type Address as KitAddress, flattenInstructionPlan } from "@solana/kit";
 import { findAssociatedTokenPda, fetchMaybeMint, fetchMaybeToken, getCreateAssociatedTokenIdempotentInstructionAsync, getCreateMintInstructionPlan, getMintToCheckedInstruction, getTransferCheckedInstruction, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import type { AddressInput, KitRpc, SignedTransaction, TokenClient } from "./types";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "./types";
@@ -9,11 +9,11 @@ export function buildTokenClient(
   rpc: KitRpc,
   signer: TransactionSigner | undefined,
   commitment: "processed" | "confirmed" | "finalized",
-  tokenProgramAddress: import("@solana/kit").Address,
+  tokenProgramAddress: KitAddress,
   nonceConfig: NonceConfig | undefined,
   onConfirmed: TransactionCallback,
 ): TokenClient {
-  const deriveAtaAddr = async (owner: AddressInput, mint: AddressInput): Promise<import("@solana/kit").Address> => {
+  const deriveAtaAddr = async (owner: AddressInput, mint: AddressInput): Promise<KitAddress> => {
     const [ata] = await findAssociatedTokenPda({ owner: kitAddress(owner), tokenProgram: kitAddress(tokenProgramAddress), mint: kitAddress(mint) });
     return ata;
   };
@@ -69,7 +69,7 @@ export function buildTokenClient(
   };
 }
 
-async function fetchMintDecimals(rpc: KitRpc, mint: AddressInput, tokenProgramAddress: import("@solana/kit").Address): Promise<number> {
+async function fetchMintDecimals(rpc: KitRpc, mint: AddressInput, tokenProgramAddress: KitAddress): Promise<number> {
   const mintAccount = await fetchMaybeMint(rpc, kitAddress(mint));
   if (!mintAccount.exists) throw new Error(`Mint not found: ${mint}`);
   if (mintAccount.programAddress === kitAddress(tokenProgramAddress)) return mintAccount.data.decimals;
