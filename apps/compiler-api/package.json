@@ -1,0 +1,20 @@
+{
+  "name": "compiler-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "check": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
