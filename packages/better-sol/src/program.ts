@@ -456,10 +456,6 @@ export function innerOfToken(token: TypeToken<unknown, TypeKind>): TypeToken<unk
   return token.inner;
 }
 
-export function sizeOfToken(token: TypeToken<unknown, TypeKind>): number | undefined {
-  if (!hasInnerAndSizeToken(token)) return undefined;
-  return token.size;
-}
 export const cpi = {
   token: {
     transfer(_params: TransferParams): void {},

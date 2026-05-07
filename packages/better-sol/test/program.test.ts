@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { bs, cpi } from "../src/program";
-import { version } from "../src/index";
-
-test("exports a version", () => {
-  expect(version).toBe("0.1.0");
-});
 
 describe("program builder", () => {
   test("creates typed account definitions", () => {

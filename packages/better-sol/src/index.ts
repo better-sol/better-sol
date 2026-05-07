@@ -1,9 +1,9 @@
-export { betterSol, secretKey, keypairFile } from "./client";
-export type { BetterSolClient, BetterSolConfig, BoundAccount, TokenClient, DeriveInput, AddressInput, StepChain, Cluster } from "./client";
-export { ProgramError } from "./client/events";
-export type { ParsedEvent, ProgramErrorMap } from "./client/events";
+export { betterSol, secretKey, keypairFile } from "#client/factory";
+export type { BetterSolClient, BetterSolConfig, BoundAccount, TokenClient, DeriveInput, AddressInput, StepChain, Cluster } from "#client/types";
+export { ProgramError } from "#client/events";
+export type { ParsedEvent, ProgramErrorMap } from "#client/events";
 
-export { bs, cpi } from "./program";
+export { bs, cpi } from "#program";
 export type {
   Address,
   InferType,
@@ -28,20 +28,13 @@ export type {
   ProgramErrors,
   ProgramEvents,
   ProgramAccounts,
-} from "./program";
+} from "#program";
 
-export { fromIdl } from "./idl";
-export type { AnchorIdl, IdlProgram, IdlField, IdlType, IdlDiscriminator } from "./idl";
-
-export { version } from "./version";
+export { fromIdl } from "#idl";
+export type { AnchorIdl, IdlProgram, IdlField, IdlType, IdlDiscriminator } from "#idl";
 
 export {
-  parallelInstructionPlan,
-  sequentialInstructionPlan,
   nonDivisibleSequentialInstructionPlan,
-  singleInstructionPlan,
-  createTransactionPlanExecutor,
-  appendTransactionMessageInstructionPlan,
   flattenInstructionPlan,
 } from "@solana/kit";
-export type { InstructionPlan, TransactionPlan } from "@solana/kit";
+export type { InstructionPlan } from "@solana/kit";
