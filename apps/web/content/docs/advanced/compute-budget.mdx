@@ -1,0 +1,122 @@
+---
+title: Compute Budget
+description: Control compute unit limits and priority fees to make your transactions land reliably.
+---
+
+Every Solana transaction consumes compute units. Simple transactions use a few thousand. Complex ones with many accounts, loops, or CPI calls can use hundreds of thousands. If your transaction exceeds the default limit, it fails before your instruction even runs.
+
+Better Sol lets you set both the compute unit limit (how many units your transaction is allowed to consume) and the compute unit price (how much you pay per unit in priority fees). You set these once in the client config, and they apply to every transaction.
+
+## How to use it
+
+Pass a `computeUnits` config to `betterSol()`:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { marketplace },
+  computeUnits: {
+    computeUnitLimit: 400_000n,
+    computeUnitPrice: 5000n,
+  },
+})
+```
+
+Both fields are optional. You can set either, both, or neither.
+
+Every instruction call through this client (`sol.counter.increment()`, `sol.send()`, `sol.batch()`, token operations) gets these settings. The client prepends `setComputeUnitLimit` and `setComputeUnitPrice` instructions at transaction build time.
+
+## Compute unit limit
+
+The `computeUnitLimit` field sets the maximum number of compute units your transaction can consume. If the transaction uses more, it fails.
+
+```ts
+computeUnitLimit: 200_000n,   // default Solana limit
+computeUnitLimit: 400_000n,   // for heavier transactions
+computeUnitLimit: 1_400_000n, // maximum allowed per transaction
+```
+
+The default Solana limit is 200,000 compute units per instruction. If your transaction has multiple instructions, the limit applies to the whole transaction, not per instruction.
+
+When in doubt, simulate first. Call `.simulate()` on your instruction to see how many compute units it uses:
+
+```ts
+const result = await sol.marketplace.batchPurchase.simulate({
+  listings: [addr1, addr2, addr3],
+  buyer: sol.payer,
+})
+console.log(result.unitsConsumed) // bigint, e.g. 320_000n
+```
+
+Take the result, add 20% for safety, and set that as your limit.
+
+## Compute unit price
+
+The `computeUnitPrice` field sets the price per compute unit in micro-lamports. Higher values get priority in the leader's transaction queue.
+
+```ts
+computeUnitPrice: 1000n,   // 0.000001 SOL per compute unit
+computeUnitPrice: 10000n,  // pay more for faster inclusion
+computeUnitPrice: 50000n,  // during congestion
+```
+
+The price is in micro-lamports. One micro-lamport is 0.000001 lamports. One lamport is 0.000000001 SOL. So:
+
+- `computeUnitPrice: 1000n` means you pay 0.000001 SOL per compute unit
+- A transaction using 200,000 compute units costs 0.2 SOL in priority fees at this price
+
+During normal network conditions you may not need to set a compute unit price at all. During congestion (NFT mints, popular token launches), leaders prioritize transactions with higher fees. Setting a reasonable price helps your transaction land instead of sitting in the queue.
+
+## When to adjust these settings
+
+**Increase the limit** when your instruction:
+
+- Loops over `bs.remaining()` accounts
+- Performs multiple CPI calls in one `run()` body
+- Writes to several accounts with complex field updates
+- Includes `bs.realloc()` to resize an account
+
+**Set a price** when:
+
+- The network is congested and transactions are landing slowly
+- You are competing with other users for block space (NFT mints, token launches)
+- Your transaction is time-sensitive (arbitrage, liquidations)
+
+**Leave both unset** when:
+
+- Your instruction is simple (a few accounts, basic arithmetic)
+- You are on devnet or localnet
+- You have no timing constraints
+
+## How they are applied
+
+The client prepends the budget instructions before your instruction data:
+
+```
+[setComputeUnitLimit(400_000)]
+[setComputeUnitPrice(5_000)]
+[your_counter_increment(...)]
+```
+
+Both are prepended automatically inside `buildAndSignTransaction()`. The budget instructions are always the first instructions in the transaction because the Solana runtime reads them before executing the rest.
+
+If you set `computeUnitLimit` without `computeUnitPrice`, only the limit instruction is prepended. If you set only the price, only the price instruction is prepended. If you set neither, no budget instructions are added and the runtime defaults apply.
+
+## Estimating with simulation
+
+The `.simulate()` return value includes `unitsConsumed`, which tells you exactly how many compute units your transaction would use:
+
+```ts
+const result = await sol.marketplace.batchPurchase.simulate({
+  listings: [addr1, addr2, addr3],
+  buyer: sol.payer,
+})
+
+console.log(result.unitsConsumed) // 287_432n
+console.log(result.logs)          // full transaction logs for debugging
+```
+
+Simulations run against the current bank state but do not modify anything. You can simulate as many times as you want without spending SOL or changing on-chain data.

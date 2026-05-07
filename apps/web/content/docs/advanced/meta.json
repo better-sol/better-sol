@@ -1,0 +1,9 @@
+{
+  "pages": [
+    "wallet-adapters",
+    "address-lookup-tables",
+    "durable-nonce",
+    "compute-budget",
+    "custom-rpc"
+  ]
+}

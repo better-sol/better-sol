@@ -8,7 +8,7 @@ A single transaction on Solana can contain multiple instructions. This is useful
 ## `sol.send()`: Multiple instructions in one transaction
 
 ```ts
-import { betterSol } from "better-sol"
+import { betterSol, keypairFile } from "better-sol"
 import { counter } from "./programs/counter"
 
 const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs: { counter } })

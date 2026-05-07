@@ -67,16 +67,6 @@ console.log("active:", data?.isActive)     // true
 
 `fetch()` returns the fully typed account data: `{ count: bigint; authority: string; isActive: boolean }`. Returns `null` if the account does not exist. You never write these types yourself. They are inferred from your program definition.
 
-## Close the account
-
-When you are done, reclaim the rent:
-
-```tsx ts2js
-await sol.counter.close({
-  counter: counterAddr,
-})
-```
-
 ## Run it
 
 ```bash

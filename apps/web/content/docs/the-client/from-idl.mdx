@@ -217,6 +217,8 @@ const staking = fromIdl({
 There is one case where `fromIdl()` provides literal instruction and account names. If you pass the IDL as a `const` assertion, TypeScript narrows the string literals:
 
 ```ts
+import type { AnchorIdl } from "better-sol"
+
 const idl = {
   address: "Ctr11111111111111111111111111111111111111",
   metadata: { name: "counter", version: "1.0.0", spec: "0.1.0" },

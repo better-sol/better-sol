@@ -1,0 +1,171 @@
+---
+title: Wallet Adapters
+description: Connect browser wallets like Phantom, Backpack, and Solflare to the client.
+---
+
+Better Sol works with any wallet that can sign transactions. You create the client once without a payer, then scope wallet sessions with `withSigner()`. Each signed instruction runs in the context of the connected wallet without creating a new client.
+
+## The pattern
+
+Create the client read-only. When a user connects their wallet, call `withSigner()` to get a scoped client that signs with that wallet:
+
+```ts
+import { betterSol } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  programs: { counter },
+})
+
+// User connects their wallet. You get a scoped client.
+const userSol = await sol.withSigner(walletAdapter(wallet))
+await userSol.counter.increment({ counter: addr, amount: 5n })
+```
+
+The original `sol` stays unchanged. Call `withSigner()` once per user session. All signer accounts in your instructions (`bs.signer()`) are filled with the connected wallet's address.
+
+If `sol.payer` was `null` on the base client, it becomes the wallet's address on the scoped client. TypeScript tracks this: scoped clients have `payer: string` instead of `payer: string | null`.
+
+## Wallet adapter (@solana/wallet-adapter-react)
+
+If you use the standard Solana wallet adapter, import `walletAdapter` and pass the connected wallet:
+
+```ts
+import { betterSol } from "better-sol"
+import { walletAdapter } from "better-sol/wallets"
+import { useWallet } from "@solana/wallet-adapter-react"
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  programs: { counter },
+})
+
+function App() {
+  const wallet = useWallet()
+
+  const handleIncrement = async () => {
+    const userSol = await sol.withSigner(walletAdapter(wallet))
+    await userSol.counter.increment({ counter: addr, amount: 5n })
+  }
+
+  return <button onClick={handleIncrement}>Increment</button>
+}
+```
+
+The wallet must support `signTransaction`. If it does not, the adapter throws an error telling you to install `@solana/wallet-adapter-react`.
+
+## Reown (AppKit)
+
+For apps using Reown AppKit for wallet connections:
+
+```ts
+import { betterSol } from "better-sol"
+import { reownWallet } from "better-sol/wallets"
+import { useAppKitProvider } from "@reown/appkit/react"
+
+const { walletProvider } = useAppKitProvider("solana")
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  programs: { counter },
+})
+
+const userSol = await sol.withSigner(reownWallet({
+  address: walletProvider.publicKey,
+  walletProvider,
+}))
+```
+
+Reown does not expose a public key string directly on the provider. Pass the address separately alongside the provider object.
+
+## Privy
+
+For apps using Privy for authentication and embedded wallets:
+
+```ts
+import { betterSol } from "better-sol"
+import { privyWallet } from "better-sol/wallets"
+import { usePrivy, useSolanaWallets } from "@privy-io/react-auth"
+
+const { user } = usePrivy()
+const { wallets } = useSolanaWallets()
+const wallet = wallets[0]
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  programs: { counter },
+})
+
+const userSol = await sol.withSigner(privyWallet({
+  wallet: wallet,
+  signTransaction: wallet.signTransaction,
+}))
+```
+
+## Dynamic
+
+For apps using Dynamic for embedded wallets:
+
+```ts
+import { betterSol } from "better-sol"
+import { dynamicWallet } from "better-sol/wallets"
+import { useDynamicContext } from "@dynamic-labs/sdk-react-core"
+
+const { primaryWallet } = useDynamicContext()
+const signer = await primaryWallet.getSigner()
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  programs: { counter },
+})
+
+const userSol = await sol.withSigner(dynamicWallet(primaryWallet))
+```
+
+Dynamic wallets require calling `getSigner()` before signing. The adapter handles this internally.
+
+## How adapters work
+
+Each adapter returns a `TransactionPartialSigner` from `@solana/kit`. This is the same interface `keypairFile()` and `secretKey()` produce. Under the hood, the adapter converts the wallet library's signer into a function that can be called by Better Sol's transaction builder.
+
+The signing happens in two steps:
+
+1. Better Sol builds a `Transaction` object with the correct accounts, instructions, and a recent blockhash
+2. The wallet prompts the user to approve and sign the transaction
+3. Better Sol sends the signed transaction to the network and waits for confirmation
+
+You never interact with the raw signing process yourself. Call the instruction method, and the client handles the rest.
+
+## Multiple users
+
+The single base client pattern scales to as many users as you need:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+
+const sol = await betterSol({ cluster: "mainnet", programs: { counter } })
+
+// Admin signs admin-only instructions
+const adminSol = await sol.withSigner(keypairFile("./admin-keypair.json"))
+await adminSol.counter.initialize({ counter: addr, initialValue: 0n })
+
+// User A signs their own increment
+const userASol = await sol.withSigner(walletAdapter(userAWallet))
+
+// User B signs their own increment
+const userBSol = await sol.withSigner(walletAdapter(userBWallet))
+```
+
+Each scoped client is independent. Transactions signed by one user never affect another. The base client's RPC connection, program definitions, and configuration are shared.
+
+## Error: no signer configured
+
+If you try to send a transaction from a client without a payer, you get a clear error:
+
+```
+No signer configured. Pass payer: keypairFile('./keypair.json') or payer: secretKey(bytes)
+to betterSol(), or call sol.withSigner(walletAdapter(wallet)) in browser flows.
+```
+
+This error tells you exactly what to do. In a browser app, call `withSigner()` when the user connects their wallet. In a script, pass `keypairFile()` or `secretKey()` to `betterSol()`.

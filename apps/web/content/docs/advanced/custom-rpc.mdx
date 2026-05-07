@@ -1,0 +1,84 @@
+---
+title: Custom RPC
+description: Use your own RPC endpoint instead of the default Solana public endpoints.
+---
+
+By default, Better Sol connects to the public Solana RPC endpoints for each cluster: `api.devnet.solana.com` for devnet, `api.mainnet.solana.com` for mainnet, and so on.
+
+The public endpoints are fine for development and low-traffic apps. For production, you usually want a dedicated RPC provider for better reliability, higher rate limits, and lower latency. Better Sol makes this a single config change.
+
+## Setting a custom RPC URL
+
+Pass `rpcUrl` in the client config. When you do, you must also pass `rpcSubscriptionsUrl` because Better Sol needs WebSocket support for transaction confirmation:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+
+const sol = await betterSol({
+  rpcUrl: "https://solana-mainnet.core.chainstack.com/your-api-key",
+  rpcSubscriptionsUrl: "wss://solana-mainnet.core.chainstack.com/your-api-key",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+```
+
+That is it. Every RPC call the client makes goes through your endpoint. Account fetching, balance queries, transaction sending, simulation: all routed to your provider.
+
+## Why both URLs are required
+
+Better Sol uses WebSocket subscriptions for transaction confirmation. When you call `sol.counter.increment()`, the client sends the transaction via HTTP and then subscribes to signature notifications via WebSocket to know when it is confirmed. This is significantly faster than polling: usually around 400ms for confirmation instead of 2 to 4 seconds.
+
+If you only provide `rpcUrl`, the client cannot open a WebSocket connection and falls back to polling. The polling fallback works but is slower. Providing both URLs gives you the fast path.
+
+## Why not just derive the WebSocket URL
+
+RPC providers use different URL patterns. Some mirror the HTTP path (`https://...` to `wss://...`), some use different subdomains, some use the same URL with a different port. There is no reliable rule to derive the WebSocket URL from the HTTP URL, so Better Sol requires you to provide both explicitly.
+
+## Common RPC providers
+
+Here are the patterns for popular providers:
+
+**Helius:**
+
+```ts
+rpcUrl: "https://mainnet.helius-rpc.com/?api-key=<KEY>",
+rpcSubscriptionsUrl: "wss://mainnet.helius-rpc.com/?api-key=<KEY>",
+```
+
+**QuickNode:**
+
+```ts
+rpcUrl: "https://<NAME>.solana-mainnet.quiknode.pro/<KEY>/",
+rpcSubscriptionsUrl: "wss://<NAME>.solana-mainnet.quiknode.pro/<KEY>/",
+```
+
+**Chainstack:**
+
+```ts
+rpcUrl: "https://solana-mainnet.core.chainstack.com/<KEY>",
+rpcSubscriptionsUrl: "wss://solana-mainnet.core.chainstack.com/<KEY>",
+```
+
+**Triton:**
+
+```ts
+rpcUrl: "https://<NAME>.solana-mainnet.rpcpool.com/<KEY>",
+rpcSubscriptionsUrl: "wss://<NAME>.solana-mainnet.rpcpool.com/<KEY>",
+```
+
+Check your provider's documentation for the exact URL format.
+
+## Choosing between cluster and custom URLs
+
+If you set `rpcUrl`, it takes priority over `cluster`. The `cluster` field becomes irrelevant because you have provided the exact URLs. You can still pass `cluster` for documentation purposes, but it does not affect the connection.
+
+If you set `cluster` without `rpcUrl`, the built-in defaults are used:
+
+| Cluster | RPC URL |
+|---|---|
+| `devnet` | `https://api.devnet.solana.com` |
+| `testnet` | `https://api.testnet.solana.com` |
+| `mainnet` | `https://api.mainnet.solana.com` |
+| `localnet` | `http://127.0.0.1:8899` |
+
+The default WebSocket URLs follow with `ws://` or `wss://` as appropriate.

@@ -1,0 +1,93 @@
+---
+title: Address Lookup Tables
+description: Compress transaction size with Address Lookup Tables for programs that touch many accounts.
+---
+
+Solana transactions have a hard size limit of 1232 bytes. If your instruction references many accounts, you can exceed that limit before you even add instruction data. Address Lookup Tables (ALTs) solve this by storing account addresses on-chain and referencing them by index inside the transaction instead of including the full 32-byte address.
+
+Better Sol handles ALT resolution automatically. You provide the ALT addresses, and the client replaces account references with compact lookup table indices at transaction build time.
+
+## How to use it
+
+Pass an array of ALT addresses in the client config:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { address } from "@solana/kit"
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { marketplace },
+  addressLookupTables: [
+    address("ALT111111111111111111111111111111111111111"),
+    address("ALT222222222111111111111111111111111111111"),
+  ],
+})
+```
+
+When you call an instruction, the client checks each account in the transaction against every registered ALT. If an account's address exists in one of the tables, the client replaces the full address with a lookup table index. The transaction stays under 1232 bytes even when your instruction has dozens of accounts.
+
+Everything else works the same. Instruction calls, `sol.send()`, `sol.batch()`, `sol.steps()`, and token operations all benefit from ALT resolution when the tables are configured.
+
+## Which accounts are resolved
+
+Only non-signer accounts are resolved through lookup tables. Signer accounts (`bs.signer()`) are always included as full addresses because the runtime needs them for signature verification.
+
+When the client builds an instruction, it iterates over the account metas. For each account that is not a signer, it checks the lookup table index. If the address is found, the meta becomes an `AccountLookupMeta` with the table address and index. If not found, the address stays in full.
+
+## Setting up a lookup table
+
+Better Sol does not create lookup tables for you. You need to create them beforehand using the Solana CLI or another tool:
+
+```bash
+solana address-lookup-table create \
+  --keypair ./keypair.json \
+  --url https://api.mainnet.solana.com
+```
+
+This outputs the ALT address. Then extend the table with the addresses your program uses:
+
+```bash
+solana address-lookup-table extend <ALT_ADDRESS> \
+  --addresses addr1,addr2,addr3,... \
+  --keypair ./keypair.json
+```
+
+Once the table is populated, pass its address to `betterSol()` and the client handles the rest.
+
+## When to use lookup tables
+
+Use ALTs when:
+
+- Your instruction touches more than 15 accounts (approaching the 1232-byte limit)
+- You batch many instructions in a single transaction with `sol.send()` or `sol.batch()`
+- Several accounts in your transaction are well-known addresses that appear in many transactions (token mints, program IDs, oracles)
+
+Skip ALTs when:
+
+- Your instruction uses 5 or fewer accounts. The overhead of fetching and indexing the tables is not worth the savings.
+- Your program always uses the same small set of accounts. The addresses fit easily within the transaction limit.
+- You are on devnet or localnet. The byte limit is the same, but the tables add setup complexity that may not be needed during development.
+
+## How the index is built
+
+When `betterSol()` is called with `addressLookupTables`, the client fetches every table from the RPC node and builds an in-memory index. The index maps each stored address to its table address and position. This happens once, at client creation time.
+
+The fetch uses `fetchAddressesForLookupTables` from `@solana/kit`, which batches the requests efficiently. The resulting `LookupTableIndex` is a `Map<string, { lookupTableAddress, addressIndex }>`. Every instruction build checks this map before building the final account metas.
+
+If a lookup table address is invalid, or the RPC node does not support the `getAddressLookupTable` method, the client throws an error at creation time. You get a clear message telling you which table failed to load.
+
+## Signer exclusion
+
+Signer accounts are never resolved through lookup tables, even if their address appears in one. This is a Solana runtime requirement: the runtime needs the full 32-byte signer address to verify the transaction signature.
+
+Better Sol handles this automatically. You do not need to worry about which accounts are signers. The resolution logic checks `"signer" in meta` before attempting lookup table resolution.
+
+## Performance considerations
+
+The lookup table index is built once and cached for the lifetime of the client. Fetching the tables takes one RPC call per table at client creation, plus any retries.
+
+If your tables contain thousands of addresses, the in-memory index can grow large. For most applications this is not a concern: a typical ALT holds 256 addresses, and most apps use one or two tables.
+
+If you create new clients frequently (for example, per request in a serverless function), the table fetch happens each time. Consider caching the client or pre-building the index if startup latency is an issue.

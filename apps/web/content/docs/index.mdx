@@ -7,7 +7,7 @@ Better Sol lets you write Solana programs in TypeScript. One file defines your a
 
 ```tsx ts2js
 // programs/counter.ts
-import { bs, cpi } from "better-sol/program"
+import { bs } from "better-sol/program"
 
 const Counter = bs.account({
   count: bs.u64(),
@@ -32,10 +32,15 @@ npx @better-sol/cli@latest deploy
 Connect from your app:
 
 ```tsx ts2js
-import { betterSol } from "better-sol"
+import { betterSol, keypairFile } from "better-sol"
 import { counter } from "./programs/counter"
 
-const sol = await betterSol({ programs: { counter } })
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+const addr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
 await sol.counter.increment({ counter: addr, amount: 5n })
 ```
 
@@ -53,7 +58,7 @@ The CLI runs via `npx`. No install needed.
 
 ## API key (optional)
 
-Deploying compiles your program. Without an API key you get 5 compiles per hour. With one, 100 per hour.
+Deploying compiles your program. Without an API key you get 3 compiles per hour. With one, 50 per hour.
 
 Get a key from the [dashboard](/dash), then save it:
 

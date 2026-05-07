@@ -7,21 +7,16 @@ When a transaction succeeds, the logs may contain events your program emitted. W
 
 ## Parsing errors
 
-When a transaction fails, the RPC returns a generic error. To find out which of your custom errors was thrown, pass the logs to `parseErrors()`:
+When a transaction fails, the RPC returns a generic error. To find out which of your custom errors was thrown, simulate the transaction first and parse the logs:
 
 ```ts
-try {
-  await sol.counter.increment({ counter: addr, amount: 5n })
-} catch (err) {
-  if (err instanceof Error && "logs" in err) {
-    const programError = sol.counter.parseErrors(err.logs as string[])
-    if (programError) {
-      console.log(programError.errorName)     // "Unauthorized"
-      console.log(programError.message)       // "Only the authority can update this counter"
-      console.log(programError.programName)   // "counter"
-      console.log(programError.errorIndex)    // 0
-    }
-  }
+const result = await sol.counter.increment.simulate({ counter: addr, amount: 5n })
+const programError = sol.counter.parseErrors(result.logs)
+if (programError) {
+  console.log(programError.errorName)     // "Unauthorized"
+  console.log(programError.programName)   // "counter"
+  console.log(programError.errorIndex)    // 0
+  console.log(programError.message)       // "counter.Unauthorized: Only the authority can update this counter"
 }
 ```
 
@@ -30,7 +25,7 @@ try {
 | Property | Type | Description |
 |---|---|---|
 | `errorName` | `string` | The name from your `errors` definition |
-| `message` | `string` | The human-readable message |
+| `message` | `string` | The formatted error: `"programName.errorName: human-readable message"` |
 | `programName` | `string` | The program that threw it |
 | `errorIndex` | `number` | The position in the errors map (0, 1, 2, ...) |
 
@@ -39,7 +34,8 @@ If no matching error is found in the logs, `parseErrors()` returns `undefined`.
 `ProgramError` also extends the native `Error` class, so you can use it with standard error handling:
 
 ```ts
-const programError = sol.counter.parseErrors(logs)
+const result = await sol.counter.increment.simulate({ counter: addr, amount: 5n })
+const programError = sol.counter.parseErrors(result.logs)
 if (programError instanceof Error) {
   console.log(programError.toString()) // "counter.Unauthorized: Only the authority can update this counter"
 }

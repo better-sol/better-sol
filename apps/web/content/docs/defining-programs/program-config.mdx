@@ -120,7 +120,7 @@ You only need to register accounts that the client interacts with directly. Inte
 On the client side, you pass the program definition to `betterSol()`:
 
 ```ts
-import { betterSol } from "better-sol"
+import { betterSol, keypairFile } from "better-sol"
 import { counter } from "./programs/counter"
 
 const sol = await betterSol({
@@ -143,6 +143,7 @@ Every program in the `programs` object becomes a namespace on the client. The ke
 You can register as many programs as you need:
 
 ```ts
+import { betterSol, keypairFile } from "better-sol"
 import { counter } from "./programs/counter"
 import { marketplace } from "./programs/marketplace"
 import { governance } from "./programs/governance"

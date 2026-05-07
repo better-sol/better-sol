@@ -124,17 +124,13 @@ Each event is a separate entry in the transaction log, and the client can parse 
 When a transaction fails, you can parse the error from the logs:
 
 ```ts
-try {
-  await sol.counter.increment({ counter: addr, amount: 5n })
-} catch (err) {
-  const logs = err.logs  // depends on how the error is surfaced
-  const programError = sol.counter.parseErrors(logs)
-  if (programError) {
-    console.log(programError.programName)   // "counter"
-    console.log(programError.errorName)     // "Unauthorized"
-    console.log(programError.errorIndex)    // 0 (position in errors map)
-    console.log(programError.message)       // "Only the authority can perform this action"
-  }
+const result = await sol.counter.increment.simulate({ counter: addr, amount: 5n })
+const programError = sol.counter.parseErrors(result.logs)
+if (programError) {
+  console.log(programError.programName)   // "counter"
+  console.log(programError.errorName)     // "Unauthorized"
+  console.log(programError.errorIndex)    // 0 (position in errors map)
+  console.log(programError.message)       // "counter.Unauthorized: Only the authority can perform this action"
 }
 ```
 
@@ -145,7 +141,7 @@ try {
 After a transaction confirms, you can parse events from the logs:
 
 ```ts
-const { value } = await rpc.getTransaction(signature, { commitment: "confirmed" }).send()
+const { value } = await sol.rpc.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }).send()
 const events = await sol.counter.parseEvents(value.meta.logMessages)
 
 for (const event of events) {

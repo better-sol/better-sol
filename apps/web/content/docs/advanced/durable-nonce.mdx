@@ -1,0 +1,86 @@
+---
+title: Durable Nonce
+description: Sign transactions that never expire using durable nonces for offline signing and scheduled execution.
+---
+
+A normal Solana transaction includes a recent blockhash and expires after about 60 seconds. If you sign a transaction and wait before sending it, the blockhash expires and the transaction is rejected.
+
+Durable nonces solve this. Instead of a blockhash, the transaction references a nonce account on-chain. The nonce value advances with each use but never expires. You can sign a transaction today and submit it next week.
+
+## How to use it
+
+Pass a `durableNonce` config to `betterSol()`:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { address } from "@solana/kit"
+
+const nonceSigner = await createKeyPairSignerFromBytes(someBytes, false)
+
+const sol = await betterSol({
+  cluster: "mainnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+  durableNonce: {
+    nonceAccountAddress: address("NonceAccountAddress..."),
+    nonceAuthority: nonceSigner,
+  },
+})
+```
+
+Every transaction sent through this client uses the durable nonce instead of a recent blockhash. Instruction calls, `sol.send()`, `sol.batch()`, token operations: all of them get the same treatment.
+
+The client fetches the current nonce value from the nonce account before building each transaction, so the nonce is always fresh. It also prepends an advance nonce instruction so the nonce value moves forward with every use.
+
+## What happens under the hood
+
+For each transaction, the client:
+
+1. Fetches the current nonce value from the nonce account on-chain using `fetchNonce` from `@solana-program/system`
+2. Calls `setTransactionMessageLifetimeUsingDurableNonce()` with that nonce value, the nonce account address, and the nonce authority address
+3. Prepends an instruction to advance the nonce so the next transaction can use the updated value
+
+This all happens inside `sendAndConfirm()`. You never see the nonce mechanics. The signature comes back just like a normal transaction.
+
+## Setting up a nonce account
+
+Better Sol does not create nonce accounts for you. You need to create one beforehand:
+
+```bash
+solana create-nonce-account \
+  --keypair ./keypair.json \
+  nonce-keypair.json \
+  --nonce-authority <AUTHORITY_PUBKEY> \
+  --url https://api.devnet.solana.com
+```
+
+This creates a nonce account and outputs its address. The `nonceAccountAddress` in your config is this address. The `nonceAuthority` is a signer whose public key matches the authority you set during creation.
+
+## When to use durable nonces
+
+Use durable nonces when:
+
+- **Offline signing.** You build a transaction, sign it on an air-gapped machine, and submit it later. With a blockhash the transaction would expire before you get it back online.
+- **Scheduled transactions.** You queue transactions to be sent at a specific time. A blockhash-based transaction queued for more than 60 seconds would be rejected.
+- **Multi-step approval.** Multiple parties need to sign a transaction over an extended period. The nonce keeps the transaction valid while signers come and go.
+- **Retry logic.** You want to resubmit a failed transaction without rebuilding it. The nonce advances each time, so retries use the next nonce value.
+
+Skip durable nonces when:
+
+- You sign and send immediately. The 60-second blockhash window is plenty.
+- You are on devnet or localnet. Blockhashes work fine for development.
+- Your users are signing through browser wallets. Wallet adapters handle the transaction lifecycle for you.
+
+## Nonce authority
+
+The `nonceAuthority` must be a signer whose public key matches the nonce account's authority. If they do not match, the runtime rejects the advance nonce instruction and the transaction fails.
+
+The nonce authority does not have to be the same as your payer. It is a separate signer used only for advancing the nonce.
+
+## Limitations
+
+Each nonce value can be used exactly once. If you try to send the same transaction twice with the same nonce, the second attempt fails because the nonce has already been advanced by the first transaction.
+
+If a transaction fails for a reason other than the nonce (for example, your instruction logic throws an error), the nonce was still advanced by the attempt. You need to build a new transaction with the new nonce value before retrying. The client handles this automatically: each call to `sendAndConfirm()` fetches the latest nonce value.
+
+Only one nonce account can be configured per client instance. If you need multiple nonce accounts, create separate clients with `withSigner()` scoped to different nonce configurations.
