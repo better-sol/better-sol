@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { intro, log, outro, spinner } from "@clack/prompts";
@@ -8,12 +8,11 @@ import { loadConfig, parseCluster } from "../config";
 import { readKeypair } from "../keypair";
 import { BETTER_SOL_DIR, cwdJoin, cwdPath, ensureDirectory, fileExists } from "../path";
 import type { Cluster, DeployOptions } from "../types";
-import { compileProgram, getApiUrl } from "../api/client";
+import { compileProgram } from "../api/client";
 import { generateAnchorProject } from "../generator/rust";
 import { discoverProgramsWithSpinner, CLI_COMMAND } from "./shared";
 
 const DEFAULT_PAYER_PATH = "keypair.json";
-const SOLANA_DEFAULT_KEYPAIR = join(homedir(), ".config", "solana", "id.json");
 const AIRDROP_LAMPORTS = 2_000_000_000n;
 const MIN_DEPLOY_BALANCE = 1_500_000_000n;
 
@@ -35,9 +34,13 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const out = options.output ?? config.out;
   const outDir = cwdPath(out);
 
-  const payerPath = resolvePayerPath(options.payer);
+  const payerPath = resolvePayerPath(options.payer, config.payer);
   const payer = await readKeypair(payerPath);
   const clusterUrl = CLUSTER_URLS[cluster];
+
+  log.step(`Cluster: ${cluster}`);
+  log.step(`Source:  ${src}`);
+  log.step(`Output:  ${out}`);
 
   await ensureFunded(payer.publicKey, cluster, clusterUrl);
 
@@ -75,11 +78,11 @@ export async function deploy(options: DeployOptions): Promise<void> {
     s.stop("Dry run complete");
     for (const project of projects)
       printProgramSummary(project.program, cluster, outDir, true);
-    outro("Dry run complete — Rust written to disk. No compilation or deployment performed.");
+    outro(`Dry run complete — Rust written to ${out}/. No compilation or deployment performed.`);
     return;
   }
 
-  s.message(`Compiling`);
+  s.message(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
   const compileResults = await Promise.all(
     projects.map((project) =>
       compileProgram({
@@ -102,10 +105,9 @@ export async function deploy(options: DeployOptions): Promise<void> {
       result.status === "success" ? "✓ Success" : `✗ ${result.status}`;
     const compileTime = `${(result.compileTimeMs / 1000).toFixed(1)}s`;
 
-    log.info(`${statusLabel} in ${compileTime}`);
-    log.step(`Explorer:   ${getApiUrl()}/explore/${result.id}`);
+    log.info(`${statusLabel} compiled in ${compileTime}`);
     log.step(
-      `Solana:     https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
+      `Explorer:   https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
     );
 
     if (result.status === "success" && result.bytecode !== null) {
@@ -138,10 +140,9 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   if (options.verify) {
-    log.info("");
     log.info("To verify this build on-chain:");
     log.step(
-      `1. Commit and push the ${out} directory to a public repository`,
+      `1. Commit and push the ${out}/ directory to a public repository`,
     );
     log.step(
       `2. Run \`${CLI_COMMAND} verify ${matched[0]?.address ?? "<program-id>"}\``,
@@ -151,10 +152,10 @@ export async function deploy(options: DeployOptions): Promise<void> {
   outro("Deploy complete.");
 }
 
-function resolvePayerPath(payerFlag: string | undefined): string {
+function resolvePayerPath(payerFlag: string | undefined, configPayer: string | undefined): string {
   if (payerFlag !== undefined) return cwdPath(payerFlag);
+  if (configPayer !== undefined) return configPayer;
   if (fileExists(cwdJoin(DEFAULT_PAYER_PATH))) return cwdJoin(DEFAULT_PAYER_PATH);
-  if (existsSync(SOLANA_DEFAULT_KEYPAIR)) return SOLANA_DEFAULT_KEYPAIR;
   throw new Error(
     `No payer keypair found. Run \`${CLI_COMMAND} init\` to create one, or use --payer <path>.`,
   );
@@ -299,7 +300,8 @@ function printProgramSummary(
   out: string,
   wroteRust: boolean,
 ): void {
-  log.step(`Program:  ${program.address}`);
+  log.info(`Program: ${program.name}`);
+  log.step(`Address:  ${program.address}`);
   log.step(`Cluster:  ${cluster}`);
   if (wroteRust) log.step(`Rust:     ${out}/${program.name}/`);
 }

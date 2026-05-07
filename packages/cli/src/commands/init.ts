@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 import { createKeypair } from "../keypair";
-import { cwdJoin } from "../path";
+import { cwdJoin, fileExists } from "../path";
 import type { InitOptions } from "../types";
 
 const PAYER_KEYPAIR_PATH = "keypair.json";
@@ -20,7 +20,7 @@ export async function init(options: InitOptions): Promise<void> {
 
   if (payerPath === cwdJoin(PAYER_KEYPAIR_PATH)) {
     if (existsSync(payerPath) && !options.force) {
-      log.info("Payer keypair already exists at keypair.json");
+      log.step("Payer keypair already exists at keypair.json");
     } else {
       const s = spinner();
       s.start("Generating payer keypair");
@@ -31,7 +31,8 @@ export async function init(options: InitOptions): Promise<void> {
       log.warn("Keep this file safe. It contains your private key. Never commit it to git.");
     }
   } else {
-    log.info(`Using existing keypair at ${payerPath}`);
+    log.step(`Using existing keypair at ${payerPath}`);
+    await writePayerConfig();
   }
 
   await ensureGitignore();
@@ -41,7 +42,7 @@ export async function init(options: InitOptions): Promise<void> {
     await installDependencies();
   }
 
-  outro(`Project ready.\n  Next: npx @better-sol/cli create <program-name>`);
+  outro("Project ready.\n  Next: npx @better-sol/cli create <program-name>\n  Then: npx @better-sol/cli deploy");
 }
 
 async function resolvePayerPath(): Promise<string> {
@@ -101,7 +102,7 @@ async function installDependencies(): Promise<void> {
     const pkg = JSON.parse(readFileSync(cwdJoin("package.json"), "utf8")) as Record<string, unknown>;
     const deps = pkg.dependencies as Record<string, string> | undefined;
     if (deps !== undefined && "better-sol" in deps) {
-      log.info("better-sol is already installed");
+      log.step("better-sol is already installed");
       return;
     }
 
@@ -181,4 +182,23 @@ function installPackage(pm: PackageManager, packageName: string): void {
     s.stop(`Failed to install ${packageName}`);
     log.warn(`Run manually: ${commands[pm]}`);
   }
+}
+
+async function writePayerConfig(): Promise<void> {
+  const configPath = cwdJoin("better-sol.config.ts");
+  if (fileExists(configPath)) return;
+
+  writeFileSync(
+    configPath,
+    [
+      `import { homedir } from "node:os";`,
+      `import { join } from "node:path";`,
+      `import { defineConfig } from "@better-sol/cli";`,
+      ``,
+      `export default defineConfig({`,
+      `  payer: join(homedir(), ".config", "solana", "id.json"),`,
+      `});`,
+    ].join("\n"),
+  );
+  log.step("Created better-sol.config.ts");
 }

@@ -18,7 +18,7 @@ export async function generateDb(options: GenerateDbOptions): Promise<void> {
   const programs = await discoverProgramsWithSpinner(src);
 
   const s = spinner();
-  s.message(`Generating Drizzle schema for ${programs.length} program${programs.length === 1 ? "" : "s"}`);
+  s.message(`Generating ${dialect} Drizzle schema for ${programs.length} program${programs.length === 1 ? "" : "s"}`);
   await writeDrizzleSchema(out, programs, dialect);
   s.stop("Schema generated");
 

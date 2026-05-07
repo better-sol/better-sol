@@ -20,7 +20,7 @@ export async function verify(programArg: string | undefined, options: VerifyOpti
   s.start("Reading git repository state");
   const repository = await gitRemote();
   const commitHash = await gitCommit();
-  s.stop("Repository detected");
+  s.stop(`Found ${repository} at ${commitHash.slice(0, 8)}`);
 
   const libName = options.libName ?? (programArg !== undefined ? programArg : programId);
   const mountPath = options.mountPath ?? `generated/${libName}`;
@@ -28,21 +28,20 @@ export async function verify(programArg: string | undefined, options: VerifyOpti
   log.info("Submission parameters:");
   log.step(`Program ID:  ${programId}`);
   log.step(`Repository:  ${repository}`);
-  log.step(`Commit:      ${commitHash}`);
+  log.step(`Commit:      ${commitHash.slice(0, 8)}`);
   log.step(`Library:     ${libName}`);
   log.step(`Mount path:  ${mountPath}`);
 
-  s.start("Submitting to OtterSec verification API");
+  s.start("Submitting to OtterSec");
   await submitToOtterSec(programId, repository, commitHash, libName, mountPath);
-  s.stop("Verification submitted");
+  s.stop("Submitted");
 
-  log.info("");
-  log.success("Verification pending — OtterSec will clone your repository and build the program in a deterministic Docker container.");
-  log.step(`Check status: ${OTTERSEC_API}/status/${programId}`);
-  log.step(`View logs:    ${OTTERSEC_API}/logs/${programId}`);
-  log.info("Results are typically available within 5 minutes. Once verified, a badge appears in Solana Explorer and SolanaFM.");
+  log.success("OtterSec will clone your repo and build the program in a deterministic Docker container.");
+  log.step(`Status:  ${OTTERSEC_API}/status/${programId}`);
+  log.step(`Logs:    ${OTTERSEC_API}/logs/${programId}`);
+  log.info("Results are typically ready within 5 minutes. Once verified, a badge appears in Solana Explorer and SolanaFM.");
 
-  outro("Verification submitted. OtterSec will process the build and publish results when ready.");
+  outro("Verification submitted.");
 }
 
 function resolveProgramId(programArg: string | undefined, options: VerifyOptions): string {

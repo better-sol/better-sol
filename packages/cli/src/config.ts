@@ -36,6 +36,7 @@ export async function loadConfig(): Promise<CliConfig> {
     programs: typeof module.default.programs === "string" ? module.default.programs : defaults.programs,
     cluster: isClusterValue(module.default.cluster) ? module.default.cluster : defaults.cluster,
     out: typeof module.default.out === "string" ? module.default.out : defaults.out,
+    payer: typeof module.default.payer === "string" ? module.default.payer : undefined,
   };
 }
 
@@ -44,6 +45,7 @@ type ConfigModule = {
     readonly programs: string;
     readonly cluster: Cluster;
     readonly out: string;
+    readonly payer: string;
   }>;
 };
 

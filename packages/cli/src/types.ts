@@ -4,6 +4,7 @@ export type CliConfig = {
   readonly programs: string;
   readonly cluster: Cluster;
   readonly out: string;
+  readonly payer?: string;
 };
 
 export type InitOptions = {
