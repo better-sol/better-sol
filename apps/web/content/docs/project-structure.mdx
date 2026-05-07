@@ -33,6 +33,7 @@ Then `create` scaffolds a program template inside `programs/` and generates a pr
       </Folder>
       <File name="Cargo.toml" />
     </Folder>
+    <File name="staking.ts" disabled />
   </Folder>
   <File name="better-sol.config.ts" />
   <File name="keypair.json" />
@@ -54,14 +55,12 @@ This file contains a private key. **Never commit it to version control.** The `i
 
 Your API key. Created when you run `npx @better-sol/cli@latest login`. This file is optional. Without it, you can still deploy at a lower rate limit.
 
-### `generated/counter/`
+### `generated/`
 
-Generated when you run `deploy` (or `deploy --dry-run`). Contains the program output:
+Two things live here:
 
-- `lib.rs`. The generated program.
-- `Cargo.toml`. Project manifest.
-
-This directory is for reference and for verified builds. You do not need to edit it. If you delete it, the next `deploy` regenerates it.
+- **`generated/<name>/`**: Rust output from `deploy` (or `deploy --dry-run`). Contains `lib.rs` and `Cargo.toml`. For reference and verified builds. Deleted and regenerated on each deploy.
+- **`generated/<name>.ts`**: typed program definitions from `generate idl`. Produced when you import an external program by address or IDL file. These are for the client only, not deployment.
 
 ### `better-sol.config.ts`
 
@@ -102,7 +101,7 @@ The same file drives both deployment and the client. There is no separate IDL, n
 
 ```
 .better-sol/
-generated/
+generated/**/*.so
 keypair.json
 node_modules/
 ```

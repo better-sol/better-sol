@@ -3,7 +3,7 @@ title: Body Language
 description: What you can and cannot write inside run() bodies.
 ---
 
-The `run()` body is the on-chain logic of your instruction. It supports a specific subset of TypeScript. Anything outside that subset produces a clear error telling you what to use instead. This page is a complete reference. If it is not listed here as supported, it is not supported.
+The `run()` body is the on-chain logic of your instruction. It supports a specific subset of TypeScript. Anything outside that subset produces a clear error telling you what to use instead.
 
 This page is a complete reference. If it is not listed here as supported, it is not supported.
 
@@ -102,7 +102,7 @@ Equality (`===`, `!==`), comparison (`>`, `<`, `>=`, `<=`), logical AND (`&&`), 
 ctx.require(condition, "ErrorName")
 ```
 
-This is the only way to throw an error in a `run()` body. If `condition` is `false`, the transaction fails with the named error. The error name must exist in your program's `errors` config. Better-sol validates this before deployment: if you mistype the error name, you get an error immediately.
+This is the only way to throw an error in a `run()` body. If `condition` is `false`, the transaction fails with the named error. The error name must exist in your program's `errors` config. Better Sol validates this before deployment: if you mistype the error name, you get an error immediately.
 
 ```ts
 ctx.require(authority === counter.authority, "Unauthorized")  // valid
@@ -224,7 +224,7 @@ Accounts declared with `bs.signer()`, `bs.mint()`, `bs.tokenAccount()`, `bs.cloc
 
 ```ts
 run: ({ authority, mint, clock }) => {
-  // authority (from bs.signer()) is a string — the signer's address
+  // authority (from bs.signer()) is a string, the signer's address
   // mint (from bs.mint()) has .key, .supply, .decimals, .mintAuthority, .freezeAuthority
   // clock (from bs.clock()) has .unixTimestamp, .slot, .epoch
 }
@@ -234,9 +234,9 @@ When accounts are constraints like `bs.mut(Counter)`, you get the full account d
 
 ```ts
 run: ({ counter }) => {
-  // counter.count — bigint
-  // counter.authority — string
-  // counter.isActive — boolean
+  // counter.count is bigint
+  // counter.authority is string
+  // counter.isActive is boolean
 }
 ```
 
@@ -244,13 +244,13 @@ Account values from `bs.init()` and `bs.mut()` also include a `key` field with t
 
 ```ts
 run: ({ counter }) => {
-  const address = counter.key  // string — the account's on-chain address
+  const address = counter.key  // string, the account's on-chain address
 }
 ```
 
 ## What is not supported
 
-Better-sol rejects anything not listed above. Each rejection comes with a specific error message and a suggestion for what to use instead. Here are the most common unsupported patterns:
+Better Sol rejects anything not listed above. Each rejection comes with a specific error message and a suggestion for what to use instead. Here are the most common unsupported patterns:
 
 | Pattern | What to use instead |
 |---|---|
@@ -267,4 +267,4 @@ Better-sol rejects anything not listed above. Each rejection comes with a specif
 | Nested functions or closures | Inline the logic directly |
 | `return` without `returns` in config | Add `returns: bs.u64()` (or the appropriate type) to the instruction config |
 
-Better-sol is intentionally conservative with what it accepts. It only supports patterns it can reliably convert to correct on-chain logic. When something is not supported, there is usually a supported alternative that achieves the same result.
+Better Sol is intentionally conservative with what it accepts. It only supports patterns it can reliably convert to correct on-chain logic. When something is not supported, there is usually a supported alternative that achieves the same result.

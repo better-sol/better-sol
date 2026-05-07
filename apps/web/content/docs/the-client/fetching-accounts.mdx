@@ -1,0 +1,120 @@
+---
+title: Fetching Accounts
+description: Derive PDA addresses and fetch typed account data.
+---
+
+When you register an account definition in your program config, the client gets a `BoundAccount` object for that account. This object has three methods: `derive()` for computing PDA addresses, `fetch()` for reading a single account, and `fetchMultiple()` for reading many accounts at once.
+
+## PDA derivation
+
+Call `.derive()` with the seed values your account definition references:
+
+```ts
+// Account definition with seeds:
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+}).derive(seed => ["counter", seed.authority])
+
+// Client-side derivation:
+const counterAddr = await sol.counter.accounts.Counter.derive({
+  authority: sol.payer,
+})
+// counterAddr is a base58 string like "CYR...base58"
+```
+
+The `.derive()` method takes the same seed values you declared in the program definition. Only the fields used as seeds appear as required parameters. If your seeds reference `seed.authority` and `seed.mint`, then `derive()` requires both `authority` and `mint`. If your seeds only use `seed.authority`, it only requires `authority`.
+
+The return value is a deterministic address. The same seed values always produce the same address. You can call `derive()` without the network being available because the computation is purely local.
+
+### Seed value types
+
+Each seed field's type determines the value you pass:
+
+| Field type | Value to pass |
+|---|---|
+| `pubkey` | A base58 address string |
+| `u8`, `u16`, `u32` | A `number` |
+| `u64`, `u128` | A `bigint` |
+| `i8`, `i16`, `i32` | A `number` |
+| `i64`, `i128` | A `bigint` |
+
+### Multiple seeds
+
+```ts
+const Escrow = bs.account({
+  maker: bs.pubkey(),
+  taker: bs.pubkey(),
+  mint: bs.pubkey(),
+  amount: bs.u64(),
+}).derive(seed => ["escrow", seed.maker, seed.mint])
+
+const escrowAddr = await sol.escrow.accounts.Escrow.derive({
+  maker: "Gsb9sERGY...",
+  mint: "EPjFWdd5A...",
+})
+```
+
+Literal seeds (like `"escrow"`) are not passed to `derive()`. They are baked into the program definition. You only pass the field references.
+
+## Fetching a single account
+
+```ts
+const data = await sol.counter.accounts.Counter.fetch(counterAddr)
+```
+
+Returns the fully typed account data, or `null` if the account does not exist or does not belong to your program.
+
+```ts
+if (data !== null) {
+  console.log(data.count)      // bigint
+  console.log(data.authority)  // string
+  console.log(data.isActive)   // boolean
+  console.log(data.label)      // string | null
+}
+```
+
+The type of `data` is inferred from your account definition. Every field matches the type token you used: `bigint` for `u64`, `string` for `pubkey`, `boolean` for `bool`, and so on. You never write these types yourself.
+
+Better Sol automatically detects whether the account uses standard Borsh serialization or zero-copy layout. If the account was defined with `.zeroCopy()`, it decodes using the zero-copy path. Otherwise, it uses Borsh. You do not need to specify which one.
+
+## Fetching multiple accounts
+
+```ts
+const accounts = await sol.counter.accounts.Counter.fetchMultiple([
+  addr1,
+  addr2,
+  addr3,
+])
+// accounts: (CounterData | null)[]
+```
+
+Fetches multiple accounts in parallel. Each element in the returned array corresponds to the address at the same index in the input array. If an account does not exist, its entry is `null`.
+
+This is more efficient than calling `fetch()` in a loop because it batches the RPC requests.
+
+## Accounts without PDA seeds
+
+If an account definition does not have `.derive()`, the `derive()` method is still available on the client but requires no seed values. You would typically use the account address directly with `fetch()`:
+
+```ts
+// Config has no seeds:
+const Config = bs.account({
+  admin: bs.pubkey(),
+  feeRate: bs.u32(),
+})
+
+// Fetch directly by address:
+const configData = await sol.myProgram.accounts.Config.fetch(configAddr)
+```
+
+## How fetching works under the hood
+
+When you call `fetch()`, the client:
+
+1. Fetches the account data from the RPC node
+2. Checks that the account exists and belongs to your program
+3. Verifies the 8-byte discriminator matches the account name (for example, `Counter` produces a unique discriminator)
+4. Decodes the remaining bytes using the field schema from your account definition
+
+If any of these checks fail (account does not exist, wrong program, wrong discriminator), `fetch()` returns `null`. This means `null` is not an error. It is a valid result indicating the account has not been created yet.

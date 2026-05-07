@@ -9,7 +9,7 @@ When you write an instruction, every account in the `accounts` object is paired 
 
 These constraints reference one of your account definitions. They make the account writable and give you typed access to the account data.
 
-### `bs.init(account)` — Create a new account
+### `bs.init(account)`: Create a new account
 
 ```ts
 initialize: ix({
@@ -32,7 +32,7 @@ All fields start at their default values: `0n` for big integers, `0` for small i
 
 The system program is included automatically whenever `bs.init()` appears. You never need to add it yourself.
 
-### `bs.initIfNeeded(account)` — Create only if it does not exist
+### `bs.initIfNeeded(account)`: Create only if it does not exist
 
 ```ts
 createOrIncrement: ix({
@@ -53,7 +53,7 @@ createOrIncrement: ix({
 
 Use this for "create or update" patterns. If the account does not exist yet, it is created with default values. If it already exists, its data is preserved and you can modify it. This is useful when you want a single instruction that works whether the account exists or not.
 
-### `bs.mut(account)` — Read and write an existing account
+### `bs.mut(account)`: Read and write an existing account
 
 ```ts
 increment: ix({
@@ -71,7 +71,7 @@ increment: ix({
 
 This is the most common constraint. You can both read and write the account's fields. The account must already exist. If it does not, the transaction fails.
 
-### `bs.close(account, refundTo)` — Close an account and reclaim rent
+### `bs.close(account, refundTo)`: Close an account and reclaim rent
 
 ```ts
 close: ix({
@@ -87,7 +87,7 @@ close: ix({
 
 The second argument (`"authority"`) is the name of another account in the same instruction that receives the reclaimed rent lamports. After this instruction, the account no longer exists. Its data is zeroed out and its lamports are transferred to the refund target.
 
-### `bs.realloc(account, space)` — Resize an account
+### `bs.realloc(account, space)`: Resize an account
 
 ```ts
 resize: ix({
@@ -109,7 +109,7 @@ You can also use `bs.realloc()` to shrink an account by passing a smaller size v
 
 These constraints provide access to well-known Solana programs and system variables. They do not reference an account definition.
 
-### `bs.signer()` — The transaction signer
+### `bs.signer()`: The transaction signer
 
 ```ts
 increment: ix({
@@ -125,17 +125,17 @@ increment: ix({
 
 `bs.signer()` represents the wallet or keypair that signed the transaction. On the client, `authority` is a `string` (base58 address). It is read-only: you cannot modify the signer's data through this constraint.
 
-On the client side, you can omit the signer when calling the instruction. Better-sol automatically fills it in with the payer's address:
+On the client side, you can omit the signer when calling the instruction. Better Sol automatically fills it in with the payer's address:
 
 ```ts
 await sol.counter.increment({
   counter: counterAddr,
   amount: 5n,
-  // authority omitted — filled with sol.payer
+  // authority is optional, filled with sol.payer
 })
 ```
 
-### `bs.mint()` — A Token mint account
+### `bs.mint()`: A Token mint account
 
 ```ts
 mintTo: ix({
@@ -145,11 +145,11 @@ mintTo: ix({
     authority: bs.signer(),
   },
   run: ({ mint, to, authority }) => {
-    // mint.key — the mint's address
-    // mint.supply — total supply (bigint)
-    // mint.decimals — decimal places (number)
-    // mint.mintAuthority — mint authority address or null
-    // mint.freezeAuthority — freeze authority address or null
+    // mint.key is the mint's address
+    // mint.supply is total supply (bigint)
+    // mint.decimals is decimal places (number)
+    // mint.mintAuthority is the mint authority address or null
+    // mint.freezeAuthority is the freeze authority address or null
   },
 }),
 ```
@@ -160,7 +160,7 @@ mintTo: ix({
 mint: bs.mint().writable(),
 ```
 
-### `bs.tokenAccount()` — A Token account
+### `bs.tokenAccount()`: A Token account
 
 ```ts
 transfer: ix({
@@ -170,10 +170,10 @@ transfer: ix({
     authority: bs.signer(),
   },
   run: ({ from, to, authority }) => {
-    // from.key — the token account address
-    // from.mint — the mint this account belongs to
-    // from.owner — the owner of this account
-    // from.amount — the balance (bigint)
+    // from.key is the token account address
+    // from.mint is the mint this account belongs to
+    // from.owner is the owner of this account
+    // from.amount is the balance (bigint)
   },
 }),
 ```
@@ -193,7 +193,7 @@ token2022Program: bs.token2022Program(),
 
 These give you a `TokenProgramInfo` object with a `key` field pointing to the respective program address. `bs.tokenProgram()` is automatically included when `bs.mint()` or `bs.tokenAccount()` appears in an instruction. You only need it explicitly for Token-2022 operations or advanced use cases.
 
-### `bs.systemProgram()` — The System program
+### `bs.systemProgram()`: The System program
 
 ```ts
 systemProgram: bs.systemProgram(),
@@ -201,7 +201,7 @@ systemProgram: bs.systemProgram(),
 
 Gives you the System program address. Automatically included whenever `bs.init()` is present. You rarely need to add it manually.
 
-### `bs.clock()` — The Clock sysvar
+### `bs.clock()`: The Clock sysvar
 
 ```ts
 expireListing: ix({
@@ -220,9 +220,9 @@ expireListing: ix({
 
 `bs.clock()` gives you access to the on-chain clock. It provides three fields:
 
-- `unixTimestamp` (`bigint`) — current Unix timestamp in seconds
-- `slot` (`bigint`) — the current slot
-- `epoch` (`bigint`) — the current epoch
+- `unixTimestamp` (`bigint`): current Unix timestamp in seconds
+- `slot` (`bigint`): the current slot
+- `epoch` (`bigint`): the current epoch
 
 Use it for time-based conditions like expiration checks, timelocks, or any logic that depends on when the transaction executes.
 

@@ -19,9 +19,9 @@ increment: ix({
 
 Three parts:
 
-- `accounts` — which on-chain accounts this instruction reads or modifies
-- `args` — the values passed from the client (amounts, flags, addresses)
-- `run` — the logic that executes on-chain
+- **`accounts`**: which on-chain accounts this instruction reads or modifies
+- **`args`**: the values passed from the client (amounts, flags, addresses)
+- **`run`**: the logic that executes on-chain
 
 Both `accounts` and `args` are optional. What you include determines the shape of the `run` callback.
 
@@ -55,7 +55,7 @@ Each argument in `args` corresponds to a type token. On the client side, you pas
 await sol.counter.increment({
   counter: counterAddr,
   amount: 5n,
-  // authority is optional — automatically filled with the payer
+  // authority is optional: automatically filled with the payer
 })
 ```
 
@@ -118,9 +118,11 @@ run: (accounts, args, ctx) => {
 }
 ```
 
-- **`ctx.require(condition, name)`** checks a condition. If the condition is `false`, the transaction fails with the named error from your program's `errors` definition. See [Errors and Events](/docs/defining-programs/errors-and-events).
-- **`ctx.emit(name, payload)`** emits a structured event that clients can parse from transaction logs.
-- **`ctx.log(message, ...values)`** writes a message to the transaction log. Useful for debugging. Values are interpolated with `{}` placeholders.
+**`ctx.require(condition, name)`** checks a condition. If the condition is `false`, the transaction fails with the named error from your program's `errors` definition. See [Errors and Events](/docs/defining-programs/errors-and-events).
+
+**`ctx.emit(name, payload)`** emits a structured event that clients can parse from transaction logs.
+
+**`ctx.log(message, ...values)`** writes a message to the transaction log. Useful for debugging. Values are interpolated with `{}` placeholders.
 
 ## Return values
 

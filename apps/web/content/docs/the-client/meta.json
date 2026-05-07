@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "connecting",
+    "calling-instructions",
+    "fetching-accounts",
+    "parsing-outputs",
+    "multi-instruction",
+    "tokens",
+    "from-idl"
+  ]
+}

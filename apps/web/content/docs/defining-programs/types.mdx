@@ -15,10 +15,10 @@ Solana accounts store integers as raw bytes. The type you choose determines how 
 
 ```ts
 const Counter = bs.account({
-  count: bs.u64(),       // bigint — balances, amounts, timestamps
-  bump: bs.u8(),         // number — small values like bump seeds and flags
-  id: bs.u32(),          // number — identifiers, indices
-  balance: bs.i64(),     // bigint — signed values like offsets or deltas
+  count: bs.u64(),       // bigint (balances, amounts, timestamps)
+  bump: bs.u8(),         // number (small values like bump seeds and flags)
+  id: bs.u32(),          // number (identifiers, indices)
+  balance: bs.i64(),     // bigint (signed values like offsets or deltas)
 })
 ```
 
@@ -35,16 +35,16 @@ const Counter = bs.account({
 | `bs.i64()` | `bigint` | 64-bit signed | Signed timestamps, deltas |
 | `bs.i128()` | `bigint` | 128-bit signed | Large signed values |
 
-The practical rule is straightforward: use `u64` for anything that holds an amount or a count. Use `u8` for bump seeds and small flags. Use `pubkey` for addresses. Use `i64` when you need negative numbers.
+The practical rule is straightforward: use `u64` for anything that holds an amount or a count, `u8` for bump seeds and small flags, `pubkey` for addresses, and `i64` when you need negative numbers.
 
 ## Booleans and addresses
 
 ```ts
 const Profile = bs.account({
   isAdmin: bs.bool(),       // boolean
-  authority: bs.pubkey(),   // string — a base58 Solana address
-  name: bs.string(),        // string — UTF-8, length-prefixed
-  metadata: bs.bytes(),     // Uint8Array — raw binary data
+  authority: bs.pubkey(),   // string (a base58 Solana address)
+  name: bs.string(),        // string (UTF-8, length-prefixed)
+  metadata: bs.bytes(),     // Uint8Array (raw binary data)
 })
 ```
 
@@ -87,8 +87,8 @@ await sol.profile.initialize({
 
 ```ts
 const Leaderboard = bs.account({
-  topScores: bs.vector(bs.u64()),         // up to 32 entries of bigint
-  recentPlayers: bs.vector(bs.pubkey(), 10), // up to 10 entries of string
+  topScores: bs.vector(bs.u64()),            // up to 32 entries of bigint
+  recentPlayers: bs.vector(bs.pubkey(), 10),  // up to 10 entries of string
 })
 ```
 
@@ -156,7 +156,7 @@ const BadZC = bs.account({
 
 ## Type inference
 
-You almost never write TypeScript types yourself. Better-sol infers everything from the program definition. The type tokens carry the information through, and the generic types on the SDK resolve the rest automatically.
+You almost never write TypeScript types yourself. Better Sol infers everything from the program definition. The type tokens carry the information through, and the generic types on the SDK resolve the rest automatically.
 
 When you do need to reference a type (for example, in a utility function), two helper types are available:
 

@@ -1,0 +1,221 @@
+---
+title: Connecting
+description: Create a client and connect to Solana with your programs and wallet.
+---
+
+The client is your runtime connection to Solana. You create it with `betterSol()`, pass in your programs and wallet, and get back a typed object with methods for every instruction, account, and token operation in your app.
+
+## Basic setup
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+```
+
+This gives you:
+
+- `sol.payer`: your wallet's public key (a base58 string)
+- `sol.rpc`: an RPC connection to the Solana cluster
+- `sol.counter`: all instructions and accounts from your `counter` program definition
+- `sol.token`: SPL Token operations
+- `sol.token2022`: Token-2022 operations
+
+Every method on the client is typed from the program definition you passed in. Add a new program, and its methods appear immediately.
+
+## Signer input types
+
+The `payer` option accepts three formats:
+
+### Keypair file
+
+```ts
+import { keypairFile } from "better-sol"
+
+const sol = await betterSol({
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+```
+
+Reads a keypair file from disk. The file should contain a flat JSON array of 64 bytes, which is the format the Solana CLI uses. This is the most common option for server-side apps and scripts. The path is relative to your project root.
+
+### Raw secret key bytes
+
+```ts
+import { secretKey } from "better-sol"
+
+const sol = await betterSol({
+  payer: secretKey(new Uint8Array([64, 234, /* ...64 bytes */])),
+  programs: { counter },
+})
+```
+
+Useful when you load the key from an environment variable or a secret manager. The `Uint8Array` must be exactly 64 bytes.
+
+### TransactionSigner object
+
+```ts
+import { betterSol } from "better-sol"
+
+const sol = await betterSol({
+  payer: walletAdapter.signer, // from a wallet adapter
+  programs: { counter },
+})
+```
+
+For browser apps where the wallet holds the private key. Any object that implements the `TransactionSigner` interface from `@solana/kit` works here. See [Wallet Adapters](/docs/advanced/wallet-adapters) for integration guides.
+
+## Read-only client
+
+You can create a client without a payer. This is useful for apps that only need to read data, not send transactions:
+
+```ts
+const sol = await betterSol({
+  cluster: "mainnet",
+  programs: { counter },
+})
+
+sol.payer // null
+await sol.counter.accounts.Counter.fetch(addr) // works fine
+await sol.counter.increment({ counter: addr, amount: 5n }) // throws: no signer
+```
+
+Read operations like `fetch()`, `fetchMultiple()`, and `derive()` all work without a payer. Any method that sends a transaction will throw with a clear error.
+
+## Scoped signers with `withSigner()`
+
+Sometimes you need to act as a different identity within the same app. For example, an admin panel that operates on behalf of a user. Instead of creating a new client, call `withSigner()`:
+
+```ts
+const adminSol = await betterSol({
+  payer: keypairFile("./admin-keypair.json"),
+  programs: { marketplace },
+})
+
+// Act as a specific seller
+const sellerSol = await adminSol.withSigner(keypairFile("./seller-keypair.json"))
+await sellerSol.marketplace.list({ item: addr, price: 100n })
+// The transaction is signed by the seller's keypair
+```
+
+`withSigner()` returns a new client with the same RPC connection, programs, and configuration, but with a different signer. The original client is not modified.
+
+## All configuration options
+
+```ts
+const sol = await betterSol({
+  // Which network to connect to
+  cluster: "devnet",           // "devnet" | "testnet" | "mainnet" | "localnet"
+
+  // Custom RPC endpoint (overrides cluster default)
+  rpcUrl: "https://my-rpc.example.com",
+  // Required when using a custom rpcUrl with WebSocket features
+  rpcSubscriptionsUrl: "wss://my-rpc.example.com",
+
+  // Wallet for signing transactions
+  payer: keypairFile("./keypair.json"),
+
+  // Programs to register
+  programs: { counter, marketplace },
+
+  // How finalized a transaction must be before returning
+  commitment: "confirmed",     // "processed" | "confirmed" | "finalized"
+
+  // Compute unit settings for priority fees
+  computeUnits: {
+    computeUnitLimit: 200_000n,  // request up to 200k compute units
+    computeUnitPrice: 1000n,     // pay 1000 micro-lamports per unit
+  },
+
+  // Address Lookup Tables for compressed account addresses
+  addressLookupTables: [
+    address("ALookupTableAddress..."),
+  ],
+
+  // Durable nonce for offline signing
+  durableNonce: {
+    nonceAccountAddress: address("NonceAccount..."),
+    nonceAuthority: nonceSigner,
+  },
+})
+```
+
+### cluster
+
+The Solana network to connect to. Defaults to `"devnet"`. Each cluster has a default RPC URL and WebSocket URL built in:
+
+| Cluster | RPC | WebSocket |
+|---|---|---|
+| `devnet` | `api.devnet.solana.com` | `wss://api.devnet.solana.com` |
+| `testnet` | `api.testnet.solana.com` | `wss://api.testnet.solana.com` |
+| `mainnet` | `api.mainnet.solana.com` | `wss://api.mainnet.solana.com` |
+| `localnet` | `127.0.0.1:8899` | `127.0.0.1:8900` |
+
+### rpcUrl and rpcSubscriptionsUrl
+
+Override the default RPC endpoint. If you set `rpcUrl`, you must also set `rpcSubscriptionsUrl` because Better Sol cannot guess the WebSocket URL for a custom endpoint. Both URLs must point to the same cluster.
+
+### commitment
+
+Controls how many validators must confirm a transaction before the client considers it done. Defaults to `"confirmed"`, which means a supermajority of the network has voted on the block. `"finalized"` waits for full finality. `"processed"` returns as soon as the leader processes the transaction, which is faster but less reliable.
+
+### computeUnits
+
+Set compute unit limits and priority fees for all transactions sent through this client. This affects every instruction call (`sol.counter.increment()`, `sol.send()`, etc.).
+
+`computeUnitLimit` is the maximum number of compute units your transaction can consume. If your transaction uses more, it fails.
+
+`computeUnitPrice` is the price per compute unit in micro-lamports. Higher values get priority in the leader's transaction queue.
+
+Both are optional. Set either or both.
+
+### addressLookupTables
+
+An array of Address Lookup Table addresses. When provided, Better Sol fetches the table contents and uses them to compress account addresses in transactions. This reduces transaction size, which is important when you have many accounts.
+
+### durableNonce
+
+Enables durable nonce transactions. Normally, transactions expire after about 60 seconds because they include a recent blockhash. Durable nonce transactions use a nonce account instead, so they never expire. This is useful for offline signing, scheduled transactions, or any scenario where there is a delay between signing and submitting.
+
+You need a nonce account set up beforehand. The `nonceAccountAddress` is the nonce account, and the `nonceAuthority` is a signer authorized to advance the nonce.
+
+## What you get back
+
+The client object has these core properties and methods:
+
+| Property | Type | Description |
+|---|---|---|
+| `sol.payer` | `string` or `null` | The active signer's public key. `null` if no payer was provided. |
+| `sol.rpc` | `Rpc` | The underlying Solana RPC connection. Use it for any direct RPC calls. |
+| `sol.rpcSubscriptions` | `RpcSubscriptions` | The WebSocket subscription connection. |
+| `sol.token` | `TokenClient` | SPL Token operations (create mint, transfer, balance). |
+| `sol.token2022` | `TokenClient` | Same API as `sol.token`, but for Token-2022. |
+
+Plus one namespace per program you registered:
+
+```ts
+sol.counter                  // program namespace
+sol.counter.address          // the program's on-chain address
+sol.counter.accounts.Counter // BoundAccount with derive() and fetch()
+sol.counter.increment()      // instruction methods
+sol.counter.parseErrors()    // error parsing
+sol.counter.parseEvents()    // event parsing
+```
+
+And these general-purpose methods:
+
+```ts
+sol.send([...])              // send multiple instructions in one transaction
+sol.batch([...])             // send as a non-divisible sequential plan
+sol.steps([...])             // sequential steps with dependency passing
+sol.transfer({ to, amount }) // transfer SOL
+sol.getBalance(address)      // query SOL balance in lamports
+sol.withSigner(signer)       // create a scoped client with a different signer
+sol.onTransaction(callback)  // listen for confirmed transactions
+```

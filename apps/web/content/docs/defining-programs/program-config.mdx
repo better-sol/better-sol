@@ -132,11 +132,11 @@ const sol = await betterSol({
 
 Every program in the `programs` object becomes a namespace on the client. The key (`counter`) must match the `name` field in the program config. Then you get:
 
-- `sol.counter.increment()` — call instructions
-- `sol.counter.accounts.Counter.derive()` — derive PDA addresses
-- `sol.counter.accounts.Counter.fetch()` — fetch and decode account data
-- `sol.counter.parseErrors()` — parse error logs
-- `sol.counter.parseEvents()` — parse event logs
+- `sol.counter.increment()`: call instructions
+- `sol.counter.accounts.Counter.derive()`: derive PDA addresses
+- `sol.counter.accounts.Counter.fetch()`: fetch and decode account data
+- `sol.counter.parseErrors()`: parse error logs
+- `sol.counter.parseEvents()`: parse event logs
 
 ## Multiple programs
 

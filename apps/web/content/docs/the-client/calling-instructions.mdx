@@ -1,0 +1,190 @@
+---
+title: Calling Instructions
+description: Every way to call a program instruction from the client.
+---
+
+When you register a program with `betterSol()`, every instruction you defined becomes a method on the client. The method name matches the key you used in the `ix` callback, and the parameters match the accounts and arguments from your definition.
+
+## The default call
+
+Calling the method directly sends the transaction and waits for confirmation:
+
+```ts
+const signature = await sol.counter.increment({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+This builds the instruction, creates a transaction, signs it with your payer, sends it to the network, and waits for confirmation. The return value is the transaction signature (a base58 string).
+
+You can do the same thing with `.send()`:
+
+```ts
+const signature = await sol.counter.increment.send({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+The default call and `.send()` behave identically. Use whichever reads more naturally in your code.
+
+## Parameter types
+
+The parameters you pass depend on how you defined the instruction. Every account constraint that is not auto-filled requires a value:
+
+```ts
+// Instruction definition:
+increment: ix({
+  accounts: {
+    counter: bs.mut(Counter),    // needs an address
+    authority: bs.signer(),      // auto-filled with payer
+  },
+  args: { amount: bs.u64() },   // needs a bigint
+  run: ({ counter, authority }, { amount }, ctx) => { ... },
+})
+
+// Client call:
+await sol.counter.increment({
+  counter: "Gsb9sERGY...",   // the counter account address
+  amount: 5n,                 // the argument value
+  // authority is omitted, filled with sol.payer
+})
+```
+
+Account values are base58 address strings. Argument values match the type token: `number` for small integers, `bigint` for 64-bit and wider, `boolean` for bools, `string` for strings and pubkeys, `Uint8Array` for bytes, `null` for optional nulls, arrays for vectors and arrays.
+
+### Auto-filled accounts
+
+Some account constraints are automatically filled and can be omitted from the call:
+
+| Constraint | Auto-filled with |
+|---|---|
+| `bs.signer()` | The active signer's address (`sol.payer`) |
+| `bs.systemProgram()` | The System program address |
+| `bs.tokenProgram()` | The Token program address |
+| `bs.token2022Program()` | The Token-2022 program address |
+| `bs.clock()` | The Clock sysvar address |
+
+If your instruction only has auto-filled constraints besides the accounts you care about, the call becomes very concise:
+
+```ts
+// All of these are valid because signer is auto-filled:
+await sol.counter.increment({ counter: addr, amount: 5n })
+await sol.counter.increment({ counter: addr, amount: 5n, authority: sol.payer })
+```
+
+If you have multiple `bs.signer()` constraints, you can omit at most one. The others require explicit addresses. If you omit more than one, Better Sol throws an error because it cannot know which signer maps to which constraint.
+
+### Remaining accounts
+
+Instructions that use `bs.remaining()` accept an array of addresses:
+
+```ts
+await sol.escrow.batchProcess({
+  authority: sol.payer,
+  remainingAccounts: [item1, item2, item3],
+})
+```
+
+### Instructions with no parameters
+
+If an instruction has no accounts and no arguments, you can call it with no parameters at all:
+
+```ts
+await sol.counter.reset()
+```
+
+## Instruction methods
+
+Every instruction method has seven variants. Each returns a different shape depending on what you need:
+
+### `.instruction()`: Get the raw Instruction
+
+```ts
+const ix = await sol.counter.increment.instruction({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+Returns a single `Instruction` object from `@solana/kit`. Use this when you need to compose multiple instructions into a custom transaction, or when you want to inspect the instruction data before sending.
+
+The instruction is not signed and not sent. You can collect multiple instructions and pass them to `sol.send()` or `sol.batch()`.
+
+### `.transaction()`: Get a signed transaction
+
+```ts
+const signedTx = await sol.counter.increment.transaction({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+Builds the instruction, creates a transaction, signs it with your payer, and returns the signed transaction without sending it. Use this when you need to inspect, serialize, or manually submit the transaction.
+
+### `.simulate()`: Simulate without sending
+
+```ts
+const result = await sol.counter.getCount.simulate({
+  counter: counterAddr,
+})
+console.log(result.logs)          // string[] (transaction logs)
+console.log(result.unitsConsumed) // bigint (compute units used)
+console.log(result.returnData)    // Uint8Array | null (return value bytes)
+```
+
+Simulates the transaction against the current bank state without actually sending it. This is free and instant. Use it to:
+
+- Read return values from instructions that have `returns` defined
+- Preview compute unit usage
+- Check if a transaction would succeed before actually sending it
+- Read transaction logs for debugging
+
+### `.prepare()`: Instruction with metadata
+
+```ts
+const prepared = await sol.counter.increment.prepare({
+  counter: counterAddr,
+  amount: 5n,
+})
+console.log(prepared.instruction) // the Instruction object
+console.log(prepared.signers)     // TransactionSigner[] (who signs)
+console.log(prepared.pubkeys)     // Record<string, Address> (all accounts involved)
+```
+
+Returns the instruction along with the signers and public keys that would be used. Useful for advanced transaction construction where you need to know exactly which accounts are involved.
+
+### `.plan()`: Composable instruction plan
+
+```ts
+const { instruction, plan } = await sol.counter.increment.plan({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+Returns the instruction wrapped in an instruction plan. Plans can be composed into larger transaction plans for complex multi-step operations. See [Multi-Instruction](/docs/the-client/multi-instruction) for details.
+
+### `.send()`: Explicit send
+
+```ts
+const signature = await sol.counter.increment.send({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+Identical to the default call. Sends the transaction and waits for confirmation.
+
+## Method summary
+
+| Method | Returns | Sends? | Use when |
+|---|---|---|---|
+| Default call | `Signature` | Yes | You just want to send and confirm |
+| `.send()` | `Signature` | Yes | Same as default, more explicit |
+| `.instruction()` | `Instruction` | No | Composing multiple instructions |
+| `.transaction()` | `SignedTransaction` | No | Inspecting or manually submitting |
+| `.simulate()` | `SimulateResult` | No | Previewing results, reading return data |
+| `.prepare()` | `PrepareResult` | No | Advanced transaction construction |
+| `.plan()` | `InstructionPlanResult` | No | Composable multi-step plans |

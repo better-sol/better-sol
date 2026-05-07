@@ -1,0 +1,111 @@
+---
+title: Parsing Outputs
+description: Read errors and events from transaction logs.
+---
+
+When a transaction succeeds, the logs may contain events your program emitted. When it fails, the logs contain the error that caused it. Better Sol parses both from the raw log strings into typed objects.
+
+## Parsing errors
+
+When a transaction fails, the RPC returns a generic error. To find out which of your custom errors was thrown, pass the logs to `parseErrors()`:
+
+```ts
+try {
+  await sol.counter.increment({ counter: addr, amount: 5n })
+} catch (err) {
+  if (err instanceof Error && "logs" in err) {
+    const programError = sol.counter.parseErrors(err.logs as string[])
+    if (programError) {
+      console.log(programError.errorName)     // "Unauthorized"
+      console.log(programError.message)       // "Only the authority can update this counter"
+      console.log(programError.programName)   // "counter"
+      console.log(programError.errorIndex)    // 0
+    }
+  }
+}
+```
+
+`parseErrors()` returns a `ProgramError` object with four properties:
+
+| Property | Type | Description |
+|---|---|---|
+| `errorName` | `string` | The name from your `errors` definition |
+| `message` | `string` | The human-readable message |
+| `programName` | `string` | The program that threw it |
+| `errorIndex` | `number` | The position in the errors map (0, 1, 2, ...) |
+
+If no matching error is found in the logs, `parseErrors()` returns `undefined`.
+
+`ProgramError` also extends the native `Error` class, so you can use it with standard error handling:
+
+```ts
+const programError = sol.counter.parseErrors(logs)
+if (programError instanceof Error) {
+  console.log(programError.toString()) // "counter.Unauthorized: Only the authority can update this counter"
+}
+```
+
+### Error name is specific
+
+The parsing matches the exact error name from your program's `errors` config. If you defined `"Unauthorized"`, only log entries containing that exact name will match. This means you can distinguish between errors from different programs when multiple programs are involved in a transaction.
+
+## Parsing events
+
+After a transaction confirms, you can extract the events your program emitted from the transaction logs:
+
+```ts
+const { value } = await sol.rpc
+  .getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 })
+  .send()
+
+if (value?.meta?.logMessages) {
+  const events = await sol.counter.parseEvents(value.meta.logMessages)
+  for (const event of events) {
+    console.log(event.name)  // "Incremented"
+    console.log(event.data)  // { newCount: 5n, authority: "Gsb9sERGY..." }
+  }
+}
+```
+
+`parseEvents()` returns an array of `ParsedEvent` objects. Each event has:
+
+| Property | Type | Description |
+|---|---|---|
+| `name` | `string` | The event name from your `events` definition |
+| `data` | `Record<string, unknown>` | The decoded payload with fields matching your field schema |
+
+The data is fully decoded. If your event has `{ newCount: bs.u64(), authority: bs.pubkey() }`, then `event.data.newCount` is a `bigint` and `event.data.authority` is a `string`. The types match exactly what you defined.
+
+### Multiple events
+
+A single transaction can emit multiple events. They are returned in the order they appear in the logs:
+
+```ts
+const events = await sol.counter.parseEvents(logs)
+// events[0] might be { name: "Reset", data: { previousCount: 42n } }
+// events[1] might be { name: "Deactivated", data: { reason: "manual reset" } }
+```
+
+### Empty results
+
+If the transaction did not emit any events, or if your program has no `events` defined, `parseEvents()` returns an empty array. It never throws.
+
+### Performance
+
+The event discriminator index is computed once and cached on the program client instance. The first call to `parseEvents()` builds the index. Subsequent calls reuse it. So calling `parseEvents()` many times has no additional overhead.
+
+## Getting logs from a simulation
+
+You can also parse errors and events from simulation results, which is useful when you want to check what would happen without actually sending the transaction:
+
+```ts
+const result = await sol.counter.increment.simulate({
+  counter: addr,
+  amount: 5n,
+})
+
+const programError = sol.counter.parseErrors(result.logs)
+const events = await sol.counter.parseEvents(result.logs)
+```
+
+Simulation logs have the same format as confirmed transaction logs, so the same parsing methods work for both.

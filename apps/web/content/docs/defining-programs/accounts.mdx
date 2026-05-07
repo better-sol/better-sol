@@ -60,7 +60,7 @@ const Escrow = bs.account({
 }).derive(seed => ["escrow", seed.maker, seed.mint])
 ```
 
-This means: each unique pair of `(maker, mint)` produces a unique PDA address. Two different makers with the same mint get different escrow accounts. One maker with two different mints also gets two different accounts.
+Each unique pair of `(maker, mint)` produces a unique PDA address. Two different makers with the same mint get different escrow accounts. One maker with two different mints also gets two different accounts.
 
 ### Deriving addresses on the client
 
@@ -84,7 +84,7 @@ const Config = bs.account({
   admin: bs.pubkey(),
   feeRate: bs.u32(),
 })
-// No .derive() — this account has a fixed address or a generated keypair
+// No .derive(), so this account has a fixed address or a generated keypair
 ```
 
 When you call `bs.init(Config)` in an instruction, Better Sol still generates the correct account creation logic. The difference is that PDA accounts use seeds to generate the address, while non-PDA accounts use a fresh keypair.
@@ -103,14 +103,14 @@ const OrderBook = bs.account({
 }).derive(seed => ["orderbook", seed.market]).zeroCopy()
 ```
 
-Zero-copy accounts skip the normal deserialization step. Instead of copying the account data into a separate buffer and parsing it field by field, the runtime reads values directly from the account's byte slice. This is significantly faster for accounts that are read frequently (like order books or price oracles).
+Zero-copy accounts skip the normal deserialization step. Instead of copying the account data into a separate buffer and parsing it field by field, the runtime reads values directly from the account's byte slice. This is significantly faster for accounts that are read frequently, like order books or price oracles.
 
 The trade-off is that zero-copy accounts can only contain types with a fixed byte layout. That means no `bool`, no `string`, no `bytes`, no `optional`, and no `vector`. Only integers, `pubkey`, `f32`, `f64`, and zero-copy structs are allowed. TypeScript enforces this restriction: if you put a disallowed type inside a zero-copy account, you get a type error.
 
 ```ts
 // This produces a TypeScript error:
 const Bad = bs.account({
-  name: bs.string(), // ← string is not allowed in zero-copy
+  name: bs.string(), // string is not allowed in zero-copy
 }).zeroCopy()
 ```
 

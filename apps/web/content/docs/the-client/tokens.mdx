@@ -1,0 +1,181 @@
+---
+title: Tokens and SOL
+description: Create mints, mint tokens, transfer tokens, and send SOL.
+---
+
+Better Sol has built-in token clients for SPL Token and Token-2022. They handle associated token account creation, mint initialization, transfers, and balance queries automatically. You do not need to construct individual Token program instructions yourself.
+
+## Accessing the token client
+
+```ts
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+
+sol.token     // SPL Token client
+sol.token2022 // Token-2022 client (same API, different program)
+```
+
+Both clients have the same methods. Use `sol.token` for standard SPL Token operations and `sol.token2022` for Token-2022 accounts.
+
+All methods below are shown with `sol.token`, but every one is also available on `sol.token2022`.
+
+## Create a mint
+
+```ts
+const { mint, mintSigner, signature } = await sol.token.createMint({
+  decimals: 9,
+})
+```
+
+Creates a new token mint. The payer funds the account and becomes the mint authority by default. You can override the authority:
+
+```ts
+const { mint } = await sol.token.createMint({
+  decimals: 6,
+  authority: "Gsb9sERGY...",         // custom mint authority
+  freezeAuthority: null,             // no freeze authority
+})
+```
+
+| Parameter | Type | Required | Default |
+|---|---|---|---|
+| `decimals` | `number` | Yes | - |
+| `authority` | `string` | No | Payer address |
+| `freezeAuthority` | `string` or `null` | No | `null` |
+
+Returns:
+
+| Field | Type | Description |
+|---|---|---|
+| `mint` | `Address` | The new mint's address |
+| `mintSigner` | `TransactionSigner` | Signer for the mint account |
+| `signature` | `Signature` | The transaction signature |
+
+## Get an Associated Token Account address
+
+```ts
+const ata = await sol.token.getATA({
+  owner: "Gsb9sERGY...",
+  mint: "EPjFWdd5A...",
+})
+// ata is the derived ATA address
+```
+
+Returns the deterministic Associated Token Account address for a given owner and mint pair. This is a local computation. No network request is made. The ATA address is always the same for the same owner and mint combination.
+
+## Mint tokens
+
+```ts
+const signature = await sol.token.mintTo({
+  mint: mintAddress,
+  to: ownerAddress,
+  amount: 100_000_000n, // 100 tokens with 9 decimals
+})
+```
+
+Mints new tokens to a recipient. If the recipient does not have an Associated Token Account yet, it is created automatically. The payer funds the ATA creation.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `mint` | `string` | Yes | The mint address |
+| `to` | `string` | Yes | The owner's address (not the token account address) |
+| `amount` | `bigint` | Yes | The amount in base units (not decimals) |
+| `decimals` | `number` | No | Auto-detected from the mint if omitted |
+
+The `to` field is the owner's address, not the token account address. Better Sol derives the ATA automatically. This is intentional because you typically know who you are paying, not what their token account address is.
+
+## Transfer tokens
+
+```ts
+const signature = await sol.token.transfer({
+  mint: mintAddress,
+  to: recipientAddress,
+  amount: 50_000_000n,
+})
+```
+
+Transfers tokens from the active signer to a recipient. If the recipient does not have an ATA yet, it is created automatically as part of the same transaction.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `mint` | `string` | Yes | The mint address |
+| `to` | `string` | Yes | The recipient's owner address |
+| `amount` | `bigint` | Yes | The amount in base units |
+| `from` | `string` | No | Defaults to the active signer's address |
+| `decimals` | `number` | No | Auto-detected from the mint if omitted |
+
+The `from` parameter defaults to the active signer. If you need to transfer from a different account, use `sol.withSigner()` to create a client scoped to that account first.
+
+## Get a token balance
+
+```ts
+const balance = await sol.token.getBalance({
+  owner: "Gsb9sERGY...",
+  mint: "EPjFWdd5A...",
+})
+console.log(balance) // 100000000n (100 USDC in base units)
+```
+
+Returns the token balance in base units (a `bigint`). If the owner does not have a token account for the given mint, returns `0n`.
+
+The balance is in base units, not in the token's display units. For a token with 9 decimals, a balance of `1_000_000_000n` represents 1 token.
+
+## Transfer SOL
+
+```ts
+const signature = await sol.transfer({
+  to: "Gsb9sERGY...",
+  amount: 1_000_000_000n, // 1 SOL in lamports
+})
+```
+
+Transfers SOL from the active signer to a recipient. The amount is in lamports (1 SOL = 1,000,000,000 lamports).
+
+The source is always the active signer. If you need to send from a different account, use `sol.withSigner()`.
+
+## Query SOL balance
+
+```ts
+const balance = await sol.getBalance("Gsb9sERGY...")
+console.log(balance) // 2500000000n (2.5 SOL in lamports)
+```
+
+Returns the SOL balance in lamports as a `bigint`.
+
+## Full example: create and distribute a token
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+})
+
+// Create a new mint with 6 decimals
+const { mint } = await sol.token.createMint({ decimals: 6 })
+
+// Mint 1000 tokens to yourself
+await sol.token.mintTo({
+  mint,
+  to: sol.payer,
+  amount: 1_000_000_000n, // 1000 tokens (6 decimals)
+})
+
+// Transfer 200 tokens to someone else
+await sol.token.transfer({
+  mint,
+  to: "RecipientAddress...",
+  amount: 200_000_000n,
+})
+
+// Check your remaining balance
+const balance = await sol.token.getBalance({
+  owner: sol.payer,
+  mint,
+})
+console.log(balance) // 800000000n (800 tokens)
+```

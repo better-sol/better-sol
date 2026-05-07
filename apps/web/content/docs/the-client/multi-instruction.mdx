@@ -1,0 +1,120 @@
+---
+title: Multi-Instruction
+description: Compose multiple instructions into single or sequential transactions.
+---
+
+A single transaction on Solana can contain multiple instructions. This is useful when several operations must succeed or fail together. Better Sol provides three ways to compose multiple instructions.
+
+## `sol.send()`: Multiple instructions in one transaction
+
+```ts
+import { betterSol } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs: { counter } })
+
+// Build individual instructions using .instruction()
+const ix1 = await sol.counter.increment.instruction({ counter: addr1, amount: 5n })
+const ix2 = await sol.counter.increment.instruction({ counter: addr2, amount: 10n })
+
+// Send both in a single transaction
+const signature = await sol.send([ix1, ix2])
+```
+
+`sol.send()` takes an array of `Instruction` objects, builds a single transaction containing all of them, signs it, sends it, and waits for confirmation. If any instruction fails, the entire transaction fails and no changes are applied.
+
+This is the simplest way to batch operations. All instructions execute in order within the same transaction, so they share the same blockhash and the same compute budget.
+
+### Composing across programs
+
+You can mix instructions from different programs:
+
+```ts
+const incrementIx = await sol.counter.increment.instruction({ counter: addr, amount: 5n })
+const transferIx = await sol.marketplace.purchase.instruction({ listing: listingAddr })
+
+await sol.send([incrementIx, transferIx])
+```
+
+### With promises
+
+`.instruction()` returns a promise. You can pass the promises directly to `sol.send()` without awaiting them first:
+
+```ts
+await sol.send([
+  sol.counter.increment.instruction({ counter: addr1, amount: 5n }),
+  sol.counter.increment.instruction({ counter: addr2, amount: 10n }),
+])
+```
+
+`sol.send()` awaits all promises internally before building the transaction.
+
+## `sol.batch()`: Non-divisible sequential plan
+
+```ts
+const ix1 = await sol.counter.initialize.instruction({ counter: addr1, initialValue: 0n })
+const ix2 = await sol.counter.initialize.instruction({ counter: addr2, initialValue: 0n })
+const ix3 = await sol.counter.increment.instruction({ counter: addr1, amount: 1n })
+
+await sol.batch([ix1, ix2, ix3])
+```
+
+`sol.batch()` is similar to `sol.send()`, but it wraps the instructions in a non-divisible sequential instruction plan. This means all instructions are guaranteed to execute in the exact order you provided, and they are treated as a single atomic unit. If any instruction fails, none of them take effect.
+
+Use `sol.batch()` when the order of execution matters and you need the guarantee that the entire sequence is atomic.
+
+## `sol.steps()`: Sequential steps with dependency passing
+
+`sol.steps()` is for when each step depends on the result of the previous step. Each step function receives the results of all prior steps as arguments:
+
+```ts
+const [addr1, addr2, addr3] = await sol.steps([
+  // Step 1: initialize (returns the signature)
+  () => sol.counter.initialize.send({ counter: addr1, initialValue: 0n }),
+
+  // Step 2: increment (can use the signature from step 1 if needed)
+  (_sig1) => sol.counter.increment.send({ counter: addr1, amount: 5n }),
+
+  // Step 3: close (can use results from both prior steps)
+  (_sig1, _sig2) => sol.counter.close.send({ counter: addr1 }),
+])
+```
+
+Each step function receives all previous results as arguments. The first function takes no arguments. The second receives the result of the first. The third receives results of the first and second. And so on.
+
+`sol.steps()` returns an array of all results, fully typed. Each element's type corresponds to the return type of its step function.
+
+### When to use steps
+
+Use `sol.steps()` when:
+
+- Step 2 needs the output of step 1 (like a derived address or a signature)
+- Each step is a separate transaction that must succeed before the next one runs
+- You need to chain operations that cannot fit in a single transaction
+
+Unlike `sol.send()` and `sol.batch()`, which put everything in one transaction, `sol.steps()` sends a separate transaction per step. Each step is individually confirmed before the next one starts.
+
+## Choosing the right method
+
+| Method | Transactions | Atomic | Use when |
+|---|---|---|---|
+| `sol.send()` | 1 | Yes | Batching independent instructions together |
+| `sol.batch()` | 1 | Yes | Same as send, with explicit ordering guarantee |
+| `sol.steps()` | N (one per step) | Each step individually | Steps depend on prior results or exceed single-transaction limits |
+
+For most cases, `sol.send()` is what you want. It batches instructions into one transaction and everything succeeds or fails together. Use `sol.steps()` only when you need separate transactions with dependencies between them.
+
+## Transaction notifications
+
+You can listen for all confirmed transactions sent through the client:
+
+```ts
+const unsubscribe = sol.onTransaction((signature, slot) => {
+  console.log("Transaction confirmed:", signature, "at slot", slot)
+})
+
+// Later, stop listening:
+unsubscribe()
+```
+
+`onTransaction()` registers a callback that fires every time a transaction is confirmed. It returns an unsubscribe function. Only one callback can be active at a time. Registering a new one replaces the previous one.
