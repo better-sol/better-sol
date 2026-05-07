@@ -6,15 +6,24 @@ No installation needed. Run with `npx` or `bunx`.
 
 ## Commands
 
-### `init` - Set up a new project
+### `init`
+
+Set up a new project.
 
 ```bash
 npx @better-sol/cli init
 ```
 
-Creates a `keypair.json` for paying transaction fees, a `programs/` directory, and a `.gitignore`. Detects your existing Solana CLI keypair at `~/.config/solana/id.json` if you have one.
+Creates a payer keypair at `keypair.json`, a `programs/` directory, and a `.gitignore`. Detects your existing Solana CLI keypair at `~/.config/solana/id.json` if you have one. Offers to install `better-sol` if a `package.json` exists.
 
-### `create` - Scaffold a program
+| Flag | Description |
+|---|---|
+| `--force` | Overwrite existing files |
+| `--skip-install` | Skip installing better-sol |
+
+### `create`
+
+Scaffold a new program.
 
 ```bash
 npx @better-sol/cli create counter
@@ -27,35 +36,39 @@ Generates `programs/counter.ts` with a working counter template and `.better-sol
 | `--dir <dir>` | `programs` | Output directory |
 | `--force` | `false` | Overwrite existing files |
 
-### `deploy` - Compile and deploy
+### `deploy`
+
+Compile and deploy to Solana.
 
 ```bash
 npx @better-sol/cli deploy
 ```
 
-Parses your TypeScript, generates Anchor Rust, compiles it via the cloud API, and deploys the binary to Solana. On devnet and testnet, automatically funds your payer if the balance is low.
+Parses your TypeScript, generates Anchor Rust, compiles it via the cloud API, and deploys the binary. On devnet and testnet, automatically funds your payer if the balance is low.
 
 | Flag | Default | Description |
 |---|---|---|
 | `--src <glob>` | `programs/**/*.ts` | Program source glob |
 | `--program <name>` | all programs | Target a specific program |
-| `--payer <path>` | from config or `keypair.json` | Payer keypair path |
+| `--payer <path>` | `keypair.json` | Payer keypair path |
 | `--cluster <cluster>` | `devnet` | `devnet`, `testnet`, `mainnet`, `localnet` |
 | `--dry-run` | `false` | Generate Rust without compiling or deploying |
-| `--verify` | `false` | Write Rust files for verified builds |
+| `--verify` | `false` | Write Rust for verified builds |
 | `--output <dir>` | `generated` | Output directory for Rust files |
 
-### `generate idl` - Import an external program
+### `generate idl`
+
+Import an external program from an on-chain address or a local IDL file.
 
 ```bash
-# From an on-chain program address
+# From an on-chain program
 npx @better-sol/cli generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
 
 # From a local IDL JSON file
 npx @better-sol/cli generate idl ./staking-idl.json
 ```
 
-Produces a typed `.ts` file in `generated/` that you can import and use with `betterSol()`. Detects whether the argument is an address or a file path automatically.
+Produces a typed `.ts` file in `generated/`. Detects whether the argument is an address or a file path automatically.
 
 | Flag | Default | Description |
 |---|---|---|
@@ -63,39 +76,47 @@ Produces a typed `.ts` file in `generated/` that you can import and use with `be
 | `--name <name>` | from IDL metadata | Override the program name |
 | `--cluster <cluster>` | `mainnet` | Cluster for on-chain IDL fetch |
 
-### `generate db` - Generate a database schema
+### `generate db`
+
+Generate a Drizzle ORM schema from your account definitions.
 
 ```bash
 npx @better-sol/cli generate db
 ```
 
-Generates a Drizzle ORM schema from your account definitions.
-
 | Flag | Default | Description |
 |---|---|---|
 | `--dialect <dialect>` | `postgres` | `postgres`, `mysql`, or `sqlite` |
-| `--out <path>` | `src/db/better-sol.ts` | Output file |
+| `--out <path>` | `src/db/better-sol.ts` | Output file path |
 | `--src <glob>` | from config | Program source glob |
 
-### `login` - Save your API key
+### `login`
+
+Save your compiler API key.
 
 ```bash
 npx @better-sol/cli login
 ```
 
-Saves your compiler API key to `.better-sol/auth.json`. Without a key you get 5 compiles per hour. With a key, 100 per hour.
+Saves your key to `.better-sol/auth.json`. Without a key you get 5 compiles per hour. With a key, 100 per hour.
 
-### `verify` - Verified builds
+### `verify`
+
+Submit a deployed program for OtterSec verified-builds.
 
 ```bash
 npx @better-sol/cli verify counter --program-id <address>
 ```
 
-Submits a deployed program for OtterSec verified-builds.
+| Flag | Description |
+|---|---|
+| `--program-id <id>` | On-chain program ID to verify |
+| `--lib-name <name>` | Rust library name (defaults to program name) |
+| `--mount-path <path>` | Subdirectory with `Cargo.toml` (defaults to `generated/<name>`) |
 
 ## Configuration
 
-Create `better-sol.config.ts` in your project root (optional):
+Create an optional `better-sol.config.ts` in your project root:
 
 ```ts
 import { defineConfig } from "@better-sol/cli"
@@ -108,7 +129,7 @@ export default defineConfig({
 })
 ```
 
-All fields are optional. CLI flags override config values.
+All fields are optional. CLI flags override config values. The `payer` field is only needed when you use a keypair outside the project directory.
 
 ## The flow
 
@@ -117,7 +138,7 @@ init ──→ keypair.json + programs/ + .gitignore
   │
   └──→ create counter ──→ programs/counter.ts + .better-sol/counter.json
          │
-         └──→ deploy ──→ on-chain program (parses TS, generates Rust, compiles, deploys)
+         └──→ deploy ──→ on-chain program
                 │
                 └──→ betterSol({ programs: { counter } }) ──→ typed client
 ```
