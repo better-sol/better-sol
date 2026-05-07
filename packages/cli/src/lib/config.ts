@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { access } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import type { CliConfig, Cluster } from "./types";
+import type { CliConfig, Cluster } from "#lib/types";
 
 const clusterValues: readonly Cluster[] = ["devnet", "testnet", "mainnet", "localnet"];
 

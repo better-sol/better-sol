@@ -5,14 +5,15 @@ import { fileURLToPath } from "node:url";
 import { init } from "./commands/init";
 import { create } from "./commands/create";
 import { deploy } from "./commands/deploy";
-import { generateDb } from "./commands/generate";
+import { generateDb } from "./commands/generate/db";
+import { generateIdl } from "./commands/generate/idl";
 import { login } from "./commands/login";
 import { verify } from "./commands/verify";
-import { defineConfig } from "./config";
-import type { InitOptions, CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
+import { defineConfig } from "#lib/config";
+import type { InitOptions, CreateOptions, DeployOptions, GenerateDbOptions, GenerateIdlOptions, VerifyOptions } from "#lib/types";
 
 export { defineConfig };
-export type { CliConfig, InitOptions, CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
+export type { CliConfig, InitOptions, CreateOptions, DeployOptions, GenerateDbOptions, GenerateIdlOptions, VerifyOptions } from "#lib/types";
 
 const cli = new Command();
 
@@ -62,6 +63,15 @@ generate
   .option("--out <path>", "output file", "src/db/better-sol.ts")
   .option("--src <glob>", "program source glob")
   .action((options: GenerateDbOptions) => run(() => generateDb(options)));
+
+generate
+  .command("idl")
+  .description("Generate a typed Better Sol program from an IDL file or on-chain program address")
+  .argument("<source>", "path to IDL JSON file or on-chain program address")
+  .option("--out <path>", "output TypeScript file (default: generated/<name>.ts)")
+  .option("--name <name>", "program name override (default: derived from IDL)")
+  .option("--cluster <cluster>", "cluster for on-chain IDL fetch (mainnet, devnet, testnet, localnet)", "mainnet")
+  .action((source: string, options: GenerateIdlOptions) => run(() => generateIdl(source, options)));
 
 cli
   .command("verify")

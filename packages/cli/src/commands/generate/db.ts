@@ -1,9 +1,9 @@
 import { intro, outro, spinner } from "@clack/prompts";
-import { loadConfig } from "#config";
-import { cwdPath } from "#path";
-import type { GenerateDbOptions } from "#types";
+import { loadConfig } from "#lib/config";
+import { cwdPath } from "#lib/fs";
+import type { GenerateDbOptions } from "#lib/types";
 import { isDbDialect, writeDrizzleSchema } from "#generator/db";
-import { discoverProgramsWithSpinner } from "./shared";
+import { discoverProgramsWithSpinner } from "../shared";
 
 export async function generateDb(options: GenerateDbOptions): Promise<void> {
   intro("better-sol generate db");

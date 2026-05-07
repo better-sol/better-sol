@@ -1,8 +1,8 @@
 import { intro, outro, spinner, text, confirm, isCancel, cancel } from "@clack/prompts";
 import { writeFile } from "node:fs/promises";
-import { createKeypair } from "#keypair";
-import { BETTER_SOL_DIR, cwdJoin, ensureDirectory, fileExists } from "#path";
-import type { CreateOptions } from "#types";
+import { createKeypair } from "#lib/keypair";
+import { BETTER_SOL_DIR, cwdJoin, ensureDirectory, fileExists } from "#lib/fs";
+import type { CreateOptions } from "#lib/types";
 
 export async function create(nameArg: string | undefined, options: CreateOptions): Promise<void> {
   intro("better-sol create");

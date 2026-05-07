@@ -8,8 +8,8 @@ import type {
   IrProgram,
   IrSeed,
   IrType,
-} from "#ir/types";
-import { toPascal, toSnake } from "#naming";
+} from "#ir";
+import { toPascal, toSnake } from "#lib/naming";
 import { CodeWriter } from "./code-writer";
 import {
   isCpiSol,

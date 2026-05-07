@@ -4,7 +4,7 @@ import {
   isMemberExpression,
   isIdentifier,
 } from "#parser/node-helpers";
-import type { IrType } from "#ir/types";
+import type { IrType } from "#ir";
 
 export function isIntegerSeedType(type: IrType): boolean {
   return (

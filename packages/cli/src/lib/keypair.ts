@@ -1,6 +1,6 @@
 import { generateKeyPairSigner, getAddressDecoder } from "@solana/kit";
 import { readFile, writeFile } from "node:fs/promises";
-import { ensureParent, fileExists } from "./path";
+import { ensureParent, fileExists } from "#lib/fs";
 
 export type KeypairData = { readonly publicKey: string; readonly secretKey: readonly number[] };
 

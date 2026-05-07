@@ -3,12 +3,12 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { createKeypair } from "#keypair";
-import { cwdJoin, fileExists } from "#path";
-import type { InitOptions } from "#types";
+import { createKeypair } from "#lib/keypair";
+import { cwdJoin, fileExists } from "#lib/fs";
+import type { InitOptions } from "#lib/types";
 
 const PAYER_KEYPAIR_PATH = "keypair.json";
-const GITIGNORE_ENTRIES = [".better-sol/", "generated/", "keypair.json", "node_modules/"];
+const GITIGNORE_ENTRIES = [".better-sol/", "generated/**/*.so", "keypair.json", "node_modules/"];
 const SOLANA_DEFAULT_KEYPAIR_PATH = join(homedir(), ".config", "solana", "id.json");
 
 type PackageManager = "npm" | "bun" | "pnpm" | "yarn";

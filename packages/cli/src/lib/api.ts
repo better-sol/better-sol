@@ -1,4 +1,4 @@
-import type { IrProgram } from "#ir/types";
+import type { IrProgram } from "#ir";
 
 const DEFAULT_API_URL = "https://better-sol.fun";
 

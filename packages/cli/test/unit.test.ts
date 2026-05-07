@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseCluster } from "../src/config";
-import { toSnake, toPascal, toCamel } from "../src/naming";
+import { parseCluster } from "../src/lib/config";
+import { toSnake, toPascal, toCamel } from "../src/lib/naming";
 import { CodeWriter } from "../src/generator/code-writer";
 
 describe("config", () => {

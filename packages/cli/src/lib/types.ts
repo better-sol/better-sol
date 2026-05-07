@@ -38,3 +38,9 @@ export type GenerateDbOptions = {
   readonly out: string | undefined;
   readonly src: string | undefined;
 };
+
+export type GenerateIdlOptions = {
+  readonly out: string | undefined;
+  readonly name: string | undefined;
+  readonly cluster: string | undefined;
+};

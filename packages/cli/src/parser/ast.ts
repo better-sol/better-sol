@@ -2,7 +2,7 @@ import type {
   IrAccount, IrAccountField, IrError, IrEvent, IrEventField,
   IrInstruction, IrInstructionAccount, IrInstructionArg, IrProgram,
   IrSeed, IrStructZC, IrType, PrimitiveType,
-} from "#ir/types";
+} from "#ir";
 import type { Node, Program, CallExpression, ObjectExpression, VariableDeclarator } from "oxc-parser";
 
 import { parseModule } from "./parse";
