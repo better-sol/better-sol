@@ -1,13 +1,15 @@
 ---
 title: Accounts
-description: Define on-chain data structures with PDA derivation and zero-copy layout.
+description: Define on-chain data structures, PDA seeds, and zero-copy layouts.
 ---
 
-Accounts store data on Solana. In better-sol, you define them as plain objects with typed fields, then optionally attach PDA seeds and zero-copy flags.
+Accounts are where your program stores data on Solana. Every account has a fixed layout of typed fields, and Better Sol uses that layout to serialize, deserialize, and compute the account size automatically. You never specify byte sizes yourself.
 
-## Basic accounts
+## Creating an account
 
-```typescript
+Call `bs.account()` with an object of typed fields:
+
+```ts
 const Counter = bs.account({
   count: bs.u64(),
   authority: bs.pubkey(),
@@ -16,13 +18,22 @@ const Counter = bs.account({
 })
 ```
 
-This creates an account definition with Borsh serialization, an 8-byte discriminator prefix, and automatic space calculation. You do not need to manually specify the account size.
+Each field is a type token from the `bs` namespace. The order of fields determines the on-chain layout, so once you deploy, do not reorder them. You can add new fields at the end.
+
+The account definition is also the schema the client uses to decode data. When you call `sol.counter.accounts.Counter.fetch(address)`, the returned object matches the field types exactly:
+
+```ts
+const data = await sol.counter.accounts.Counter.fetch(addr)
+// { count: bigint; authority: string; isActive: boolean; label: string | null }
+```
 
 ## PDA derivation
 
-Program Derived Addresses (PDAs) are deterministic addresses derived from seeds. You attach seeds to an account with `.derive()`:
+Most accounts on Solana use Program Derived Addresses (PDAs). A PDA is a deterministic address derived from seeds, which means you can compute it without asking the network. No private key is needed, and no two seed inputs produce the same address.
 
-```typescript
+You attach seeds to an account definition with `.derive()`:
+
+```ts
 const Counter = bs.account({
   count: bs.u64(),
   authority: bs.pubkey(),
@@ -30,76 +41,84 @@ const Counter = bs.account({
 }).derive(seed => ["counter", seed.authority])
 ```
 
-The `seed` builder exposes field names from the account. Only fields with types that can be used as seeds (integers and pubkeys) appear on the builder.
-
-### Seed types
-
-| Seed type | How it appears in the ledger | Example |
-|---|---|---|
-| Literal string | `"counter"` becomes the bytes `counte...` | `["counter"]` |
-| Field reference | `seed.authority` becomes the address bytes | `["counter", seed.authority]` |
-| Mixed | Combine both | `["vault", seed.tokenA, seed.tokenB]` |
+The callback receives a `seed` builder object. This builder exposes only the fields whose types can be used as seeds (integers and pubkeys). In the example above, `seed.authority` is available because `authority` is a `pubkey`, but `seed.isActive` is not because `bool` cannot be a seed.
 
 ### How seeds work
 
-When you call `.derive(seed => ["counter", seed.authority])`, the transpiler generates the Anchor `seeds` attribute:
+Each seed in the array is either:
 
-```rust
-#[account]
-pub struct Counter {
-    pub count: u64,
-    pub authority: Pubkey,
-    pub is_active: bool,
-}
+- **A literal string**, like `"counter"`. It is encoded as UTF-8 bytes on-chain.
+- **A field reference**, like `seed.authority`. It is encoded as the raw bytes of that field: 32 bytes for a pubkey, little-endian for integers.
 
-// Generated PDA logic:
-// seeds = [b"counter", authority.key().as_ref()]
+You can mix both:
+
+```ts
+const Escrow = bs.account({
+  maker: bs.pubkey(),
+  mint: bs.pubkey(),
+  amount: bs.u64(),
+}).derive(seed => ["escrow", seed.maker, seed.mint])
 ```
 
-On the client side, `derive()` becomes a typed function that only accepts the fields you referenced:
+This means: each unique pair of `(maker, mint)` produces a unique PDA address. Two different makers with the same mint get different escrow accounts. One maker with two different mints also gets two different accounts.
 
-```typescript
-// Only `authority` is available because that is what the seeds reference
-const address = await sol.counter.accounts.Counter.derive({
-  authority: "Gsb9sERGY...base58...",
+### Deriving addresses on the client
+
+When you registered the account in your program definition and called `.derive()`, the client gets a `.derive()` method that mirrors the same seeds:
+
+```ts
+const escrowAddr = await sol.escrow.accounts.Escrow.derive({
+  maker: "Gsb9sERGY...",
+  mint: "EPjFWdd5A...",
 })
 ```
 
-If you omit a required seed field, TypeScript will show a type error. If you pass a field that is not a seedable type, it will not appear on the builder.
+Only the fields you referenced in the seeds appear as required arguments. TypeScript enforces this. If `Escrow` uses `seed.maker` and `seed.mint`, then `derive()` requires both. If it only uses `seed.authority`, it only requires `authority`.
 
-### No-seed accounts
+### Accounts without PDA seeds
 
-Not every account needs PDA derivation. Static accounts or accounts created from externally-generated keypairs skip `.derive()`:
+Not every account needs PDA derivation. Accounts that are created with a randomly-generated keypair, or that use a well-known address, simply skip `.derive()`:
 
-```typescript
+```ts
 const Config = bs.account({
   admin: bs.pubkey(),
   feeRate: bs.u32(),
 })
-// No .derive() — this account is created with a separate keypair
+// No .derive() — this account has a fixed address or a generated keypair
 ```
+
+When you call `bs.init(Config)` in an instruction, Better Sol still generates the correct account creation logic. The difference is that PDA accounts use seeds to generate the address, while non-PDA accounts use a fresh keypair.
 
 ## Zero-copy accounts
 
-For high-performance accounts that need fast reads, use `.zeroCopy()`:
+For performance-critical accounts that need fast reads, add `.zeroCopy()`:
 
-```typescript
+```ts
 const OrderBook = bs.account({
-  bids: bs.array(Order, 64),
-  asks: bs.array(Order, 64),
+  bids: bs.array(bs.u64(), 64),
+  asks: bs.array(bs.u64(), 64),
+  bestBid: bs.u64(),
+  bestAsk: bs.u64(),
   market: bs.pubkey(),
 }).derive(seed => ["orderbook", seed.market]).zeroCopy()
 ```
 
-Zero-copy accounts use `AccountLoader` in Anchor instead of `Account`. They are loaded as a byte slice and deserialized on demand, which avoids copying the entire account data into a separate buffer.
+Zero-copy accounts skip the normal deserialization step. Instead of copying the account data into a separate buffer and parsing it field by field, the runtime reads values directly from the account's byte slice. This is significantly faster for accounts that are read frequently (like order books or price oracles).
 
-Zero-copy has restrictions. Only integer types, `pubkey`, `f32`, `f64`, and other zero-copy structs are allowed. You cannot use `bool`, `string`, `bytes`, `optional`, or `vector` inside a zero-copy account. TypeScript enforces this at the type level.
+The trade-off is that zero-copy accounts can only contain types with a fixed byte layout. That means no `bool`, no `string`, no `bytes`, no `optional`, and no `vector`. Only integers, `pubkey`, `f32`, `f64`, and zero-copy structs are allowed. TypeScript enforces this restriction: if you put a disallowed type inside a zero-copy account, you get a type error.
 
-## Structs for zero-copy sub-types
+```ts
+// This produces a TypeScript error:
+const Bad = bs.account({
+  name: bs.string(), // ← string is not allowed in zero-copy
+}).zeroCopy()
+```
 
-When a zero-copy account has nested structures, define them with `bs.struct()`:
+### Structs for zero-copy sub-types
 
-```typescript
+When a zero-copy account has repeating structures (like an order inside an order book), define them with `bs.struct()`:
+
+```ts
 const Order = bs.struct({
   trader: bs.pubkey(),
   price: bs.u64(),
@@ -114,15 +133,13 @@ const OrderBook = bs.account({
 }).derive(seed => ["orderbook", seed.market]).zeroCopy()
 ```
 
-Structs are only valid inside zero-copy accounts. If you try to use `bs.struct()` in a regular Borsh account, TypeScript will show a type error.
+Structs defined with `bs.struct()` can only be used inside zero-copy accounts. They serve the same role as grouping fields together, but they have a fixed byte layout that makes direct memory access possible.
 
-## Account constraints
+## Account constraints in definitions
 
-Constraints are defined on accounts, not on their fields. They tell the transpiler how each account is used in an instruction. See [Constraints](/docs/defining-programs/constraints) for the full list.
+The `.hasOne()` method annotates an account definition with a validation rule. It tells Better Sol that a specific field must match a specific account passed to the instruction. When you write:
 
-One constraint worth mentioning here is `hasOne`, which attaches a validation rule to the account definition itself:
-
-```typescript
+```ts
 const Vault = bs.account({
   balance: bs.u64(),
   authority: bs.pubkey(),
@@ -130,4 +147,8 @@ const Vault = bs.account({
   .hasOne("authority")
 ```
 
-This generates `has_one = authority` in the Anchor `#[derive(Accounts)]` struct, ensuring that the `authority` field matches the signer.
+Any instruction that uses `bs.mut(Vault)` or `bs.init(Vault)` will automatically verify that the `authority` field inside the account data matches the `authority` account passed to that instruction. If they do not match, the transaction fails with a clear error.
+
+This is a safety mechanism. Without `hasOne("authority")`, someone could pass any address as the `authority` account, and your program would not check whether it matches the data stored in the vault. With `hasOne("authority")`, the check is enforced automatically.
+
+See [Constraints](/docs/defining-programs/constraints) for the full list of instruction-level constraints like `bs.init()`, `bs.mut()`, and `bs.close()`.

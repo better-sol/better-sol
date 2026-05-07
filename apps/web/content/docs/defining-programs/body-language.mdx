@@ -3,154 +3,268 @@ title: Body Language
 description: What you can and cannot write inside run() bodies.
 ---
 
-The `run()` body is transpiled to Anchor Rust. It supports a specific subset of TypeScript. Everything else is rejected at transpile time with a clear error message telling you what to use instead.
+The `run()` body is the on-chain logic of your instruction. It supports a specific subset of TypeScript. Anything outside that subset produces a clear error telling you what to use instead. This page is a complete reference. If it is not listed here as supported, it is not supported.
 
-## Supported features
+This page is a complete reference. If it is not listed here as supported, it is not supported.
 
-### Variable assignment and field mutation
+## Reading and writing account fields
 
-```typescript
-counter.count = 5n
-counter.authority = authority
-counter.isActive = true
-counter.count += amount
-counter.count -= 1n
-counter.label = null   // → None in Rust
-```
+You can read any field from any account in your `accounts` object, and you can write to accounts that are marked writable (those using `bs.init()`, `bs.mut()`, `bs.initIfNeeded()`, `bs.close()`, or `bs.realloc()`):
 
-### Arithmetic
+```ts
+run: ({ counter, authority }, { amount }, ctx) => {
+  // Read
+  ctx.require(counter.isActive, "NotActive")
 
-```typescript
-counter.count += amount
-counter.count -= 1n
-counter.count *= 2n
-total = price * quantity
-```
-
-### Control flow
-
-```typescript
-if (counter.isActive) {
+  // Write
   counter.count += amount
-} else {
-  ctx.require(false, "NotActive")
-}
-
-for (let i = 0; i < limit; i++) {
-  total += items[i].value
+  counter.authority = authority
+  counter.isActive = false
+  counter.label = null   // clear an optional field
 }
 ```
 
-For loops must have a bounded end condition. The transpiler converts them to Rust `for i in 0..limit`.
+Assignment (`=`) and compound assignment (`+=`, `-=`, `*=`) are both supported for numeric fields. Setting an optional field to `null` clears it.
 
-### Require (error checking)
+## Conditional logic
 
-```typescript
-ctx.require(authority === counter.authority, "Unauthorized")
-ctx.require(counter.isActive, "NotActive")
-ctx.require(counter.count >= amount, "BelowZero")
+### if / else
+
+```ts
+run: ({ counter }, { amount }, ctx) => {
+  if (counter.count >= amount) {
+    counter.count -= amount
+  } else {
+    ctx.require(false, "BelowZero")
+  }
+}
 ```
 
-`ctx.require()` is the only way to throw errors. The error name must exist in the program's `errors` config. The transpiler validates this at compile time.
+Both `if` and `if/else` are supported. There is no `else if` construct. For multiple conditions, use nested `if/else` blocks.
 
-### Event emission
+### Ternary expressions
 
-```typescript
-ctx.emit("Incremented", { newCount: counter.count, authority })
-ctx.emit("Transfer", { from: sender, to: recipient, amount })
-```
-
-The event name must exist in the program's `events` config. The payload must match the field schema exactly. Missing or extra fields cause a transpile-time error.
-
-### Logging
-
-```typescript
-ctx.log("Incremented counter by {}", amount)
-ctx.log("Transfer from {} to {}", sender, recipient)
-```
-
-Transpiles to Anchor's `msg!()` macro. Curly braces are format placeholders.
-
-### Return values
-
-```typescript
+```ts
 run: ({ counter }) => {
-  return counter.count
+  counter.isActive = counter.count > 0n ? true : false
 }
 ```
 
-Requires `returns: bs.u64()` (or any type) in the instruction config. Transpiles to `return Ok(counter.count);` in Rust.
+Ternary expressions work in assignments. The condition must be a boolean expression, and both branches must produce the same type.
 
-### Conditional assignment
+## Loops
 
-```typescript
-counter.isActive = !counter.isActive
-counter.count = counter.count > 0 ? counter.count - 1n : 0n
+### Bounded for loops
+
+```ts
+run: ({ items }) => {
+  for (let i = 0; i < items.length; i++) {
+    items[i].value += 1n
+  }
+}
 ```
 
-Boolean negation and ternary expressions are supported.
+For loops must have an explicit, bounded end condition (`i < limit`). The following are not supported: `for...of`, `for...in`, and `while` loops.
 
-### CPI (cross-program invocation)
+## Arithmetic
 
-```typescript
+All standard arithmetic operators are supported:
+
+```ts
+run: ({ counter }, { amount }) => {
+  counter.count += amount       // addition
+  counter.count -= 1n          // subtraction
+  counter.count *= 2n          // multiplication
+  const total = counter.count + amount  // arithmetic in expressions
+}
+```
+
+Division and modulo are not supported because they add complexity on-chain. Use multiplication for ratios instead.
+
+## Comparison and boolean logic
+
+```ts
+run: ({ counter, authority }, ctx) => {
+  ctx.require(counter.count > 0n, "BelowZero")
+  ctx.require(authority === counter.authority, "Unauthorized")
+  ctx.require(counter.isActive && counter.count > 0n, "NoOperation")
+
+  // Negation
+  counter.isActive = !counter.isActive
+}
+```
+
+Equality (`===`, `!==`), comparison (`>`, `<`, `>=`, `<=`), logical AND (`&&`), logical OR (`||`), and boolean negation (`!`) are all supported.
+
+## Require
+
+```ts
+ctx.require(condition, "ErrorName")
+```
+
+This is the only way to throw an error in a `run()` body. If `condition` is `false`, the transaction fails with the named error. The error name must exist in your program's `errors` config. Better-sol validates this before deployment: if you mistype the error name, you get an error immediately.
+
+```ts
+ctx.require(authority === counter.authority, "Unauthorized")  // valid
+ctx.require(condition, "FooError")  // error: not in errors map
+```
+
+Multiple `ctx.require()` calls in a row are fine. They are checked in order, and the first one that fails stops the transaction:
+
+```ts
+run: ({ counter, authority }, { amount }, ctx) => {
+  ctx.require(authority === counter.authority, "Unauthorized")
+  ctx.require(counter.isActive, "NotActive")
+  ctx.require(counter.count >= amount, "BelowZero")
+  counter.count -= amount
+}
+```
+
+## Emit
+
+```ts
+ctx.emit("EventName", { field1: value1, field2: value2 })
+```
+
+Emits a structured event. The event name must exist in your program's `events` config. The payload must match the field schema exactly. Missing fields or extra fields cause an error.
+
+```ts
+ctx.emit("Incremented", { newCount: counter.count, authority })  // valid
+ctx.emit("Incremented", { newCount: counter.count })  // error: missing "authority"
+```
+
+You can emit multiple events in a single instruction:
+
+```ts
+run: ({ listing }, ctx) => {
+  ctx.emit("Deactivated", { reason: "expired" })
+  ctx.emit("Refunded", { amount: listing.price })
+}
+```
+
+## Log
+
+```ts
+ctx.log("Counter incremented by {}", amount)
+ctx.log("Transfer from {} to {}", from, to)
+```
+
+Writes a formatted message to the transaction log. Curly braces `{}` are placeholders that get filled with the provided values. Only string, number, bigint, boolean, and address values can be interpolated.
+
+## Return values
+
+```ts
+getCount: ix({
+  accounts: {
+    counter: bs.mut(Counter),
+  },
+  returns: bs.u64(),
+  run: ({ counter }) => {
+    return counter.count
+  },
+}),
+```
+
+Add a `returns` field to the instruction config with any type token. Then use `return` in the `run()` body. The returned value is available to the caller through simulation.
+
+You can also return expressions:
+
+```ts
+return counter.count * 2n
+return counter.isActive
+```
+
+## Cross-program invocations (CPI)
+
+The `cpi` object provides typed cross-program invocations inside `run()` bodies:
+
+```ts
 import { cpi } from "better-sol/program"
 
-cpi.token.mintTo({
-  mint: rewardMint,
-  to: rewardTokenAccount,
-  authority,
-  amount: rewardAmount,
-})
-
-cpi.token.transfer({
-  from,
-  to: recipient,
-  authority,
-  amount: 100n,
-})
-
-cpi.sol.timestamp()  // → Clock::get()?.unix_timestamp (i64)
+mintTo: ix({
+  accounts: {
+    mint: bs.mint(),
+    to: bs.tokenAccount().writable(),
+    authority: bs.signer(),
+    tokenProgram: bs.tokenProgram(),
+  },
+  args: { amount: bs.u64() },
+  run: ({ mint, to, authority }, { amount }) => {
+    cpi.token.mintTo({ mint, to, authority, amount })
+  },
+}),
 ```
 
-`cpi` is a separate import from `bs`. It is only meaningful inside `run()` bodies. Calling it at runtime does nothing; the transpiler reads its AST and generates the Anchor CPI code. PDA-signed CPIs automatically use the program's seeds.
+Supported CPI calls:
 
-### Accessing account fields
+| Call | Parameters |
+|---|---|
+| `cpi.token.transfer()` | `{ from, to, authority, amount }` |
+| `cpi.token.transferChecked()` | `{ from, to, mint, authority, amount, decimals }` |
+| `cpi.token.mintTo()` | `{ mint, to, authority, amount }` |
+| `cpi.token.burn()` | `{ from, mint, authority, amount }` |
+| `cpi.sol.timestamp()` | (none) |
 
-All account fields defined in the account definition are accessible in the body:
+`cpi.token.transfer()` and the other token calls take the same parameter shapes as you see in the `accounts` constraints. The accounts come from the instruction's accounts, and the amounts come from the args.
 
-```typescript
-run: ({ counter, authority }, { amount }, ctx) => {
-  ctx.require(authority === counter.authority, "Unauthorized")  // field comparison
-  counter.count += amount   // field mutation
-  ctx.emit("Message", { authority })  // field in event payload
+`cpi.sol.timestamp()` returns the current Unix timestamp as a `bigint`:
+
+```ts
+run: ({ listing }, ctx) => {
+  const now = cpi.sol.timestamp()
+  ctx.require(now >= listing.expiresAt, "NotExpired")
 }
 ```
 
-The transpiler knows the type of each field and generates the correct Rust access pattern.
+CPI calls are turned into on-chain cross-program invocations. At runtime in TypeScript, they do nothing (they are placeholders that Better Sol reads during deployment).
 
-## Unsupported features
+## Accessing constraint values in the body
 
-The transpiler rejects everything not listed above. Each rejection comes with a specific error message and a suggestion for what to use instead.
+Accounts declared with `bs.signer()`, `bs.mint()`, `bs.tokenAccount()`, `bs.clock()`, and `bs.systemProgram()` all provide typed values in the `run()` body:
 
-| Pattern | Error message |
+```ts
+run: ({ authority, mint, clock }) => {
+  // authority (from bs.signer()) is a string — the signer's address
+  // mint (from bs.mint()) has .key, .supply, .decimals, .mintAuthority, .freezeAuthority
+  // clock (from bs.clock()) has .unixTimestamp, .slot, .epoch
+}
+```
+
+When accounts are constraints like `bs.mut(Counter)`, you get the full account data:
+
+```ts
+run: ({ counter }) => {
+  // counter.count — bigint
+  // counter.authority — string
+  // counter.isActive — boolean
+}
+```
+
+Account values from `bs.init()` and `bs.mut()` also include a `key` field with the account's address:
+
+```ts
+run: ({ counter }) => {
+  const address = counter.key  // string — the account's on-chain address
+}
+```
+
+## What is not supported
+
+Better-sol rejects anything not listed above. Each rejection comes with a specific error message and a suggestion for what to use instead. Here are the most common unsupported patterns:
+
+| Pattern | What to use instead |
 |---|---|
-| `while` / `do-while` | "Use a bounded `for` loop." |
-| `for...of` / `for...in` | "Use a bounded `for` loop." |
-| `switch` | "Use explicit if/else branches." |
-| `try` / `catch` / `finally` | "Use ctx.require() and Result-returning operations." |
-| `throw` | "Use ctx.require(condition, 'ErrorName')." |
-| `return` (without `returns` type) | "Instruction handlers must complete normally. Add `returns: bs.u64()` to the instruction config." |
-| `await` | "On-chain logic cannot await. Move async work to the client." |
-| `Math.max()` / `Math.min()` | "Compare directly: `a > b ? a : b`." |
-| Template strings | "Use string literals only in ctx.log()." |
-| Object spread `{...obj}` | "Write every object field explicitly." |
-| Destructuring | "Declare each local explicitly instead of destructuring." |
-| Nested functions | "Inline the logic." |
-| External constants | "Only instruction accounts, args, and locals are available." |
-| Mutable conditional aliases | "Rewrite as explicit branches." |
-| Unknown error name | "Add the error to the program's `errors` config." |
-| Unknown event name | "Add the event to the program's `events` config." |
-| Unknown account field | "The field does not exist on this account type." |
-| Wrong event payload | "Event payload fields must match the event definition." |
+| `while` / `do-while` | A bounded `for` loop |
+| `for...of` / `for...in` | A bounded `for` loop with index access |
+| `switch` / `case` | Explicit `if/else` branches |
+| `try` / `catch` / `finally` | `ctx.require()` for validation |
+| `throw` | `ctx.require(condition, "ErrorName")` |
+| `await` | Move async work to the client side |
+| `Math.*` functions | Arithmetic operators or write the logic directly |
+| Template strings (`` ` ``) | String literals in `ctx.log()` with `{}` placeholders |
+| Object spread (`{...obj}`) | Write each field explicitly |
+| Destructuring assignments | Declare each variable explicitly |
+| Nested functions or closures | Inline the logic directly |
+| `return` without `returns` in config | Add `returns: bs.u64()` (or the appropriate type) to the instruction config |
 
-The transpiler is conservative by design. It only accepts patterns it can reliably translate to correct Rust. If something is not supported, there is usually a supported alternative that achieves the same result.
+Better-sol is intentionally conservative with what it accepts. It only supports patterns it can reliably convert to correct on-chain logic. When something is not supported, there is usually a supported alternative that achieves the same result.

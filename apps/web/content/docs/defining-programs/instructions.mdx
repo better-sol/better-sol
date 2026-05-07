@@ -3,33 +3,35 @@ title: Instructions
 description: Define on-chain instructions with accounts, arguments, and return values.
 ---
 
-Instructions are the entry points to your program. Each instruction declares which accounts it interacts with, what arguments it accepts, and what the body does.
+Instructions are the entry points of your program. Each one declares which accounts it touches, what arguments it accepts, and what logic it runs. When you call `sol.counter.increment()` on the client, it is the instruction definition that determines what parameters you pass and what the program does.
 
 ## Basic structure
 
-```typescript
-ix({
+Every instruction is created with `ix()`:
+
+```ts
+increment: ix({
   accounts: { ... },
   args: { ... },
   run: (accounts, args, ctx) => { ... },
 })
 ```
 
-An instruction has three parts:
+Three parts:
 
-- **accounts** — the on-chain accounts this instruction interacts with (read, write, create, close)
-- **args** — the arguments passed from the client
-- **run** — the body that executes on-chain
+- `accounts` — which on-chain accounts this instruction reads or modifies
+- `args` — the values passed from the client (amounts, flags, addresses)
+- `run` — the logic that executes on-chain
 
-Both `accounts` and `args` are optional. The `run` callback adapts its signature based on what you provide.
+Both `accounts` and `args` are optional. What you include determines the shape of the `run` callback.
 
-## Four instruction shapes
+## The four instruction shapes
 
-### Accounts and args
+### Accounts and arguments
 
 The most common shape. Both accounts and arguments are present:
 
-```typescript
+```ts
 increment: ix({
   accounts: {
     counter: bs.mut(Counter),
@@ -43,32 +45,44 @@ increment: ix({
 }),
 ```
 
-The callback receives `(accounts, args, ctx)`.
+The callback receives three arguments: `(accounts, args, ctx)`.
+
+Each account in the `accounts` object becomes a property you can read and modify. The constraint (`bs.mut`, `bs.signer`, etc.) determines what you can do with it. `bs.mut(Counter)` means you can read and write the counter's fields. `bs.signer()` gives you the signer's address.
+
+Each argument in `args` corresponds to a type token. On the client side, you pass the actual value:
+
+```ts
+await sol.counter.increment({
+  counter: counterAddr,
+  amount: 5n,
+  // authority is optional — automatically filled with the payer
+})
+```
 
 ### Accounts only
 
-When the instruction only needs accounts, no arguments:
+When the instruction operates on accounts but needs no user-supplied arguments:
 
-```typescript
+```ts
 close: ix({
   accounts: {
     counter: bs.close(Counter, "authority"),
     authority: bs.signer(),
   },
-  run: ({ counter, authority }, ctx) => {
-    // Account is closed, rent reclaimed
+  run: ({ counter, authority }) => {
+    // The account is closed, rent is reclaimed by authority
   },
 }),
 ```
 
-The callback receives `(accounts, ctx)`.
+The callback receives two arguments: `(accounts, ctx)`.
 
-### Args only
+### Arguments only
 
-When the instruction does not reference any on-chain accounts:
+When the instruction needs no on-chain accounts:
 
-```typescript
-ping: ix({
+```ts
+log: ix({
   args: { message: bs.string() },
   run: ({ message }, ctx) => {
     ctx.log(message)
@@ -76,27 +90,43 @@ ping: ix({
 }),
 ```
 
-The callback receives `(args, ctx)`.
+The callback receives two arguments: `(args, ctx)`.
 
 ### Neither
 
-The simplest instruction, no accounts and no arguments:
+The simplest instruction, useful when all the information comes from the context:
 
-```typescript
+```ts
 reset: ix({
   run: (ctx) => {
-    ctx.log("Program reset")
+    ctx.log("Reset triggered")
   },
 }),
 ```
 
 The callback receives only `(ctx)`.
 
+## What is `ctx`?
+
+The `ctx` object is available in every `run()` body. It provides three methods:
+
+```ts
+run: (accounts, args, ctx) => {
+  ctx.require(condition, "ErrorName")       // check a condition, throw error if false
+  ctx.emit("EventName", { field: value })   // emit an event
+  ctx.log("message: {}", value)             // write to the transaction log
+}
+```
+
+- **`ctx.require(condition, name)`** checks a condition. If the condition is `false`, the transaction fails with the named error from your program's `errors` definition. See [Errors and Events](/docs/defining-programs/errors-and-events).
+- **`ctx.emit(name, payload)`** emits a structured event that clients can parse from transaction logs.
+- **`ctx.log(message, ...values)`** writes a message to the transaction log. Useful for debugging. Values are interpolated with `{}` placeholders.
+
 ## Return values
 
-Instructions can return a value back to the client. Add `returns` to the instruction config and use `return` in the body:
+Instructions can return a value to the caller. Add `returns` to the instruction config, and use `return` in the body:
 
-```typescript
+```ts
 getCount: ix({
   accounts: {
     counter: bs.mut(Counter),
@@ -108,14 +138,23 @@ getCount: ix({
 }),
 ```
 
-The return type is a regular `bs` type. The transpiler generates `-> Result<u64>` in Anchor Rust. On the client, the return data is available in the simulation result.
+The `returns` field takes any type token: `bs.u64()`, `bs.pubkey()`, `bs.optional(bs.string())`, and so on. On the client, you get the return value from a simulation:
 
-## Account and arg name collisions
+```ts
+const result = await sol.counter.getCount.simulate({
+  counter: counterAddr,
+})
+// result.returnData is a bigint (the count value)
+```
 
-If an account name and an arg name are the same, better-sol throws an error at definition time:
+Return values are most useful for read-only queries. Since transactions are normally only confirmed or failed, return data is typically accessed via simulation rather than a regular transaction send.
 
-```typescript
-// This throws: "Instruction account 'authority' conflicts with an instruction arg"
+## Account and argument name conflicts
+
+If an account name and an argument name are the same, Better Sol throws an error at definition time:
+
+```ts
+// Error: "Instruction account 'authority' conflicts with an instruction arg"
 badInstruction: ix({
   accounts: { authority: bs.signer() },
   args: { authority: bs.pubkey() },
@@ -123,21 +162,32 @@ badInstruction: ix({
 }),
 ```
 
-Rename one of them. A common pattern is to suffix the account: `authorityAccount` for the account, `authority` for the arg.
+Rename one of them. A common pattern is to use descriptive names that avoid the collision:
 
-## What goes inside run()
-
-The `run()` body is transpiled to Anchor Rust. It supports a restricted subset of TypeScript. See [Body Language](/docs/defining-programs/body-language) for the complete reference.
-
-The three operations you will use most often:
-
-```typescript
-// Check a condition and throw a custom error
-ctx.require(authority === counter.authority, "Unauthorized")
-
-// Modify an account field
-counter.count += amount
-
-// Emit an event
-ctx.emit("Incremented", { newCount: counter.count, authority })
+```ts
+goodInstruction: ix({
+  accounts: { authorityAccount: bs.signer() },
+  args: { authority: bs.pubkey() },
+  run: ({ authorityAccount }, { authority }, ctx) => {
+    ctx.require(authorityAccount === authority, "NotMatch")
+  },
+}),
 ```
+
+## Modifying account fields
+
+Inside `run()`, you can read and write account fields directly. The changes happen on-chain as part of the transaction:
+
+```ts
+run: ({ counter, authority }, { amount }, ctx) => {
+  // Read
+  ctx.require(counter.isActive, "NotActive")
+
+  // Write
+  counter.count += amount
+  counter.isActive = false    // set a flag
+  counter.label = null         // clear an optional field
+},
+```
+
+Assignment, compound assignment (`+=`, `-=`, `*=`), and setting optional fields to `null` are all supported. See [Body Language](/docs/defining-programs/body-language) for the complete reference.

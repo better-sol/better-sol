@@ -1,116 +1,176 @@
 ---
 title: Types
-description: Every type available in better-sol and when to use each one.
+description: Every type available in Better Sol and when to use each one.
 ---
 
-better-sol provides all the types you need to define on-chain data structures. They live under the `bs` namespace, so you always type `bs.u64()` instead of remembering a separate import.
+All type tokens in Better Sol live under the `bs` namespace. You never import individual types. Instead you call `bs.u64()`, `bs.optional()`, `bs.vector()`, and so on. Each call returns a typed token that Better Sol uses to serialize your data on-chain and infer TypeScript types on the client.
 
-## Integer types
+```ts
+import { bs } from "better-sol/program"
+```
 
-Solana has 14 integer types. They differ in bit width and signedness. The TypeScript mapping is simple: small ones are `number`, big ones are `bigint`.
+## Integers
 
-| Type | TypeScript | Bytes | Use for |
-|---|---|---|---|
-| `bs.u8()` | `number` | 1 | Small counters, flags, enums |
-| `bs.u16()` | `number` | 2 | Token decimals,_lens |
-| `bs.u32()` | `number` | 4 | Account lengths, instruction indices |
-| `bs.u64()` | `bigint` | 8 | Balances, amounts, timestamps |
-| `bs.u128()` | `bigint` | 16 | Large balances, mathematical fields |
-| `bs.i8()` | `number` | 1 | Signed small values |
-| `bs.i16()` | `number` | 2 | Signed medium values |
-| `bs.i32()` | `number` | 4 | Signed 32-bit values |
-| `bs.i64()` | `bigint` | 8 | Signed timestamps, offsets |
-| `bs.i128()` | `bigint` | 16 | Signed large values |
+Solana accounts store integers as raw bytes. The type you choose determines how many bytes are used and whether the value can be negative. The TypeScript mapping follows a simple rule: types up to 32 bits map to `number`, and anything 64 bits or wider maps to `bigint`.
 
-```typescript
-const Account = bs.account({
-  count: bs.u64(),      // bigint — token amounts, counters
-  authority: bs.pubkey(), // string (base58 address)
-  isActive: bs.bool(),   // boolean
-  bump: bs.u8(),         // number — PDA bump seed
+```ts
+const Counter = bs.account({
+  count: bs.u64(),       // bigint — balances, amounts, timestamps
+  bump: bs.u8(),         // number — small values like bump seeds and flags
+  id: bs.u32(),          // number — identifiers, indices
+  balance: bs.i64(),     // bigint — signed values like offsets or deltas
 })
 ```
 
-The rule of thumb: use `u64` for anything that holds an amount or a count. Use `u8` for bump seeds and small flags. Use `pubkey` for addresses.
+| Type | TypeScript | Width | Use when |
+|---|---|---|---|
+| `bs.u8()` | `number` | 8-bit unsigned | Bump seeds, small flags, enum variants |
+| `bs.u16()` | `number` | 16-bit unsigned | Token decimals, string/vector lengths |
+| `bs.u32()` | `number` | 32-bit unsigned | Account sizes, instruction indices |
+| `bs.u64()` | `bigint` | 64-bit unsigned | Balances, token amounts, timestamps, counters |
+| `bs.u128()` | `bigint` | 128-bit unsigned | Very large numbers, mathematical fields |
+| `bs.i8()` | `number` | 8-bit signed | Small negative values |
+| `bs.i16()` | `number` | 16-bit signed | Temperature, offsets |
+| `bs.i32()` | `number` | 32-bit signed | General-purpose signed integers |
+| `bs.i64()` | `bigint` | 64-bit signed | Signed timestamps, deltas |
+| `bs.i128()` | `bigint` | 128-bit signed | Large signed values |
+
+The practical rule is straightforward: use `u64` for anything that holds an amount or a count. Use `u8` for bump seeds and small flags. Use `pubkey` for addresses. Use `i64` when you need negative numbers.
 
 ## Booleans and addresses
 
-| Type | TypeScript | Notes |
-|---|---|---|
-| `bs.bool()` | `boolean` | Cannot be used in zero-copy accounts (use `u8` with `=== 1` checks instead) |
-| `bs.pubkey()` | `string` (Address) | A base58-encoded Solana address. Used for account references and PDA seeds |
-| `bs.string()` | `string` | UTF-8 encoded, length-prefixed. Expensive on-chain. Avoid in hot paths |
-| `bs.bytes()` | `Uint8Array` | Raw bytes, length-prefixed. For arbitrary binary data |
-
-## Compound types
-
-### Optional values
-
-```typescript
-bs.optional(bs.u64())   // bigint | null — 1-byte prefix + inner
+```ts
+const Profile = bs.account({
+  isAdmin: bs.bool(),       // boolean
+  authority: bs.pubkey(),   // string — a base58 Solana address
+  name: bs.string(),        // string — UTF-8, length-prefixed
+  metadata: bs.bytes(),     // Uint8Array — raw binary data
+})
 ```
 
-Maps to `Option<u64>` in Anchor Rust. The prefix byte is `0` for `null` and `1` for `Some`. Use it for fields that may not always have a value, like an optional authority or a nullable metadata field.
+**`bool()`** stores as a single byte (`0` or `1`). It cannot appear inside zero-copy accounts. Use `u8()` with an explicit `=== 1` check instead if you need a boolean in a zero-copy context.
 
-### Dynamic-length arrays
+**`pubkey()`** stores as 32 bytes. It is the type you use for every address reference: authorities, mints, owners, and PDA seeds that reference other accounts. On the TypeScript side it is a base58 `string`.
 
-```typescript
-bs.vector(bs.u64())         // bigint[] — up to 32 entries by default
-bs.vector(bs.pubkey(), 128) // string[] — custom max of 128 entries
+**`string()`** is length-prefixed UTF-8. Avoid it in hot paths or large data sets because variable-length strings are expensive on-chain. Prefer fixed-size alternatives when possible.
+
+**`bytes()`** is length-prefixed raw binary. Use it for arbitrary binary data like hashes, signatures, or serialized blobs.
+
+## Optional values
+
+`bs.optional()` wraps another type to allow `null`:
+
+```ts
+const Profile = bs.account({
+  nickname: bs.optional(bs.string()),   // string | null
+  delegate: bs.optional(bs.pubkey()),   // string | null
+  maxStake: bs.optional(bs.u64()),      // bigint | null
+})
 ```
 
-Maps to `Vec<u64>` in Anchor Rust. The default max is 32 entries. You can specify a different maximum as the second argument. The max is enforced by the Borsh serializer.
+When the value is present, it is preceded by a single byte: `1` for present, `0` for null. Use optional for fields that are not always filled in, like a nickname that a user might not set, or a delegate that can be revoked.
 
-On-chain, vectors store a 4-byte length prefix followed by the elements. This makes them expensive for large data sets.
+On the TypeScript side, you pass `null` to set the field to null, or the actual value otherwise:
 
-### Fixed-length arrays
-
-```typescript
-bs.array(bs.u64(), 10)  // FixedArray<bigint, 10> — exactly 10 elements
+```ts
+await sol.profile.initialize({
+  profile: addr,
+  nickname: null,       // not set
+  delegate: someAddr,    // set
+  maxStake: null,       // not set
+})
 ```
 
-Maps to `[u64; 10]` in Anchor Rust. Fixed arrays have no length prefix and their size is known at compile time. They are cheaper than vectors for fixed-size collections.
+## Dynamic-length arrays
 
-Fixed arrays return a type with a `length` property set to the size. This is different from a regular `bigint[]` because TypeScript needs to know the exact length for type inference.
+`bs.vector()` creates an array with a maximum number of entries. The length is stored as a 4-byte prefix followed by the elements:
+
+```ts
+const Leaderboard = bs.account({
+  topScores: bs.vector(bs.u64()),         // up to 32 entries of bigint
+  recentPlayers: bs.vector(bs.pubkey(), 10), // up to 10 entries of string
+})
+```
+
+The default maximum is 32 entries. Pass a different number as the second argument if you need more or fewer. The maximum is enforced during serialization: if you pass a longer array, it throws. This maximum exists because on-chain accounts have a fixed size, and the system needs to know the worst-case space requirement.
+
+On the TypeScript side, the vector maps to a regular array type:
+
+```ts
+// topScores is bigint[]
+// recentPlayers is string[]
+await sol.leaderboard.update({
+  leaderboard: addr,
+  topScores: [100n, 200n, 300n],
+  recentPlayers: [addr1, addr2, addr3],
+})
+```
+
+## Fixed-length arrays
+
+`bs.array()` creates an array with an exact, fixed number of entries. No length prefix is needed because the size is always the same:
+
+```ts
+const Multisig = bs.account({
+  signers: bs.array(bs.pubkey(), 3),   // exactly 3 signer addresses
+  votes: bs.array(bs.bool(), 5),        // exactly 5 vote flags
+})
+```
+
+The difference from `vector` matters on-chain. Fixed arrays occupy a predictable amount of space: 3 pubkeys is always 96 bytes, no prefix needed. Vectors need that 4-byte length prefix plus up to `maxEntries * elementSize` bytes of space reserved.
+
+On the TypeScript side, these arrays have a `length` property set to the declared size, which helps TypeScript understand the exact shape:
+
+```ts
+// signers: { length: 3; [index: number]: string }
+// votes: { length: 5; [index: number]: boolean }
+```
+
+Use `array` when you always have the same number of elements (like signers in a multisig). Use `vector` when the number varies (like a list of scores that grows over time).
 
 ## Zero-copy restrictions
 
-Only these types can appear inside a zero-copy account or struct:
+Zero-copy accounts trade flexibility for read speed. They can only contain types that have a fixed, known byte layout. The allowed types are:
 
 - All integer types (`u8` through `i128`)
 - `f32` and `f64`
 - `pubkey`
-- Other zero-copy structs (via `bs.struct`)
+- Structs created with `bs.struct()` (see [Accounts](/docs/defining-programs/accounts))
 
-The following types **cannot** be used in zero-copy accounts:
+These types are **not allowed** in zero-copy accounts because they have variable or dynamic layouts:
 
-- `bool` — not Pod-safe. Use `u8()` with `=== 1` checks instead
-- `string` — variable length, not Pod-safe
-- `bytes` — variable length, not Pod-safe
-- `optional` — uses a discriminator byte
-- `vector` — variable length, not Pod-safe
+- `bool` (not a fixed Pod type; use `u8()` with an explicit check instead)
+- `string` (variable length)
+- `bytes` (variable length)
+- `optional()` (needs a discriminator byte)
+- `vector()` (variable length)
 
-If you try to use a non-Pod type in a zero-copy account, TypeScript will show a type error pointing to the offending field.
+If you try to use a restricted type inside a zero-copy account, TypeScript will flag it immediately:
+
+```ts
+// TypeScript error: bool is not allowed in zero-copy accounts
+const BadZC = bs.account({
+  flag: bs.bool(),   // ← error here
+}).zeroCopy()
+```
 
 ## Type inference
 
-You never write the TypeScript type yourself. The `bs` namespace returns typed tokens, and better-sol infers the rest:
+You almost never write TypeScript types yourself. Better-sol infers everything from the program definition. The type tokens carry the information through, and the generic types on the SDK resolve the rest automatically.
 
-```typescript
-import { bs } from "better-sol/program"
+When you do need to reference a type (for example, in a utility function), two helper types are available:
 
-type Count = bs.InferType<typeof bs.u64>           // bigint
-type Flag = bs.InferType<typeof bs.bool>           // boolean
-type MaybeAmount = bs.InferType<typeof bs.optional(bs.u64())> // bigint | null
-type Counts = bs.InferType<typeof bs.vector(bs.u64())>  // bigint[]
+```ts
+import { bs, InferType, InferFields } from "better-sol"
 
-const Counter = bs.account({
-  count: bs.u64(),
-  authority: bs.pubkey(),
-})
+// InferType gives you the TypeScript type for a single field token:
+type Count = InferType<typeof bs.u64>             // bigint
+type Flag = InferType<typeof bs.bool>             // boolean
+type MaybeName = InferType<ReturnType<typeof bs.optional<typeof bs.string>>>  // string | null
 
-type CounterData = bs.InferFields<typeof Counter.fields>
-// { count: bigint; authority: string; }
+// InferFields gives you the full object shape from an account definition:
+type CounterData = InferFields<typeof Counter.fields>
+// { count: bigint; authority: string; isActive: boolean }
 ```
 
-`InferType` gives you the TypeScript type for a single field. `InferFields` gives you the full object type from an account definition. You will rarely need these directly — the client SDK infers everything from your program definition automatically.
+In practice you rarely need these. The client SDK infers argument types, account data shapes, and event payloads all from the program definition you pass to `betterSol()`.
