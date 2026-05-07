@@ -1,5 +1,5 @@
 import type { Address, TransactionPartialSigner } from "@solana/kit";
-import { createSignTransactions } from "./sign-utils";
+import { createSignTransactions } from "./sign-utils.ts";
 
 type WalletAdapterLike = {
   readonly publicKey: { toBase58(): string };
@@ -20,3 +20,7 @@ export function walletAdapter(wallet: WalletAdapterLike): TransactionPartialSign
     signTransactions: createSignTransactions(address, signTransaction),
   };
 }
+
+export { reownWallet } from "./reown.ts";
+export { privyWallet } from "./privy.ts";
+export { dynamicWallet } from "./dynamic.ts";

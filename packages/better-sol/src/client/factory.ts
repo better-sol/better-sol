@@ -14,7 +14,7 @@ import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import {
   anchorDiscriminator,
   encodeInstruction,
-} from "../coder";
+} from "#codec";
 import {
   type AccountDefinition,
   type FieldSchema,
@@ -26,7 +26,7 @@ import {
   hasInnerToken,
   hasInnerAndSizeToken,
   innerOfToken,
-} from "../program";
+} from "#program";
 import type {
   AnyProgram,
   BetterSolClient,
@@ -44,16 +44,16 @@ import type {
   PrepareResult,
   InstructionPlanResult,
   StepChain,
-} from "./types";
-import { CLUSTER_URLS, CLUSTER_WS_URLS, TOKEN_2022_PROGRAM_ADDRESS } from "./types";
-import { resolveSigner, requireSigner } from "./signer";
-import { buildAndSignTransaction, buildAccountMetas, sendAndConfirm, runSimulation, toSnake, withComputeBudget, createTransactionNotifier, type NonceConfig, type TransactionCallback } from "./transaction";
-import { buildLookupTableIndex, type LookupTableIndex } from "./lookup-tables";
-import { BoundAccountImpl } from "./bound-account";
-import { buildTokenClient } from "./token-client";
-import { ProgramError, type ProgramErrorMap, buildErrorIndex, type ParsedEvent, buildEventDiscriminatorIndex, extractEventLogs, parseEventLog, decodeEventData } from "./events";
+} from "./types.ts";
+import { CLUSTER_URLS, CLUSTER_WS_URLS, TOKEN_2022_PROGRAM_ADDRESS } from "./types.ts";
+import { resolveSigner, requireSigner } from "./signer.ts";
+import { buildAndSignTransaction, buildAccountMetas, sendAndConfirm, runSimulation, withComputeBudget, createTransactionNotifier, type NonceConfig, type TransactionCallback } from "./transaction.ts";
+import { buildLookupTableIndex, type LookupTableIndex } from "./lookup-tables.ts";
+import { BoundAccountImpl } from "./bound-account.ts";
+import { buildTokenClient } from "./token-client.ts";
+import { ProgramError, type ProgramErrorMap, buildErrorIndex, type ParsedEvent, buildEventDiscriminatorIndex, extractEventLogs, parseEventLog, decodeEventData } from "./events.ts";
 
-export { secretKey, keypairFile } from "./signer";
+export { secretKey, keypairFile } from "./signer.ts";
 
 interface ClientCore<TPrograms extends ProgramInputs, THasSigner extends boolean> {
   readonly payer: THasSigner extends true ? KitAddress : KitAddress | null;
@@ -107,6 +107,10 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
   const notifier = createTransactionNotifier();
 
   return buildClientShape({ programs, rpc, rpcSubscriptions, signer, commitment, computeUnits, nonceConfig, lookupTableIndex, notifier }) as BetterSolClient<TPrograms, typeof config.payer extends undefined ? false : true>;
+}
+
+function toSnake(name: string): string {
+  return name.replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/^_/, "");
 }
 
 interface ClientParams<TPrograms extends ProgramInputs> {

@@ -1,5 +1,5 @@
 import type { Address, TransactionPartialSigner } from "@solana/kit";
-import { createSignTransactions } from "./sign-utils";
+import { createSignTransactions } from "./sign-utils.ts";
 
 type ReownProvider = {
   readonly signTransaction?: <T>(transaction: T) => Promise<T>;

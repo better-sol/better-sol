@@ -10,7 +10,7 @@ import {
   type TypeToken,
   type TypeKind,
   type AccountInputs,
-} from "./program";
+} from "#program";
 
 type IdlTypePrimitive =
   | "u8" | "u16" | "u32" | "u64" | "u128"

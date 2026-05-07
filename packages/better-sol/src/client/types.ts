@@ -28,7 +28,7 @@ import {
   type Instructions,
   type ProgramDefinition,
   type TypeToken,
-} from "../program";
+} from "#program";
 
 export type { Signature, Instruction } from "@solana/kit";
 

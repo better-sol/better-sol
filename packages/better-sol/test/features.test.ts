@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { AccountRole, address } from "@solana/kit";
 import { bs } from "../src/program";
-import { buildAccountMetas, createTransactionNotifier, toSnake, withComputeBudget } from "../src/client/transaction";
+import { buildAccountMetas, createTransactionNotifier, withComputeBudget } from "../src/client/transaction";
+
+function toSnake(name: string): string {
+  return name.replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/^_/, "");
+}
 import { resolveWithLookupTables, type LookupTableIndex } from "../src/client/lookup-tables";
 
 const signer = {

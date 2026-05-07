@@ -7,7 +7,7 @@ import {
   type AccountSignerMeta,
   type Address,
 } from "@solana/kit";
-import type { KitRpc } from "./types";
+import type { KitRpc } from "./types.ts";
 
 export type LookupTableIndex = ReadonlyMap<string, { readonly lookupTableAddress: Address; readonly addressIndex: number }>;
 

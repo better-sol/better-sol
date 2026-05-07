@@ -1,9 +1,9 @@
 import { address as kitAddress, type TransactionSigner, type Signature, type Address as KitAddress, flattenInstructionPlan } from "@solana/kit";
 import { findAssociatedTokenPda, fetchMaybeMint, fetchMaybeToken, getCreateAssociatedTokenIdempotentInstructionAsync, getCreateMintInstructionPlan, getMintToCheckedInstruction, getTransferCheckedInstruction, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import type { AddressInput, KitRpc, KitRpcSubscriptions, SignedTransaction, TokenClient } from "./types";
-import { TOKEN_2022_PROGRAM_ADDRESS } from "./types";
-import { requireSigner, createGeneratedSigner } from "./signer";
-import { buildAndSignTransaction, sendAndConfirm, type NonceConfig, type TransactionCallback } from "./transaction";
+import type { AddressInput, KitRpc, KitRpcSubscriptions, SignedTransaction, TokenClient } from "./types.ts";
+import { TOKEN_2022_PROGRAM_ADDRESS } from "./types.ts";
+import { requireSigner, createGeneratedSigner } from "./signer.ts";
+import { buildAndSignTransaction, sendAndConfirm, type NonceConfig, type TransactionCallback } from "./transaction.ts";
 
 export function buildTokenClient(
   rpc: KitRpc,

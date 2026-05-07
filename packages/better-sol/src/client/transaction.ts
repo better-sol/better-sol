@@ -26,16 +26,16 @@ import {
   type AccountInputs,
   type ArgsSchema,
   type InstructionDefinition,
-} from "../program";
+} from "#program";
 import type {
   InstructionSigningMode,
   KitRpc,
   KitRpcSubscriptions,
   SignedTransaction,
   SimulateResult,
-} from "./types";
-import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_INTERVAL_MS, type ComputeUnitConfig } from "./types";
-import { type LookupTableIndex, type ResolvedAccountMeta, resolveWithLookupTables } from "./lookup-tables";
+} from "./types.ts";
+import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_INTERVAL_MS, type ComputeUnitConfig } from "./types.ts";
+import { type LookupTableIndex, type ResolvedAccountMeta, resolveWithLookupTables } from "./lookup-tables.ts";
 
 export type NonceConfig = {
   readonly nonceAccountAddress: string;
@@ -55,10 +55,6 @@ export function createTransactionNotifier(): { readonly notify: TransactionCallb
       return () => { callback = undefined; };
     },
   };
-}
-
-export function toSnake(name: string): string {
-  return name.replace(/([A-Z]+)([A-Z][a-z])/g, "_$1_$2").replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase().replace(/^_/, "");
 }
 
 export async function buildAndSignTransaction(
