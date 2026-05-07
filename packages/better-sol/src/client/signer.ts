@@ -38,8 +38,11 @@ async function loadKeypairFile(path: string): Promise<TransactionSigner> {
 }
 
 function readSecretKeyBytes(value: unknown): Uint8Array {
+  if (Array.isArray(value) && value.every((item) => typeof item === "number") && value.length === 64) {
+    return new Uint8Array(value);
+  }
   if (isKeypairFile(value)) return new Uint8Array(value.secretKey);
-  throw new Error("Invalid keypair file");
+  throw new Error("Invalid keypair file. Expected a Solana CLI keypair (byte array) or { publicKey, secretKey } format.");
 }
 
 function isKeypairFile(value: unknown): value is KeypairFile {
