@@ -26,7 +26,7 @@ The `generate idl` command reads an IDL and produces a `.ts` file that uses the 
 Pass a program address. Better Sol fetches the IDL from the chain:
 
 ```bash
-npx @better-sol/cli generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
+npx @better-sol/cli@alpha generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
 ```
 
 This connects to mainnet, fetches the on-chain IDL, and writes a TypeScript file:
@@ -38,7 +38,7 @@ generated/staking.ts
 By default it targets mainnet. Use `--cluster` for other networks:
 
 ```bash
-npx @better-sol/cli generate idl Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS --cluster devnet
+npx @better-sol/cli@alpha generate idl Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS --cluster devnet
 ```
 
 ### From a local IDL file
@@ -46,7 +46,7 @@ npx @better-sol/cli generate idl Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS --
 If you have an IDL JSON file on disk (downloaded from an explorer, provided by a team, etc.):
 
 ```bash
-npx @better-sol/cli generate idl ./staking-idl.json
+npx @better-sol/cli@alpha generate idl ./staking-idl.json
 ```
 
 Better Sol detects whether the argument is a program address or a file path automatically.

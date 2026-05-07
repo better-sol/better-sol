@@ -1,5 +1,9 @@
 # Better Sol
 
+> **Alpha**
+>
+> Better Sol is in early development. APIs may change, rough edges exist, and things can break. Your feedback shapes what comes next. Thank you for being an early adopter.
+
 Write Solana programs in TypeScript. One file defines your accounts and instructions. Deploy on-chain from that same file, and get a fully typed client with no extra steps.
 
 ```ts
@@ -23,7 +27,7 @@ export const counter = bs.program({ name: "counter", address: "<key>" }, ix => (
 Deploy:
 
 ```bash
-npx @better-sol/cli deploy
+npx @better-sol/cli@alpha deploy
 ```
 
 Use from your app:
@@ -48,9 +52,9 @@ No separate IDL to maintain. No hand-written client types. No code generation st
 ## Quick start
 
 ```bash
-npx @better-sol/cli init                     # scaffold project + payer keypair
-npx @better-sol/cli create counter           # scaffold a program
-npx @better-sol/cli deploy                   # compile and deploy to devnet
+npx @better-sol/cli@alpha init                     # scaffold project + payer keypair
+npx @better-sol/cli@alpha create counter           # scaffold a program
+npx @better-sol/cli@alpha deploy                   # compile and deploy to devnet
 ```
 
 Your program is on-chain. Read the [full guide](https://better-sol.fun/docs).
@@ -59,7 +63,7 @@ Your program is on-chain. Read the [full guide](https://better-sol.fun/docs).
 
 | Package | What it does | Install |
 |---|---|---|
-| [better-sol](packages/better-sol) | Program definition DSL, typed client, token helpers, `fromIdl()` | `npm install better-sol` |
+| [better-sol](packages/better-sol) | Program definition DSL, typed client, token helpers, `fromIdl()` | `npm install better-sol@alpha` |
 | [@better-sol/cli](packages/cli) | Create, deploy, generate schemas, import external programs | runs via `npx`, no install needed |
 
 The runtime SDK contains no compiler or code generation logic. Nothing from the CLI ships to browser bundles.

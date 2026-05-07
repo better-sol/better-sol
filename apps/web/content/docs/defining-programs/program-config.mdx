@@ -94,7 +94,7 @@ Each key becomes a method on the client. You call it as `sol.counter.initialize(
 The `address` field is the permanent on-chain identity of your program. It is generated when you run `create`:
 
 ```bash
-npx @better-sol/cli@latest create counter
+npx @better-sol/cli@alpha create counter
 ```
 
 This outputs the address and stores the keypair at `.better-sol/counter.json`. The keypair is used for deployment. Never commit it to git; the `init` command already adds `.better-sol/` to your `.gitignore`.

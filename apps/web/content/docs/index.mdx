@@ -3,6 +3,10 @@ title: Installation
 description: What Better Sol is and how to get it running.
 ---
 
+<Callout type="warn">
+Better Sol is in **alpha**. APIs may change, rough edges exist, and things can break. Your feedback shapes what comes next. Thank you for being an early adopter.
+</Callout>
+
 Better Sol lets you write Solana programs in TypeScript. One file defines your accounts and instructions. From that same file you deploy on-chain and get a typed client.
 
 ```tsx ts2js
@@ -26,7 +30,7 @@ export const counter = bs.program({ name: "counter", address: "<key>" }, ix => (
 Deploy:
 
 ```bash
-npx @better-sol/cli@latest deploy
+npx @better-sol/cli@alpha deploy
 ```
 
 Connect from your app:
@@ -51,10 +55,10 @@ Node.js 22 or later.
 ## Install
 
 ```npm
-npm install better-sol
+npm install better-sol@alpha
 ```
 
-The CLI runs via `npx`. No install needed.
+The CLI runs via `npx`. No install needed. Add `@alpha` to get the latest prerelease.
 
 ## API key (optional)
 
@@ -63,7 +67,7 @@ Deploying compiles your program. Without an API key you get 3 compiles per hour.
 Get a key from the [dashboard](/dash), then save it:
 
 ```bash
-npx @better-sol/cli@latest login
+npx @better-sol/cli@alpha login
 ```
 
 It gets stored at `.better-sol/auth.json`.

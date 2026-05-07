@@ -10,7 +10,7 @@ In this guide you will write a counter program in TypeScript and deploy it to So
 If you have not already, initialize a project:
 
 ```bash
-npx @better-sol/cli@latest init
+npx @better-sol/cli@alpha init
 ```
 
 This creates a `keypair.json` for paying transaction fees, a `programs/` directory, and a `.gitignore`. It also installs `better-sol` if you have a `package.json`.
@@ -18,7 +18,7 @@ This creates a `keypair.json` for paying transaction fees, a `programs/` directo
 Then scaffold your first program:
 
 ```bash
-npx @better-sol/cli@latest create counter
+npx @better-sol/cli@alpha create counter
 ```
 
 This generates two things:
@@ -96,7 +96,7 @@ Each of these is covered in detail in [Defining Programs](/docs/defining-program
 ## Step 3: Deploy
 
 ```bash
-npx @better-sol/cli@latest deploy
+npx @better-sol/cli@alpha deploy
 ```
 
 On devnet and testnet, the CLI automatically funds your payer if the balance is low. On mainnet, make sure your payer has enough SOL.

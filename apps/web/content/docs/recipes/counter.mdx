@@ -18,7 +18,7 @@ The counter account uses a Program Derived Address, or PDA. A PDA is an address 
 ## Step 1: Create the program
 
 ```bash
-npx @better-sol/cli@latest create counter
+npx @better-sol/cli@alpha create counter
 ```
 
 This generates `programs/counter.ts` and `.better-sol/counter.json`. The `.ts` file is your program definition. The `.json` file is the keypair that identifies your program on-chain. Never commit the keypair to git: the `init` command already added `.better-sol/` to your `.gitignore`.
@@ -185,13 +185,13 @@ The `run()` body is empty because `bs.close()` handles everything: zeroing the a
 Run `init` first if you have not set up a project:
 
 ```bash
-npx @better-sol/cli@latest init
+npx @better-sol/cli@alpha init
 ```
 
 Then deploy:
 
 ```bash
-npx @better-sol/cli@latest deploy
+npx @better-sol/cli@alpha deploy
 ```
 
 The CLI discovers all program files in `programs/`, generates Anchor Rust for each one, compiles them through the cloud API, and deploys the bytecode. On devnet and testnet it automatically funds your payer if the balance is low.

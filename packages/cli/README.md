@@ -1,5 +1,9 @@
 # @better-sol/cli
 
+> **Alpha**
+>
+> Better Sol is in early development. APIs may change, rough edges exist, and things can break. Your feedback shapes what comes next. Thank you for being an early adopter.
+
 The Better Sol command-line tool. Scaffold programs, compile and deploy to Solana, generate database schemas, and import external programs.
 
 No installation needed. Run with `npx` or `bunx`.
@@ -11,7 +15,7 @@ No installation needed. Run with `npx` or `bunx`.
 Set up a new project.
 
 ```bash
-npx @better-sol/cli init
+npx @better-sol/cli@alpha init
 ```
 
 Creates a payer keypair at `keypair.json`, a `programs/` directory, and a `.gitignore`. Detects your existing Solana CLI keypair at `~/.config/solana/id.json` if you have one. Offers to install `better-sol` if a `package.json` exists.
@@ -26,7 +30,7 @@ Creates a payer keypair at `keypair.json`, a `programs/` directory, and a `.giti
 Scaffold a new program.
 
 ```bash
-npx @better-sol/cli create counter
+npx @better-sol/cli@alpha create counter
 ```
 
 Generates `programs/counter.ts` with a working counter template and `.better-sol/counter.json` with the program keypair.
@@ -41,7 +45,7 @@ Generates `programs/counter.ts` with a working counter template and `.better-sol
 Compile and deploy to Solana.
 
 ```bash
-npx @better-sol/cli deploy
+npx @better-sol/cli@alpha deploy
 ```
 
 Parses your TypeScript, generates Anchor Rust, compiles it via the cloud API, and deploys the binary. On devnet and testnet, automatically funds your payer if the balance is low.
@@ -62,10 +66,10 @@ Import an external program from an on-chain address or a local IDL file.
 
 ```bash
 # From an on-chain program
-npx @better-sol/cli generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
+npx @better-sol/cli@alpha generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
 
 # From a local IDL JSON file
-npx @better-sol/cli generate idl ./staking-idl.json
+npx @better-sol/cli@alpha generate idl ./staking-idl.json
 ```
 
 Produces a typed `.ts` file in `generated/`. Detects whether the argument is an address or a file path automatically.
@@ -81,7 +85,7 @@ Produces a typed `.ts` file in `generated/`. Detects whether the argument is an 
 Generate a Drizzle ORM schema from your account definitions.
 
 ```bash
-npx @better-sol/cli generate db
+npx @better-sol/cli@alpha generate db
 ```
 
 | Flag | Default | Description |
@@ -95,7 +99,7 @@ npx @better-sol/cli generate db
 Save your compiler API key.
 
 ```bash
-npx @better-sol/cli login
+npx @better-sol/cli@alpha login
 ```
 
 Saves your key to `.better-sol/auth.json`. Without a key you get 5 compiles per hour. With a key, 100 per hour.
@@ -105,7 +109,7 @@ Saves your key to `.better-sol/auth.json`. Without a key you get 5 compiles per 
 Submit a deployed program for OtterSec verified-builds.
 
 ```bash
-npx @better-sol/cli verify counter --program-id <address>
+npx @better-sol/cli@alpha verify counter --program-id <address>
 ```
 
 | Flag | Description |

@@ -1,11 +1,15 @@
 # better-sol
 
+> **Alpha**
+>
+> Better Sol is in early development. APIs may change, rough edges exist, and things can break. Your feedback shapes what comes next. Thank you for being an early adopter.
+
 The Better Sol runtime SDK. Define Solana programs in TypeScript and get a fully typed client with no extra steps.
 
 ## Install
 
 ```bash
-npm install better-sol
+npm install better-sol@alpha
 ```
 
 ## Program definition
@@ -126,7 +130,7 @@ Use `sol.batch([...])` when order within a single transaction must be guaranteed
 ### Generate a typed program from an IDL (recommended)
 
 ```bash
-npx @better-sol/cli generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
+npx @better-sol/cli@alpha generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
 ```
 
 This produces `generated/staking.ts`. Import it and get full autocomplete:
