@@ -54,7 +54,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="antialiased bg-background">
-        <RootProvider theme={{ enabled: false }}>{children}</RootProvider>
+        <RootProvider>{children}</RootProvider>
         <Toast.Provider />
         <TanStackDevtools
           config={{
