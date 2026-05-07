@@ -1,4 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useState, type ReactNode } from "react";
+import { useAppKitTheme } from "@reown/appkit/react";
 
 type Theme = "light" | "dark";
 
@@ -8,15 +9,25 @@ const ThemeContext = createContext<{
 }>({ theme: "light", toggleTheme: () => {} });
 
 export function ThemeProvider({ children }: { readonly children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "light";
-    return (localStorage.getItem("theme") as Theme) ?? "light";
-  });
+  const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
+  const { setThemeMode: setAppKitTheme } = useAppKitTheme();
 
   useEffect(() => {
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark" || stored === "light") {
+      setTheme(stored);
+      document.documentElement.setAttribute("data-theme", stored);
+    }
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("theme", theme);
-  }, [theme]);
+    setAppKitTheme(theme);
+  }, [theme, mounted, setAppKitTheme]);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));

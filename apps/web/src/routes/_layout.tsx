@@ -1,5 +1,5 @@
 import Header from "#/components/header.tsx";
-import { ThemeProvider, useTheme } from "#/hooks/use-theme.tsx";
+import { ThemeProvider } from "#/hooks/use-theme.tsx";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { AppKitProvider } from "@reown/appkit/react";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
@@ -11,9 +11,7 @@ export const Route = createFileRoute("/_layout")({
   component: RouteComponent,
 });
 
-function AppShell() {
-  const { theme } = useTheme();
-
+function RouteComponent() {
   return (
     <AppKitProvider
       projectId="2a81f9e7c38958d0376014f3b4023629"
@@ -28,18 +26,12 @@ function AppShell() {
       features={{
         analytics: true,
       }}
-      themeMode={theme}
+      themeMode="light"
     >
-      <Header />
-      <Outlet />
+      <ThemeProvider>
+        <Header />
+        <Outlet />
+      </ThemeProvider>
     </AppKitProvider>
-  );
-}
-
-function RouteComponent() {
-  return (
-    <ThemeProvider>
-      <AppShell />
-    </ThemeProvider>
   );
 }
