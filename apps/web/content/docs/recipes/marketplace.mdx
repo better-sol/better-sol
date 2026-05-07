@@ -1,0 +1,355 @@
+---
+title: Marketplace
+description: Process multiple accounts in a single instruction using remaining accounts.
+---
+
+This recipe builds a marketplace where buyers can purchase multiple listings in a single transaction. The key concept is `bs.remaining()`: a constraint that lets an instruction accept a dynamic number of accounts. Instead of defining each listing as a named account (which forces you to know the count at compile time), you declare one `bs.remaining()` slot and pass any number of listing addresses at call time.
+
+If you are new to account constraints, read [Constraints](/docs/defining-programs/constraints) first for an overview of `bs.init()`, `bs.mut()`, and the other constraint types.
+
+## What you will build
+
+The marketplace has one account type, `Listing`, and three instructions. A seller creates a listing for a specific token mint at a specific price. They can deactivate their own listing if they change their mind. A buyer can purchase multiple listings at once by passing their addresses as remaining accounts.
+
+The program does not handle token transfers. It manages listing state on-chain. The actual transfer of tokens or SOL between buyer and seller happens client-side after the purchase instruction confirms. This separation keeps the program simple and lets the client use Better Sol's built-in token operations.
+
+## Step 1: Create the program
+
+```bash
+npx @better-sol/cli@latest create marketplace
+```
+
+Replace the template with the code in the next sections.
+
+## Step 2: Define the account
+
+Each listing is a PDA derived from the seller and the token mint. This means each seller can have at most one active listing per mint at a time:
+
+```ts
+import { bs } from "better-sol/program"
+
+const Listing = bs.account({
+  seller: bs.pubkey(),
+  price: bs.u64(),
+  mint: bs.pubkey(),
+  active: bs.bool(),
+}).derive(seed => ["listing", seed.seller, seed.mint])
+```
+
+The `seller` is the address receiving payment. The `price` is in the smallest unit of whatever is being exchanged (lamports for SOL, base units for tokens). The `mint` identifies which token is being sold. The `active` flag lets sellers deactivate without closing the account.
+
+The seeds are `["listing", seed.seller, seed.mint]`. Since `seller` and `mint` are both `bs.pubkey()`, they appear in the `seed` builder. The literal `"listing"` is not a field reference: it is baked into every listing PDA as a namespace prefix.
+
+## Step 3: Define the program config
+
+```ts
+export const marketplace = bs.program({
+  name: "marketplace",
+  address: "<your-program-address>",
+  accounts: { Listing },
+  errors: {
+    Unauthorized: "Only the listing seller can deactivate",
+    AlreadySold: "Listing is no longer active",
+    InsufficientFunds: "Buyer total exceeds maxTotal",
+  },
+  events: {
+    Purchased: {
+      listing: bs.pubkey(),
+      seller: bs.pubkey(),
+      buyer: bs.pubkey(),
+      price: bs.u64(),
+    },
+  },
+}, ix => ({
+  // instructions go here
+}))
+```
+
+The three errors cover the main failure modes. `Unauthorized` prevents someone other than the seller from deactivating. `AlreadySold` prevents double-purchasing. `InsufficientFunds` stops the batch purchase if the running total exceeds the buyer's stated maximum.
+
+The `Purchased` event fires once per listing in the batch. It records the listing address, the seller, the buyer, and the price. This lets off-chain indexers track purchases without polling every listing account.
+
+## Step 4: Write the list instruction
+
+Creating a listing uses `bs.init()`, just like the counter:
+
+```ts
+list: ix({
+  accounts: {
+    listing: bs.init(Listing),
+    seller: bs.signer(),
+  },
+  args: { price: bs.u64(), mint: bs.pubkey() },
+  run: ({ listing, seller }, { price, mint }) => {
+    listing.seller = seller
+    listing.price = price
+    listing.mint = mint
+    listing.active = true
+  },
+}),
+```
+
+The PDA is derived from the seller and the mint. Both must be provided to `derive()` on the client. The `price` and `mint` come from the instruction arguments.
+
+## Step 5: Write the deactivate instruction
+
+A seller can deactivate their own listing. This is a simple read-modify-write with an authorization check:
+
+```ts
+deactivate: ix({
+  accounts: {
+    listing: bs.mut(Listing),
+    seller: bs.signer(),
+  },
+  run: ({ listing, seller }, ctx) => {
+    ctx.require(seller === listing.seller, "Unauthorized")
+    listing.active = false
+  },
+}),
+```
+
+`bs.mut(Listing)` means the instruction reads and writes the listing's data. The `ctx.require()` makes sure the signer is the listing's seller.
+
+## Step 6: Write the batch purchase instruction
+
+This is where `bs.remaining()` comes in. Instead of defining `listing1`, `listing2`, `listing3` as separate named accounts, you declare one `listings` slot that accepts any number of Listing accounts:
+
+```ts
+batchPurchase: ix({
+  accounts: {
+    buyer: bs.signer(),
+    listings: bs.remaining(Listing),
+  },
+  args: { maxTotal: bs.u64() },
+  run: ({ buyer, listings }, { maxTotal }, ctx) => {
+    let total = 0n
+    for (let i = 0; i < listings.length; i++) {
+      const listing = listings[i]
+      ctx.require(listing.active, "AlreadySold")
+      total += listing.price
+      listing.active = false
+      ctx.emit("Purchased", {
+        listing: listing.key,
+        seller: listing.seller,
+        buyer,
+        price: listing.price,
+      })
+    }
+    ctx.require(total <= maxTotal, "InsufficientFunds")
+  },
+}),
+```
+
+Let us walk through what happens step by step.
+
+The `buyer` is a signer so the client fills it in with `sol.payer`. The `listings` are passed as an array of addresses on the client. The `maxTotal` is a safety cap the buyer sets to avoid accidentally spending more than intended.
+
+Inside the `run()` body, `listings` behaves like an array. It has a `length` property and supports index access. Each `listings[i]` is a fully typed Listing account: you can read `listing.seller`, `listing.price`, `listing.mint`, `listing.active`, and write `listing.active = false`.
+
+The loop is a bounded `for` loop: `for (let i = 0; i < listings.length; i++)`. This is the only loop form allowed in `run()` bodies. The bound is `listings.length`, which is known at runtime from the number of remaining accounts passed.
+
+For each listing the program checks that it is still active. If any listing has already been deactivated or purchased, the entire transaction fails with `AlreadySold` and none of the listings are modified. This is because Solana transactions are atomic: either all instructions succeed or none of them do.
+
+After the check, the program adds the listing's price to the running total, marks it inactive so it cannot be purchased again, and emits a `Purchased` event with the listing address, seller, buyer, and price.
+
+After the loop finishes, the program verifies that the total does not exceed the buyer's stated maximum. If it does, the transaction fails. This protects the buyer from a situation where someone adds an expensive listing between the time the buyer builds the transaction and the time it lands.
+
+## Step 7: Deploy
+
+```bash
+npx @better-sol/cli@latest init       # if you have not already
+npx @better-sol/cli@latest deploy
+```
+
+## Step 8: Interact
+
+Create listings and purchase them in a batch:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { marketplace } from "./programs/marketplace"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { marketplace },
+})
+```
+
+Derive two listing addresses. Each requires the seller and the mint:
+
+```ts
+const listing1 = await sol.marketplace.accounts.Listing.derive({
+  seller: sol.payer,
+  mint: "So11111111111111111111111111111111111111112",
+})
+
+const listing2 = await sol.marketplace.accounts.Listing.derive({
+  seller: "Gsb9sERGY6UULB1pT8kYeWtlcdAtFoPtF5Hfsx8SUroo",
+  mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+})
+```
+
+`So111...` is the native SOL mint (wrapped SOL). `EPjFW...` is USDC on mainnet. On devnet you would use devnet token mints.
+
+Create the first listing:
+
+```ts
+await sol.marketplace.list({
+  listing: listing1,
+  price: 100_000_000n,
+  mint: "So11111111111111111111111111111111111111112",
+})
+```
+
+The `seller` account is auto-filled with `sol.payer`.
+
+Purchase both listings in one transaction:
+
+```ts
+await sol.marketplace.batchPurchase({
+  buyer: sol.payer,
+  listings: [listing1, listing2],
+  maxTotal: 500_000_000n,
+})
+```
+
+The `listings` array can be any length. The client passes each address as a remaining account in the transaction. The order in the array is the order the program processes them in the loop. The `maxTotal` protects the buyer from spending more than 0.5 SOL-equivalent.
+
+After the purchase, verify the listings are deactivated:
+
+```ts
+const data1 = await sol.marketplace.accounts.Listing.fetch(listing1)
+console.log(data1?.active) // false
+
+const data2 = await sol.marketplace.accounts.Listing.fetch(listing2)
+console.log(data2?.active) // false
+```
+
+Read the events from the purchase transaction:
+
+```ts
+const sig = await sol.marketplace.batchPurchase({
+  buyer: sol.payer,
+  listings: [listing1, listing2],
+  maxTotal: 500_000_000n,
+})
+
+const { value } = await sol.rpc
+  .getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 })
+  .send()
+
+if (value?.meta?.logMessages) {
+  const events = await sol.marketplace.parseEvents(value.meta.logMessages)
+  for (const e of events) {
+    console.log(e.name)       // "Purchased"
+    console.log(e.data.price) // bigint
+    console.log(e.data.seller) // string
+  }
+}
+```
+
+Each listing in the batch produces its own `Purchased` event. The events appear in the order the loop processed the listings.
+
+## Remaining accounts: what you can and cannot do
+
+Remaining accounts give you flexibility at the cost of some constraints. Here is what works and what does not.
+
+**You can** read and write fields on every account in the list. Each `listings[i]` gives you the full typed account data just like `bs.mut()` does.
+
+**You can** pass any number of accounts. There is no maximum you set in the program definition. The practical limit is the Solana transaction size limit of 1232 bytes, which accommodates roughly 20 to 30 remaining accounts depending on the other accounts and instruction data.
+
+**You can** access the `key` field on each account to get its on-chain address. This is useful for events, logging, and cross-referencing.
+
+**You cannot** have signers in a remaining accounts list. The Solana runtime requires signer accounts to be declared upfront, and remaining accounts are processed dynamically.
+
+**You cannot** use different constraints per account. All remaining accounts share the same constraint you passed to `bs.remaining()`. If you need some accounts to be `bs.init()` and others `bs.mut()`, use separate named accounts.
+
+**You cannot** know the number of accounts at compile time. The `length` is only available inside `run()`. You cannot use it outside the body.
+
+## When to use remaining accounts versus named accounts
+
+Use `bs.remaining()` when the account count varies per call and you cannot predict it. Batch processing, user-submitted lists, and dynamic sets are the right fit.
+
+Use named accounts when the set is fixed and known at compile time. Named accounts give better type safety because TypeScript knows exactly which accounts are expected and what their types are. They also let you use constraints like `bs.init()`, `bs.close()`, and `bs.realloc()` that are not available through `bs.remaining()`.
+
+## Full code
+
+```ts
+import { bs } from "better-sol/program"
+
+const Listing = bs.account({
+  seller: bs.pubkey(),
+  price: bs.u64(),
+  mint: bs.pubkey(),
+  active: bs.bool(),
+}).derive(seed => ["listing", seed.seller, seed.mint])
+
+export const marketplace = bs.program({
+  name: "marketplace",
+  address: "<your-program-address>",
+  accounts: { Listing },
+  errors: {
+    Unauthorized: "Only the listing seller can deactivate",
+    AlreadySold: "Listing is no longer active",
+    InsufficientFunds: "Buyer total exceeds maxTotal",
+  },
+  events: {
+    Purchased: {
+      listing: bs.pubkey(),
+      seller: bs.pubkey(),
+      buyer: bs.pubkey(),
+      price: bs.u64(),
+    },
+  },
+}, ix => ({
+  list: ix({
+    accounts: {
+      listing: bs.init(Listing),
+      seller: bs.signer(),
+    },
+    args: { price: bs.u64(), mint: bs.pubkey() },
+    run: ({ listing, seller }, { price, mint }) => {
+      listing.seller = seller
+      listing.price = price
+      listing.mint = mint
+      listing.active = true
+    },
+  }),
+
+  deactivate: ix({
+    accounts: {
+      listing: bs.mut(Listing),
+      seller: bs.signer(),
+    },
+    run: ({ listing, seller }, ctx) => {
+      ctx.require(seller === listing.seller, "Unauthorized")
+      listing.active = false
+    },
+  }),
+
+  batchPurchase: ix({
+    accounts: {
+      buyer: bs.signer(),
+      listings: bs.remaining(Listing),
+    },
+    args: { maxTotal: bs.u64() },
+    run: ({ buyer, listings }, { maxTotal }, ctx) => {
+      let total = 0n
+      for (let i = 0; i < listings.length; i++) {
+        const listing = listings[i]
+        ctx.require(listing.active, "AlreadySold")
+        total += listing.price
+        listing.active = false
+        ctx.emit("Purchased", {
+          listing: listing.key,
+          seller: listing.seller,
+          buyer,
+          price: listing.price,
+        })
+      }
+      ctx.require(total <= maxTotal, "InsufficientFunds")
+    },
+  }),
+}))
+```

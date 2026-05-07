@@ -1,0 +1,395 @@
+---
+title: Counter Program
+description: A complete reference counter implementation with initialization, increment, decrement, events, and close.
+---
+
+This recipe walks through a complete counter program from scratch. You will define the on-chain account, write four instructions, add custom errors and events, deploy to devnet, and interact with the program from TypeScript. Every concept in this recipe is one you will use when building your own programs.
+
+If you have not set up a project yet, start with [Your First Program](/docs/your-first-program) and come back here for the deeper walkthrough.
+
+## How the counter works
+
+The counter stores a number on-chain inside an account. An account is a fixed-size region of data owned by your program. The counter's account holds three fields: the current count, the authority who is allowed to update it, and a flag for whether it is active.
+
+The program has four instructions. `initialize` creates the counter account and sets the starting value. `increment` and `decrement` modify the count after checking that the caller is the authority and the counter is active. `close` removes the account and reclaims the rent.
+
+The counter account uses a Program Derived Address, or PDA. A PDA is an address computed from a set of seeds rather than from a private key. The same seeds always produce the same address, so you can derive it on the client without asking the network. PDAs are how Solana programs locate their accounts deterministically.
+
+## Step 1: Create the program
+
+```bash
+npx @better-sol/cli@latest create counter
+```
+
+This generates `programs/counter.ts` and `.better-sol/counter.json`. The `.ts` file is your program definition. The `.json` file is the keypair that identifies your program on-chain. Never commit the keypair to git: the `init` command already added `.better-sol/` to your `.gitignore`.
+
+Open `programs/counter.ts`. It contains a working template with a single account and two instructions. You will expand it into the full counter from this recipe.
+
+## Step 2: Define the account
+
+The account definition describes what data lives on-chain. Every field has a type that determines its size in bytes and its TypeScript type on the client:
+
+```ts
+import { bs } from "better-sol/program"
+
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+}).derive(seed => ["counter", seed.authority])
+```
+
+`bs.account()` takes an object where every key is a field name and every value is a type token from the `bs` namespace. The order of fields is the order they appear on-chain. Once deployed, you can add fields at the end but cannot reorder them.
+
+Each type maps to a specific TypeScript type on the client side. `bs.u64()` is a `bigint`, for holding counts, balances, and amounts. `bs.pubkey()` is a `string` in base58 format, for holding addresses. `bs.bool()` is a `boolean`.
+
+The `.derive()` call attaches PDA seeds to the account. In this case the seed is the literal string `"counter"` followed by the `authority` field. This means each authority gets their own counter at a unique address. When you derive the PDA on the client, you pass the authority's address and the client returns the deterministic PDA.
+
+Only pubkey and integer fields can appear in the seed callback. The `seed` builder object only exposes fields whose types are seedable, so TypeScript prevents you from using a bool or string as a seed.
+
+## Step 3: Define the program config
+
+The program config wraps the account, errors, events, and instructions into one object:
+
+```ts
+export const counter = bs.program({
+  name: "counter",
+  address: "<your-program-address>",
+  accounts: { Counter },
+  errors: {
+    Unauthorized: "Only the authority can update this counter",
+    NotActive: "Counter is not active",
+    BelowZero: "Counter would go below zero",
+  },
+  events: {
+    Incremented: { newCount: bs.u64(), authority: bs.pubkey() },
+    Decremented: { newCount: bs.u64(), authority: bs.pubkey() },
+  },
+}, ix => ({
+  // instructions go here
+}))
+```
+
+The `name` is used as the on-chain module name and as the client namespace (`sol.counter`). It must be lowercase letters, numbers, and underscores.
+
+The `address` is your program's permanent identity on Solana. The `create` command generates it and fills it into the template. Each program has a unique address.
+
+The `accounts` field registers your account definitions for the client. Without it, `.derive()` and `.fetch()` are not available. You only need to register accounts that the client interacts with directly.
+
+The `errors` field maps error names to human-readable messages. These messages appear in transaction logs when an error is thrown. The error name is what you pass to `ctx.require()` inside `run()` bodies.
+
+The `events` field maps event names to field schemas. Each schema works like a mini account definition: a set of typed fields that travel with the event in the transaction log. The payload is type-checked when you call `ctx.emit()`.
+
+The second argument to `bs.program()` is a function that receives `ix` and returns an object of instruction definitions. Each key becomes a method on the client.
+
+## Step 4: Write the instructions
+
+### initialize
+
+The first instruction creates the counter account:
+
+```ts
+initialize: ix({
+  accounts: {
+    counter: bs.init(Counter),
+    authority: bs.signer(),
+  },
+  args: { initialValue: bs.u64() },
+  run: ({ counter, authority }, { initialValue }) => {
+    counter.count = initialValue
+    counter.authority = authority
+    counter.isActive = true
+  },
+}),
+```
+
+`bs.init(Counter)` tells the runtime to create a new account using the Counter schema. If the account has `.derive()` seeds, as Counter does, the runtime creates it at the derived PDA address. The system program is included automatically: you never add it yourself.
+
+When the account is created, every field starts at its default value. `bigint` fields start at `0n`, `number` fields at `0`, `boolean` at `false`, `string` at `""`, and `pubkey` at all zeros. The `run()` body sets the real values.
+
+`bs.signer()` represents the wallet that signed the transaction. On the client, you can omit the signer and Better Sol fills it in with the active payer. In the `run()` body, the signer is a `string` (base58 address). You can read it but cannot modify it.
+
+The `run()` callback receives three arguments when both `accounts` and `args` are defined: the accounts object, the args object, and the context. The types of `counter` and `authority` are fully inferred from the constraints you used.
+
+### increment
+
+Adding to the count requires running two checks before modifying the data:
+
+```ts
+increment: ix({
+  accounts: {
+    counter: bs.mut(Counter),
+    authority: bs.signer(),
+  },
+  args: { amount: bs.u64() },
+  run: ({ counter, authority }, { amount }, ctx) => {
+    ctx.require(authority === counter.authority, "Unauthorized")
+    ctx.require(counter.isActive, "NotActive")
+    counter.count += amount
+    ctx.emit("Incremented", { newCount: counter.count, authority })
+  },
+}),
+```
+
+`bs.mut(Counter)` means the instruction reads and writes the account's data. The account must exist already. If it does not, the transaction fails.
+
+`ctx.require(condition, "ErrorName")` checks a condition. If it is `false`, the transaction halts immediately and the error name and message appear in the logs. The error name must exist in the program's `errors` config. TypeScript validates this at definition time: if you mistype the error name, you get a type error.
+
+The checks happen in order. First the program verifies the caller is the authority. Then it verifies the counter is active. If either fails, the counter is not modified.
+
+`ctx.emit("EventName", payload)` writes a structured event to the transaction log. The payload's fields must match the schema in the `events` config. Missing fields or extra fields cause a type error. Clients can parse these events from transaction logs with `.parseEvents()`.
+
+### decrement
+
+Decrementing adds one more check: the count must not go below zero:
+
+```ts
+decrement: ix({
+  accounts: {
+    counter: bs.mut(Counter),
+    authority: bs.signer(),
+  },
+  args: { amount: bs.u64() },
+  run: ({ counter, authority }, { amount }, ctx) => {
+    ctx.require(authority === counter.authority, "Unauthorized")
+    ctx.require(counter.isActive, "NotActive")
+    ctx.require(counter.count >= amount, "BelowZero")
+    counter.count -= amount
+    ctx.emit("Decremented", { newCount: counter.count, authority })
+  },
+}),
+```
+
+The third `ctx.require()` makes sure the current count is at least as large as the amount being subtracted. If someone tries to decrement by more than the current count, the transaction fails with `BelowZero`.
+
+### close
+
+Closing an account removes it from the chain and returns the rent lamports to a specified address:
+
+```ts
+close: ix({
+  accounts: {
+    counter: bs.close(Counter, "authority"),
+    authority: bs.signer(),
+  },
+  run: () => {},
+}),
+```
+
+`bs.close(Counter, "authority")` takes two arguments: the account definition and the name of another account in this instruction that receives the reclaimed rent. The string `"authority"` refers to the `authority: bs.signer()` account above. After this instruction runs, the counter account no longer exists. Any future `fetch()` for this address returns `null`.
+
+The `run()` body is empty because `bs.close()` handles everything: zeroing the account data, transferring lamports, and removing the account. You do not need to do anything else.
+
+## Step 5: Deploy
+
+Run `init` first if you have not set up a project:
+
+```bash
+npx @better-sol/cli@latest init
+```
+
+Then deploy:
+
+```bash
+npx @better-sol/cli@latest deploy
+```
+
+The CLI discovers all program files in `programs/`, generates Anchor Rust for each one, compiles them through the cloud API, and deploys the bytecode. On devnet and testnet it automatically funds your payer if the balance is low.
+
+## Step 6: Interact from TypeScript
+
+Create a file called `client.ts` in your project root:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+```
+
+`betterSol()` creates a client connected to the cluster with your wallet as the payer. The `programs` option registers your counter definition. TypeScript infers everything from it: instruction parameters, account data shapes, error names, event payloads.
+
+### Derive the PDA
+
+Before calling any instruction you need the counter's address. Since the counter uses PDA seeds, you derive the address locally:
+
+```ts
+const counterAddr = await sol.counter.accounts.Counter.derive({
+  authority: sol.payer,
+})
+```
+
+`derive()` takes the seed values your account definition declared. Counter's seeds are `["counter", seed.authority]`, so `derive()` requires `authority` and nothing else. The literal `"counter"` is baked into the definition and is not passed to `derive()`.
+
+The result is a deterministic base58 address. The same authority always produces the same counter address. You can call `derive()` without the network being available because the computation is purely mathematical.
+
+### Initialize
+
+```ts
+await sol.counter.initialize({
+  counter: counterAddr,
+  initialValue: 0n,
+})
+```
+
+The `authority` account is a signer, so the client fills it in with `sol.payer` automatically. You omit it from the call. The `initialValue` is a `bigint` because `bs.u64()` maps to `bigint` on the client.
+
+This instruction creates the counter account and sets its fields. It costs rent to allocate space for the account data on-chain. The payer covers this automatically.
+
+### Read the data
+
+```ts
+const data = await sol.counter.accounts.Counter.fetch(counterAddr)
+console.log(data?.count)      // 0n
+console.log(data?.authority)  // your address
+console.log(data?.isActive)   // true
+```
+
+`fetch()` returns the fully typed account data. The type is `{ count: bigint; authority: string; isActive: boolean }` because those are the fields you defined in `bs.account()`. You never write this type yourself.
+
+If the account does not exist, or it belongs to a different program, or its discriminator does not match the name `Counter`, `fetch()` returns `null`. This is not an error: it means the account has not been created yet.
+
+### Increment and decrement
+
+```ts
+await sol.counter.increment({ counter: counterAddr, amount: 10n })
+await sol.counter.decrement({ counter: counterAddr, amount: 3n })
+
+const updated = await sol.counter.accounts.Counter.fetch(counterAddr)
+console.log(updated?.count) // 7n
+```
+
+### Check for errors before sending
+
+If you are unsure whether a transaction will succeed, simulate it first. Simulation runs the transaction against the current chain state without modifying anything. It is free and instant:
+
+```ts
+const result = await sol.counter.decrement.simulate({
+  counter: counterAddr,
+  amount: 100n,
+})
+
+const programError = sol.counter.parseErrors(result.logs)
+if (programError) {
+  console.log(programError.errorName) // "BelowZero"
+}
+```
+
+`.simulate()` returns the transaction logs, compute units consumed, and any return data. You pass the logs to `.parseErrors()` to look for your program's custom errors. If the error is found, you get a `ProgramError` object with `errorName`, `programName`, `errorIndex`, and `message`. If no matching error is found, you get `undefined`.
+
+### Parse events
+
+After a transaction confirms, you can read the events it emitted:
+
+```ts
+const sig = await sol.counter.increment({ counter: counterAddr, amount: 5n })
+
+const { value } = await sol.rpc
+  .getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 })
+  .send()
+
+if (value?.meta?.logMessages) {
+  const events = await sol.counter.parseEvents(value.meta.logMessages)
+  for (const e of events) {
+    console.log(e.name)          // "Incremented"
+    console.log(e.data.newCount) // bigint
+    console.log(e.data.authority) // string
+  }
+}
+```
+
+`sol.rpc` is the underlying Solana RPC connection. You use it for direct RPC calls like `getTransaction`. The transaction's `logMessages` are an array of strings. `parseEvents()` scans them for event discriminators matching your program's event definitions, decodes the Borsh-serialized payloads, and returns typed objects.
+
+### Close
+
+When you are done with the counter, close it to reclaim the rent:
+
+```ts
+await sol.counter.close({ counter: counterAddr })
+
+const gone = await sol.counter.accounts.Counter.fetch(counterAddr)
+console.log(gone) // null
+```
+
+The account is removed from the chain. The rent lamports are returned to the authority. The `fetch()` call returns `null` because the account no longer exists.
+
+## Full code
+
+```ts
+import { bs } from "better-sol/program"
+
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+}).derive(seed => ["counter", seed.authority])
+
+export const counter = bs.program({
+  name: "counter",
+  address: "<your-program-address>",
+  accounts: { Counter },
+  errors: {
+    Unauthorized: "Only the authority can update this counter",
+    NotActive: "Counter is not active",
+    BelowZero: "Counter would go below zero",
+  },
+  events: {
+    Incremented: { newCount: bs.u64(), authority: bs.pubkey() },
+    Decremented: { newCount: bs.u64(), authority: bs.pubkey() },
+  },
+}, ix => ({
+  initialize: ix({
+    accounts: {
+      counter: bs.init(Counter),
+      authority: bs.signer(),
+    },
+    args: { initialValue: bs.u64() },
+    run: ({ counter, authority }, { initialValue }) => {
+      counter.count = initialValue
+      counter.authority = authority
+      counter.isActive = true
+    },
+  }),
+
+  increment: ix({
+    accounts: {
+      counter: bs.mut(Counter),
+      authority: bs.signer(),
+    },
+    args: { amount: bs.u64() },
+    run: ({ counter, authority }, { amount }, ctx) => {
+      ctx.require(authority === counter.authority, "Unauthorized")
+      ctx.require(counter.isActive, "NotActive")
+      counter.count += amount
+      ctx.emit("Incremented", { newCount: counter.count, authority })
+    },
+  }),
+
+  decrement: ix({
+    accounts: {
+      counter: bs.mut(Counter),
+      authority: bs.signer(),
+    },
+    args: { amount: bs.u64() },
+    run: ({ counter, authority }, { amount }, ctx) => {
+      ctx.require(authority === counter.authority, "Unauthorized")
+      ctx.require(counter.isActive, "NotActive")
+      ctx.require(counter.count >= amount, "BelowZero")
+      counter.count -= amount
+      ctx.emit("Decremented", { newCount: counter.count, authority })
+    },
+  }),
+
+  close: ix({
+    accounts: {
+      counter: bs.close(Counter, "authority"),
+      authority: bs.signer(),
+    },
+    run: () => {},
+  }),
+}))
+```

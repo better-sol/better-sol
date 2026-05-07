@@ -1,0 +1,303 @@
+---
+title: Token Rewards
+description: Mint tokens from an on-chain program using CPI to the Token program.
+---
+
+This recipe builds a reward program that mints tokens to users. The key concept is CPI: Cross-Program Invocation. Your program calls the SPL Token program from inside a `run()` body to mint new tokens. The same pattern works for token transfers, burns, and any other Token program operation.
+
+Before starting, make sure you understand the basics from [Your First Program](/docs/your-first-program) and [Body Language](/docs/defining-programs/body-language). The CPI section of that page covers the `cpi` object and its methods.
+
+## What you will build
+
+The reward program has two instructions and one config account. The config stores which token mint to use and how many tokens to give per claim. The `initialize` instruction creates the config. The `claim` instruction mints tokens to the caller by invoking the Token program.
+
+The program does not own the mint. The mint authority is the wallet that signs the `claim` transaction. This means the wallet must be the mint's authority (set during mint creation) for the CPI to succeed. The program itself handles access control: only the address stored in the config's `authority` field can trigger claims.
+
+## Step 1: Create the program
+
+```bash
+npx @better-sol/cli@latest create rewards
+```
+
+This creates `programs/rewards.ts` and `.better-sol/rewards.json`. Replace the generated template with the code below.
+
+## Step 2: Define the account and program config
+
+The reward config account stores the operational state of the reward system. It is a PDA keyed to its authority, so each authority can have exactly one config:
+
+```ts
+import { bs, cpi } from "better-sol/program"
+
+const RewardConfig = bs.account({
+  rewardMint: bs.pubkey(),
+  tokensPerClaim: bs.u64(),
+  authority: bs.pubkey(),
+  totalClaimed: bs.u64(),
+}).derive(seed => ["reward_config", seed.authority])
+```
+
+The `rewardMint` field stores the address of the SPL token mint that will be used for rewards. This lets you change the mint by creating a new config instead of redeploying the program.
+
+`tokensPerClaim` is how many base units of the token each claim produces. If your mint has 9 decimals and you want 10 tokens per claim, set this to `10_000_000_000n`.
+
+The `authority` is the only address allowed to call `claim`. The `totalClaimed` tracks how many tokens have been minted through this config for off-chain accounting.
+
+Now wrap the account in a program config with errors and events:
+
+```ts
+export const rewards = bs.program({
+  name: "rewards",
+  address: "<your-program-address>",
+  accounts: { RewardConfig },
+  errors: {
+    Unauthorized: "Only the config authority can trigger claims",
+    WrongMint: "The provided mint does not match the reward config",
+  },
+  events: {
+    Claimed: {
+      user: bs.pubkey(),
+      amount: bs.u64(),
+    },
+  },
+}, ix => ({
+  // instructions go here
+}))
+```
+
+The address is filled by `create`. Two errors cover the main failure cases: someone who is not the authority trying to claim, and a mismatch between the mint in the config and the mint passed to the instruction. One event fires each time a claim succeeds, recording who received tokens and how many.
+
+## Step 3: Write the initialize instruction
+
+```ts
+initialize: ix({
+  accounts: {
+    config: bs.init(RewardConfig),
+    authority: bs.signer(),
+  },
+  args: {
+    rewardMint: bs.pubkey(),
+    tokensPerClaim: bs.u64(),
+  },
+  run: ({ config, authority }, { rewardMint, tokensPerClaim }) => {
+    config.rewardMint = rewardMint
+    config.tokensPerClaim = tokensPerClaim
+    config.authority = authority
+    config.totalClaimed = 0n
+  },
+}),
+```
+
+`bs.init(RewardConfig)` creates a new PDA using the seeds from the account definition. The system program is included automatically. Every field starts at its default and the `run()` body sets the real values from the instruction arguments and the signer.
+
+The `authority` is a signer, so the client fills it in with `sol.payer`. The `rewardMint` and `tokensPerClaim` are passed from the client as arguments.
+
+## Step 4: Write the claim instruction
+
+This is where the CPI happens. The instruction takes five accounts: the config to read, the mint to write to, the token account to receive tokens, the authority who signs, and the Token program address:
+
+```ts
+claim: ix({
+  accounts: {
+    config: bs.mut(RewardConfig),
+    mint: bs.mint().writable(),
+    to: bs.tokenAccount().writable(),
+    authority: bs.signer(),
+    tokenProgram: bs.tokenProgram(),
+  },
+  run: ({ config, mint, to, authority }, ctx) => {
+    ctx.require(authority === config.authority, "Unauthorized")
+    ctx.require(mint.key === config.rewardMint, "WrongMint")
+
+    cpi.token.mintTo({ mint, to, authority, amount: config.tokensPerClaim })
+    config.totalClaimed += config.tokensPerClaim
+
+    ctx.emit("Claimed", { user: to.owner, amount: config.tokensPerClaim })
+  },
+}),
+```
+
+Let us walk through each line.
+
+`ctx.require(authority === config.authority, "Unauthorized")` checks that the signer matches the authority stored in the config. If someone else tries to call `claim`, the transaction fails immediately with the `Unauthorized` error.
+
+`ctx.require(mint.key === config.rewardMint, "WrongMint")` verifies that the mint account passed to the instruction is the same one stored in the config. This prevents someone from passing a different mint and minting tokens they should not be able to.
+
+`cpi.token.mintTo({ mint, to, authority, amount: config.tokensPerClaim })` is the actual CPI. It crosses from your program into the SPL Token program and executes a mint. The `mint` is the mint account (writable because minting changes the supply). The `to` is the token account receiving the new tokens (writable because the balance changes). The `authority` is the signer who must be the mint's authority. The `amount` is read from the config.
+
+`config.totalClaimed += config.tokensPerClaim` updates the running total. This is on-chain accounting, not a security mechanism. Someone could read this value off-chain to check how many tokens have been distributed.
+
+`ctx.emit("Claimed", { user: to.owner, amount: config.tokensPerClaim })` fires an event so clients can track claims without polling the account data. The `to.owner` field is the owner of the token account receiving the tokens. It comes from the `TokenAccountInfo` type that `bs.tokenAccount()` provides in the `run()` body.
+
+### Why each account is writable
+
+The `mint` account is `bs.mint().writable()` because `cpi.token.mintTo()` calls into the Token program's `mint_to` instruction, which modifies the mint's total supply. If you pass `bs.mint()` without `.writable()`, the CPI fails because the runtime requires write access.
+
+The `to` account is `bs.tokenAccount().writable()` because receiving tokens increases the account's balance field. This is also a write operation.
+
+The `tokenProgram` account is included but the client fills it automatically. You never pass it from the call site. It is there so the CPI knows which Token program to invoke (the standard Token program at `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`).
+
+## Step 5: Deploy
+
+```bash
+npx @better-sol/cli@latest init       # if you have not already
+npx @better-sol/cli@latest deploy
+```
+
+## Step 6: Set up and interact
+
+Create a mint, initialize a reward config, and claim tokens:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { rewards } from "./programs/rewards"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { rewards },
+})
+```
+
+First, create a token mint. The payer becomes the mint authority by default:
+
+```ts
+const { mint } = await sol.token.createMint({ decimals: 9 })
+```
+
+The returned `mint` is the mint's base58 address. The payer is the mint authority, which is important because the `claim` instruction requires the signer to be the mint authority.
+
+Derive the config PDA and initialize it:
+
+```ts
+const configAddr = await sol.rewards.accounts.RewardConfig.derive({
+  authority: sol.payer,
+})
+
+await sol.rewards.initialize({
+  config: configAddr,
+  rewardMint: mint,
+  tokensPerClaim: 100_000_000n, // 0.1 tokens with 9 decimals
+})
+```
+
+The `authority` account is auto-filled with `sol.payer`. The config now points to the mint you created.
+
+Call `claim` to mint tokens to yourself. You need the ATA address for the recipient:
+
+```ts
+await sol.rewards.claim({
+  config: configAddr,
+  mint,
+  to: await sol.token.getATA({ owner: sol.payer, mint }),
+})
+```
+
+Only three parameters are passed. The `authority` is auto-filled with `sol.payer`. The `tokenProgram` is auto-filled. The `mint` and `to` are addresses you pass.
+
+After the claim, check the balance:
+
+```ts
+const balance = await sol.token.getBalance({ owner: sol.payer, mint })
+console.log(balance) // 100000000n
+```
+
+Call claim again and the balance doubles:
+
+```ts
+await sol.rewards.claim({ config: configAddr, mint, to: await sol.token.getATA({ owner: sol.payer, mint }) })
+const newBalance = await sol.token.getBalance({ owner: sol.payer, mint })
+console.log(newBalance) // 200000000n
+```
+
+## How CPI parameter types work
+
+In the `run()` body, every account constraint produces a typed value. When you pass that value to a `cpi` function, TypeScript checks that the types match:
+
+| CPI parameter | Where it comes from | The type in `run()` |
+|---|---|---|
+| `mint` | `bs.mint()` or `bs.mint().writable()` | `{ key, supply, decimals, mintAuthority, freezeAuthority }` |
+| `to` / `from` | `bs.tokenAccount()` or `.writable()` | `{ key, mint, owner, amount }` |
+| `authority` | `bs.signer()` | `string` (a base58 address) |
+| `amount` | An `args` field with `bs.u64()` | `bigint` |
+| `decimals` | From `mint.decimals` | `number` |
+
+The `mint` and `to`/`from` types are full objects with multiple fields. You do not just pass an address string: the full typed object comes from the constraint. The CPI call reads the `.key` field internally to get the address.
+
+## All available CPI calls
+
+Better Sol currently supports five CPI calls. Each one mirrors a Token program instruction:
+
+| CPI call | What it does |
+|---|---|
+| `cpi.token.transfer({ from, to, authority, amount })` | Move tokens from one token account to another |
+| `cpi.token.transferChecked({ from, to, mint, authority, amount, decimals })` | Same as transfer but verifies the mint's decimals match |
+| `cpi.token.mintTo({ mint, to, authority, amount })` | Create new tokens and deposit them into a token account |
+| `cpi.token.burn({ from, mint, authority, amount })` | Destroy tokens from a token account |
+| `cpi.sol.timestamp()` | Read the current on-chain Unix timestamp as a `bigint` |
+
+The token CPI calls take the same parameter shapes you see in the `accounts` constraints. The accounts come from your instruction's `accounts` object, and the amounts come from `args`. TypeScript enforces that you pass the right types to each parameter.
+
+## Full code
+
+```ts
+import { bs, cpi } from "better-sol/program"
+
+const RewardConfig = bs.account({
+  rewardMint: bs.pubkey(),
+  tokensPerClaim: bs.u64(),
+  authority: bs.pubkey(),
+  totalClaimed: bs.u64(),
+}).derive(seed => ["reward_config", seed.authority])
+
+export const rewards = bs.program({
+  name: "rewards",
+  address: "<your-program-address>",
+  accounts: { RewardConfig },
+  errors: {
+    Unauthorized: "Only the config authority can trigger claims",
+    WrongMint: "The provided mint does not match the reward config",
+  },
+  events: {
+    Claimed: {
+      user: bs.pubkey(),
+      amount: bs.u64(),
+    },
+  },
+}, ix => ({
+  initialize: ix({
+    accounts: {
+      config: bs.init(RewardConfig),
+      authority: bs.signer(),
+    },
+    args: {
+      rewardMint: bs.pubkey(),
+      tokensPerClaim: bs.u64(),
+    },
+    run: ({ config, authority }, { rewardMint, tokensPerClaim }) => {
+      config.rewardMint = rewardMint
+      config.tokensPerClaim = tokensPerClaim
+      config.authority = authority
+      config.totalClaimed = 0n
+    },
+  }),
+
+  claim: ix({
+    accounts: {
+      config: bs.mut(RewardConfig),
+      mint: bs.mint().writable(),
+      to: bs.tokenAccount().writable(),
+      authority: bs.signer(),
+      tokenProgram: bs.tokenProgram(),
+    },
+    run: ({ config, mint, to, authority }, ctx) => {
+      ctx.require(authority === config.authority, "Unauthorized")
+      ctx.require(mint.key === config.rewardMint, "WrongMint")
+
+      cpi.token.mintTo({ mint, to, authority, amount: config.tokensPerClaim })
+      config.totalClaimed += config.tokensPerClaim
+
+      ctx.emit("Claimed", { user: to.owner, amount: config.tokensPerClaim })
+    },
+  }),
+}))
+```
