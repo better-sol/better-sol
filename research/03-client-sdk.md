@@ -261,15 +261,21 @@ Handles compound IDL types (`option`, `vec`, `coption`, `defined`), nested/compo
 | Import path | Exports |
 |---|---|
 | `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `ProgramError`, `bs`, `cpi`, types |
-| `better-sol/program` | `bs`, `cpi`, type helpers |
+| `better-sol/program` | `bs`, `cpi`, `AccountDefinition`, `InstructionDefinition`, `ProgramDefinition`, type helpers |
 | `better-sol/codec` | `encodeField`, `decodeField`, `encodeAccount`, `decodeAccount`, `decodeZeroCopyAccount`, `encodeInstruction`, `anchorDiscriminator`, `accountDiscriminator` |
-| `better-sol/wallets/*` | Individual wallet adapters |
+| `better-sol/wallets` | `walletAdapter`, `reownWallet`, `privyWallet`, `dynamicWallet` |
+| `better-sol/wallets/reown` | `reownWallet` |
+| `better-sol/wallets/privy` | `privyWallet` |
+| `better-sol/wallets/dynamic` | `dynamicWallet` |
 
 ### Removed from Public API
 
+- `version` — duplicated `package.json` version with no runtime use
 - `generateSigner()` — server uses `keypairFile()`/`secretKey()`, client uses wallet adapters
 - `SolSigner` type — `TransactionSigner` from `@solana/kit` accepted directly
 - `sol.destroy()` — WebSocket closes on page unload
-- `IxInstruction`, `IxTransaction` types — internal, leaked by accident
 - `walletSigner()` — no-op wrapper
 - `BoundAccount.size`, `borshSize()` — premature optimization
+- `sizeOfToken()` — unused internally, not needed externally
+- `SimulateResult`, `PrepareResult` types — internal, leaked by accident
+- Unused `@solana/kit` re-exports: `parallelInstructionPlan`, `sequentialInstructionPlan`, `singleInstructionPlan`, `createTransactionPlanExecutor`, `appendTransactionMessageInstructionPlan`, `TransactionPlan` type

@@ -12,7 +12,7 @@ Two imports. `bs` contains everything for defining programs. `cpi` contains tran
 
 ## 1. Primitive Types
 
-Every primitive is a factory function returning a `TypeToken`. The internal `kind` string (e.g. `"u64"`, `"pubkey"`) is the contract between the public API and the coder/transpiler/codegen. Public names are cosmetic; internal kinds are canonical.
+Every primitive is a factory function returning a `TypeToken`. The internal `kind` string (e.g. `"u64"`, `"pubkey"`) is the contract between the public API and the codec/transpiler/codegen. Public names are cosmetic; internal kinds are canonical.
 
 ### Integer Types
 
@@ -93,6 +93,7 @@ const OrderBook = bs.account({
 ```
 
 **Seed rules enforced at transpile time:**
+
 - Field seeds must reference pubkey or integer fields on the account
 - During `bs.init()`, each field seed must be provided by a matching instruction arg or account
 - Dynamic string templates are rejected — store values as account fields instead
@@ -349,18 +350,9 @@ type ErrorNames = keyof typeof counter.errors
 
 ---
 
-## 12. Constraints No Longer Planned
+## 12. Future Constraints
 
-All previously P2 constraints are now implemented:
-
-| Constraint | Status |
-|---|---|
-| `bs.hasOne("field")` | **Done** |
-| `bs.belongsTo(ParentAccount)` | **Done** |
-| `bs.realloc(Account, newSpace)` | **Done** |
-| Instruction return values (`returns:`) | **Done** |
-
-### Future Constraints
+All previously planned constraints are now implemented. The remaining gaps are Anchor edge cases:
 
 | Anchor constraint | Priority | Notes |
 |---|---|---|

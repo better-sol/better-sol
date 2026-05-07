@@ -78,15 +78,17 @@ content/docs/
 ### Getting Started
 
 #### `installation.mdx`
+
 Goal: Install better-sol and run the CLI. No program yet, just verify the tools work.
 
 - `npm install better-sol`
 - `npx @better-sol/cli login`
 - `npx @better-sol/cli create hello` — what it generates
 - `npx @better-sol/cli deploy --dry-run` — verify without deploying
-- Prerequisites: Node.js 22+, Solana CLI for local testing (optional)
+- Prerequisites: Node.js 22+
 
 #### `your-first-program.mdx`
+
 Goal: Build, deploy, and interact with a counter program in under 10 minutes.
 
 - Write a minimal counter program (3 fields, 3 instructions: init, increment, close)
@@ -96,18 +98,20 @@ Goal: Build, deploy, and interact with a counter program in under 10 minutes.
 - Full copy-paste code — should work end-to-end on devnet
 
 #### `project-structure.mdx`
+
 Goal: Understand what the CLI generates and where files go.
 
 - `programs/` — your TypeScript definitions
 - `generated/` — Rust output + compiled `.so`
 - `better-sol.config.ts` — CLI configuration
-- `better-sol/` — auth state
+- `.better-sol/` — keypairs and auth state
 
 ---
 
 ### Defining Programs
 
 #### `types.mdx`
+
 Goal: Know every type available and when to use each one.
 
 - Integer types: `bs.u8()` through `bs.i128()` — when to use `number` vs `bigint`
@@ -117,6 +121,7 @@ Goal: Know every type available and when to use each one.
 - Each type shown with a field definition and the TypeScript type it maps to
 
 #### `accounts.mdx`
+
 Goal: Define accounts with fields, PDA seeds, and zero-copy.
 
 - Basic account: `bs.account({ ... })`
@@ -126,6 +131,7 @@ Goal: Define accounts with fields, PDA seeds, and zero-copy.
 - Account space is computed automatically
 
 #### `instructions.mdx`
+
 Goal: Define instructions with accounts, arguments, and optional return types.
 
 - Basic structure: `ix({ accounts, args, run })`
@@ -135,6 +141,7 @@ Goal: Define instructions with accounts, arguments, and optional return types.
 - Account/arg name collision detection
 
 #### `constraints.mdx`
+
 Goal: Understand every constraint and what it generates in Anchor.
 
 - User accounts: `bs.init()`, `bs.initIfNeeded()`, `bs.mut()`, `bs.close()`, `bs.realloc()`
@@ -145,6 +152,7 @@ Goal: Understand every constraint and what it generates in Anchor.
 - Each constraint shown with generated Anchor equivalent
 
 #### `errors-and-events.mdx`
+
 Goal: Define custom errors and events, use them in run() bodies.
 
 - Error definitions: `errors: { Unauthorized: "message" }`
@@ -154,6 +162,7 @@ Goal: Define custom errors and events, use them in run() bodies.
 - Error and event names are validated at transpile time
 
 #### `program-config.mdx`
+
 Goal: Wire accounts, instructions, errors, and events into a program.
 
 - `bs.program({ name, address, accounts, errors, events }, ix => ({ ... }))`
@@ -162,6 +171,7 @@ Goal: Wire accounts, instructions, errors, and events into a program.
 - Type inference: how TypeScript infers instruction params from the definition
 
 #### `body-language.mdx`
+
 Goal: Know exactly what you can write inside `run()` bodies.
 
 - Supported: assignment, arithmetic, if/else, bounded for loops, ctx.require, ctx.emit, ctx.log, CPI calls, return values
@@ -174,6 +184,7 @@ Goal: Know exactly what you can write inside `run()` bodies.
 ### The Client
 
 #### `connecting.mdx`
+
 Goal: Create a client and understand all configuration options.
 
 - Basic setup: `betterSol({ cluster, payer, programs })`
@@ -184,6 +195,7 @@ Goal: Create a client and understand all configuration options.
 - Scoped signers: `sol.withSigner()` for multi-user scenarios
 
 #### `calling-instructions.mdx`
+
 Goal: Call program instructions in every possible way.
 
 - Default call: `await sol.counter.increment({ ... })` → signature
@@ -196,6 +208,7 @@ Goal: Call program instructions in every possible way.
 - Signer auto-fill: when `bs.signer()` accounts are omitted
 
 #### `fetching-accounts.mdx`
+
 Goal: Derive PDAs and fetch typed account data.
 
 - PDA derivation: `sol.counter.accounts.Counter.derive({ authority })`
@@ -205,6 +218,7 @@ Goal: Derive PDAs and fetch typed account data.
 - Seed field types: what types can be PDA seeds
 
 #### `errors.mdx`
+
 Goal: Catch and parse typed program errors.
 
 - Transaction failures throw generic errors from RPC
@@ -214,6 +228,7 @@ Goal: Catch and parse typed program errors.
 - Mapping error names back to your program definition
 
 #### `events.mdx`
+
 Goal: Decode Anchor events from transaction logs.
 
 - `sol.counter.parseEvents(logs)` → `ParsedEvent[]`
@@ -222,15 +237,16 @@ Goal: Decode Anchor events from transaction logs.
 - Getting logs from `rpc.getTransaction()` or simulate results
 
 #### `multi-instruction.mdx`
+
 Goal: Compose multiple instructions into single or sequential transactions.
 
 - `sol.send([...])` — multiple instructions in one transaction
 - `sol.batch([...])` — non-divisible sequential plan (all-or-nothing)
 - `sol.steps([...])` — sequential steps with dependency passing
 - Composing with `.instruction()` from different programs
-- Instruction plans: re-exported Kit plan utilities
 
 #### `tokens.mdx`
+
 Goal: Create, mint, transfer, and query tokens.
 
 - `sol.token` (Token) and `sol.token2022` (Token-2022) — identical API
@@ -241,6 +257,7 @@ Goal: Create, mint, transfer, and query tokens.
 - Balance: `sol.token.getBalance({ owner, mint })`
 
 #### `sol-transfers.mdx`
+
 Goal: Transfer SOL and query balances.
 
 - `sol.transfer({ to, amount })` — send SOL
@@ -252,6 +269,7 @@ Goal: Transfer SOL and query balances.
 ### Advanced
 
 #### `address-lookup-tables.mdx`
+
 Goal: Configure ALTs for compact transaction encoding.
 
 - Why ALTs matter: reducing transaction size for programs with many accounts
@@ -260,6 +278,7 @@ Goal: Configure ALTs for compact transaction encoding.
 - Signer accounts excluded from ALT resolution
 
 #### `durable-nonce.mdx`
+
 Goal: Sign transactions offline with durable nonce.
 
 - Why durable nonce: offline signing, transaction queueing
@@ -268,6 +287,7 @@ Goal: Sign transactions offline with durable nonce.
 - Creating a nonce account (requires separate setup)
 
 #### `compute-budget.mdx`
+
 Goal: Set compute unit limits and priority fees.
 
 - Configuration: `computeUnits: { limit, price }` in `betterSol()`
@@ -275,6 +295,7 @@ Goal: Set compute unit limits and priority fees.
 - How it works: `setComputeUnitLimit` and `setComputeUnitPrice` instructions prepended
 
 #### `from-idl.mdx`
+
 Goal: Use any existing Anchor program with a typed client.
 
 - `fromIdl(idlJson)` — import Anchor IDL
@@ -284,9 +305,10 @@ Goal: Use any existing Anchor program with a typed client.
 - Optional accounts and nested items
 
 #### `wallet-adapters.mdx`
+
 Goal: Connect browser wallets to the client.
 
-- `walletAdapter()` from `better-sol/wallets/wallet-adapter`
+- `walletAdapter()` from `better-sol/wallets`
 - `reownWallet()` from `better-sol/wallets/reown`
 - `privyWallet()` from `better-sol/wallets/privy`
 - `dynamicWallet()` from `better-sol/wallets/dynamic`
@@ -294,6 +316,7 @@ Goal: Connect browser wallets to the client.
 - Multiple users: different signers on the same base client
 
 #### `custom-rpc.mdx`
+
 Goal: Use custom RPC endpoints and self-host the compiler.
 
 - Custom RPC: `rpcUrl` in config (requires `rpcSubscriptionsUrl` for WebSocket)
@@ -305,6 +328,7 @@ Goal: Use custom RPC endpoints and self-host the compiler.
 ### CLI
 
 #### `creating-programs.mdx`
+
 Goal: Scaffold a new program with the CLI.
 
 - `npx @better-sol/cli create <name>` — what it generates
@@ -313,6 +337,7 @@ Goal: Scaffold a new program with the CLI.
 - The generated template: basic account, init instruction, program config
 
 #### `deploying.mdx`
+
 Goal: Deploy a program from TypeScript to on-chain.
 
 - `npx @better-sol/cli deploy` — full pipeline (parse → generate Rust → compile → deploy)
@@ -324,6 +349,7 @@ Goal: Deploy a program from TypeScript to on-chain.
 - Login first: `npx @better-sol/cli login`
 
 #### `generating-db-schemas.mdx`
+
 Goal: Generate a Drizzle ORM schema from account definitions.
 
 - `npx @better-sol/cli generate db`
@@ -332,6 +358,7 @@ Goal: Generate a Drizzle ORM schema from account definitions.
 - Generated schema: type mappings (u64 → bigint, pubkey → text, etc.)
 
 #### `verified-builds.mdx`
+
 Goal: Submit a deployed program for OtterSec verified builds.
 
 - `npx @better-sol/cli verify <program>`
@@ -339,6 +366,7 @@ Goal: Submit a deployed program for OtterSec verified builds.
 - Options: `--program-id`, `--lib-name`, `--mount-path`
 
 #### `configuration.mdx`
+
 Goal: Configure the CLI with `better-sol.config.ts`.
 
 - `defineConfig({ programs, cluster, out })`
@@ -350,6 +378,7 @@ Goal: Configure the CLI with `better-sol.config.ts`.
 ### Recipes
 
 #### `counter.mdx`
+
 Goal: A complete reference counter implementation — the "todo list" of Solana programs.
 
 - Full program: init, increment, decrement, toggle, close, token reward (CPI)
@@ -358,6 +387,7 @@ Goal: A complete reference counter implementation — the "todo list" of Solana 
 - This is the page people copy-paste to get started
 
 #### `token-rewards.mdx`
+
 Goal: Mint and transfer tokens from on-chain via CPI.
 
 - Program with `cpi.token.mintTo()` in `run()` body
@@ -366,6 +396,7 @@ Goal: Mint and transfer tokens from on-chain via CPI.
 - Client-side: creating the mint, calling the reward instruction
 
 #### `nft-mint.mdx`
+
 Goal: Create and manage NFTs with the token client.
 
 - Create mint with decimals 0 and supply 1
@@ -374,6 +405,7 @@ Goal: Create and manage NFTs with the token client.
 - Token-2022 NFT with extensions
 
 #### `escrow.mdx`
+
 Goal: Build an escrow program with PDA vault and conditional release.
 
 - Escrow account: buyer, seller, amount, token mint, state
@@ -383,6 +415,7 @@ Goal: Build an escrow program with PDA vault and conditional release.
 - Client: full flow from create to release
 
 #### `marketplace.mdx`
+
 Goal: Build a marketplace with `bs.remaining()` for dynamic account lists.
 
 - Listing account: seller, price, token mint

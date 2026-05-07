@@ -12,7 +12,7 @@ Analysis of official Solana SDKs, Anchor, and competing approaches. Used to info
 - Uses `@solana-program/token` and `@solana-program/system` for token and SOL operations
 - Follows the `TransactionSigner` interface for wallet integration
 - Uses `Instruction` type as the return type for `.instruction()` method
-- Re-exports instruction plan utilities (`sequentialInstructionPlan`, `parallelInstructionPlan`, etc.)
+- Re-exports `nonDivisibleSequentialInstructionPlan` and `flattenInstructionPlan` for instruction plan composition
 
 ### What better-sol Abstracts Away
 
@@ -85,7 +85,7 @@ By targeting Anchor Rust as transpiler output, better-sol programs are auditable
 
 ---
 
-## 4. Completed Ecosystem Features
+## 4. Completed Features
 
 All P1 and P2 features from the original ecosystem analysis are now implemented:
 
@@ -112,7 +112,7 @@ All P1 and P2 features from the original ecosystem analysis are now implemented:
 
 **Decision**: Error parsing (`parseErrors`) and event parsing (`parseEvents`) are instance methods on the program client, not standalone functions.
 
-**Rationale**: Consistency (every program interaction goes through `sol.counter.X()`), discoverability (autocomplete shows everything), caching (discriminator index lives on the instance), and encapsulation (user doesn't need a separate program reference). The internal module boundary (`events.ts`) exports standalone functions for direct testing.
+**Rationale**: Consistency (every program interaction goes through `sol.counter.X()`), discoverability (autocomplete shows everything), caching (discriminator index lives on the instance), and encapsulation (user doesn't need a separate program reference).
 
 ### Proxy vs Static Object
 

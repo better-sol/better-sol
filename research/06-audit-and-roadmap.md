@@ -8,24 +8,33 @@ Current implementation state, type-safety audit results, and future improvements
 
 ### Test Coverage
 
-**183 passing tests** across 11 files. Zero lint errors, zero type errors, zero build errors.
+- **95 SDK tests** across 6 files (170 expect calls)
+- **87 CLI tests** across 5 files (377 expect calls)
+- Zero lint errors, zero type errors, zero build errors
 
-### Module Sizes
+### SDK Module Layout
 
-| Module | LOC | Description |
-|---|---|---|
-| `src/program.ts` | 497 | Program definition DSL (bs namespace) |
-| `src/client/factory.ts` | 478 | Client factory, Proxy-based program client |
-| `src/client/transaction.ts` | 332 | Build/sign/send with WebSocket confirmation |
-| `src/client/types.ts` | 252 | All type definitions, config types |
-| `src/coder.ts` | 416 | Borsh + zero-copy encode/decode |
-| `src/idl.ts` | 223 | fromIdl() Anchor IDL import |
-| `src/client/events.ts` | 129 | Error parsing + event decoding |
-| `src/client/token-client.ts` | 79 | Token + Token-2022 operations |
-| `src/client/signer.ts` | 70 | Keypair loading, seed encoding |
-| `src/client/lookup-tables.ts` | 63 | Address lookup table resolution |
-| `src/client/bound-account.ts` | 57 | PDA derivation + account fetch |
-| **Total SDK** | **2,596** | |
+| Module | Description |
+|---|---|
+| `src/program.ts` | Program definition DSL (`bs` namespace) |
+| `src/codec.ts` | Borsh + zero-copy encode/decode |
+| `src/idl.ts` | `fromIdl()` Anchor IDL import |
+| `src/index.ts` | Public API entrypoint |
+| `src/client/factory.ts` | Client factory, Proxy-based program client |
+| `src/client/transaction.ts` | Build/sign/send with WebSocket confirmation |
+| `src/client/types.ts` | All type definitions, config types |
+| `src/client/events.ts` | Error parsing + event decoding |
+| `src/client/token-client.ts` | Token + Token-2022 operations |
+| `src/client/signer.ts` | Keypair loading, seed encoding |
+| `src/client/lookup-tables.ts` | Address lookup table resolution |
+| `src/client/bound-account.ts` | PDA derivation + account fetch |
+
+### Build Tooling
+
+- **tsdown** for both SDK and CLI (single build tool, replaces tsc + bun build)
+- **`#*` import aliases** via Node.js subpath imports (package.json + tsconfig paths)
+- SDK: `platform: "neutral"`, 7 entrypoints, code splitting
+- CLI: `platform: "node"`, single bundled entry, version injection via `define`
 
 ### Feature Completeness
 
@@ -57,9 +66,6 @@ Current implementation state, type-safety audit results, and future improvements
 | Anchor event parsing | **Done** |
 | Instruction plan composability | **Done** |
 | Transaction notifications | **Done** |
-| Proxy-based program client (tRPC pattern) | **Done** |
-| Split client into modules | **Done** |
-| Standalone codec exports | **Done** |
 
 ---
 
@@ -95,7 +101,6 @@ Extracted to `program.ts` for reuse:
 - `hasInnerToken(token)` — checks for `option`, `vec` inner type
 - `hasInnerAndSizeToken(token)` — checks for `vec` with size, `array`
 - `innerOfToken(token)` — extracts inner type token
-- `sizeOfToken(token)` — extracts array size
 
 ---
 
@@ -150,7 +155,7 @@ instruction params
 | Feature | Description | Priority |
 |---|---|---|
 | Metaplex token-metadata helpers | `sol.metaplex.createMetadata(...)`, `updateMetadata()` for NFT operations | P3 |
-| Codama IDL bridge | `fromCodama(idl)` for compatibility with newer Solana IDL format (used by `@solana-program/*` packages) | P3 |
+| Codama IDL bridge | `fromCodama(idl)` for compatibility with newer Solana IDL format | P3 |
 | Watch mode | `deploy --watch` — file watcher recompiles on change | P3 |
 | VS Code extension | Diagnostics, autocomplete for `bs.*` constraints and `cpi.*` stubs | P4 |
 | Parallel instruction plan execution | `parallelInstructionPlan()` composition in `sol.send()` | P3 |
@@ -167,7 +172,7 @@ instruction params
 | Change | Description | Priority |
 |---|---|---|
 | Extract codec as standalone package | `@better-sol/codec` for use by indexers/explorers without full client dependency | P3 |
-| Streaming event subscription | WebSocket-based `program.addEventListener()` for real-time event listening (not just post-hoc parsing) | P3 |
+| Streaming event subscription | WebSocket-based `program.addEventListener()` for real-time event listening | P3 |
 | Transaction builder pattern | Fluent API for composing complex multi-instruction transactions with conditional logic | P4 |
 
 ---
