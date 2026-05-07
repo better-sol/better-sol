@@ -5,10 +5,13 @@ import Icons from "unplugin-icons/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { cloudflare } from "@cloudflare/vite-plugin";
+import mdx from "fumadocs-mdx/vite";
+import * as MdxConfig from "./source.config";
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
+    mdx(MdxConfig),
     Icons({ compiler: "jsx", jsx: "react" }),
     devtools(),
     cloudflare({ viteEnvironment: { name: "ssr" } }),

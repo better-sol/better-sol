@@ -1,5 +1,6 @@
 import {
   HeadContent,
+  Outlet,
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router";
@@ -10,6 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { FormDevtoolsPanel } from "@tanstack/react-form-devtools";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import { Toast } from "@heroui/react";
+import { RootProvider } from "fumadocs-ui/provider/tanstack";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -34,8 +36,16 @@ export const Route = createRootRouteWithContext<{
       },
     ],
   }),
-  shellComponent: RootDocument,
+  shellComponent: RootComponent,
 });
+
+function RootComponent() {
+  return (
+    <RootDocument>
+      <Outlet />
+    </RootDocument>
+  );
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
@@ -44,7 +54,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="antialiased bg-background">
-        {children}
+        <RootProvider theme={{ enabled: false }}>{children}</RootProvider>
         <Toast.Provider />
         <TanStackDevtools
           config={{

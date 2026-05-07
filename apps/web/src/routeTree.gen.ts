@@ -9,12 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as LlmsFullDottxtRouteImport } from './routes/llms-full[.]txt'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout.index'
+import { Route as DocsSplatRouteImport } from './routes/docs.$'
+import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiCompileRouteImport } from './routes/api/compile'
 import { Route as LayoutDashIndexRouteImport } from './routes/_layout.dash.index'
+import { Route as LlmsDotmdxDocsSplatRouteImport } from './routes/llms[.]mdx.docs.$'
 import { Route as LayoutDashKeysRouteImport } from './routes/_layout.dash.keys'
 
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LlmsFullDottxtRoute = LlmsFullDottxtRouteImport.update({
+  id: '/llms-full.txt',
+  path: '/llms-full.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
   getParentRoute: () => rootRouteImport,
@@ -23,6 +38,16 @@ const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => LayoutRoute,
+} as any)
+const DocsSplatRoute = DocsSplatRouteImport.update({
+  id: '/docs/$',
+  path: '/docs/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSearchRoute = ApiSearchRouteImport.update({
+  id: '/api/search',
+  path: '/api/search',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCompileRoute = ApiCompileRouteImport.update({
   id: '/api/compile',
@@ -34,6 +59,11 @@ const LayoutDashIndexRoute = LayoutDashIndexRouteImport.update({
   path: '/dash/',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LlmsDotmdxDocsSplatRoute = LlmsDotmdxDocsSplatRouteImport.update({
+  id: '/llms.mdx/docs/$',
+  path: '/llms.mdx/docs/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LayoutDashKeysRoute = LayoutDashKeysRouteImport.update({
   id: '/dash/keys',
   path: '/dash/keys',
@@ -42,45 +72,102 @@ const LayoutDashKeysRoute = LayoutDashKeysRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/llms-full.txt': typeof LlmsFullDottxtRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/api/compile': typeof ApiCompileRoute
+  '/api/search': typeof ApiSearchRoute
+  '/docs/$': typeof DocsSplatRoute
   '/dash/keys': typeof LayoutDashKeysRoute
+  '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/dash/': typeof LayoutDashIndexRoute
 }
 export interface FileRoutesByTo {
+  '/llms-full.txt': typeof LlmsFullDottxtRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/api/compile': typeof ApiCompileRoute
+  '/api/search': typeof ApiSearchRoute
+  '/docs/$': typeof DocsSplatRoute
   '/': typeof LayoutIndexRoute
   '/dash/keys': typeof LayoutDashKeysRoute
+  '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/dash': typeof LayoutDashIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/llms-full.txt': typeof LlmsFullDottxtRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/api/compile': typeof ApiCompileRoute
+  '/api/search': typeof ApiSearchRoute
+  '/docs/$': typeof DocsSplatRoute
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/dash/keys': typeof LayoutDashKeysRoute
+  '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/_layout/dash/': typeof LayoutDashIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/compile' | '/dash/keys' | '/dash/'
+  fullPaths:
+    | '/'
+    | '/llms-full.txt'
+    | '/llms.txt'
+    | '/api/compile'
+    | '/api/search'
+    | '/docs/$'
+    | '/dash/keys'
+    | '/llms.mdx/docs/$'
+    | '/dash/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/compile' | '/' | '/dash/keys' | '/dash'
+  to:
+    | '/llms-full.txt'
+    | '/llms.txt'
+    | '/api/compile'
+    | '/api/search'
+    | '/docs/$'
+    | '/'
+    | '/dash/keys'
+    | '/llms.mdx/docs/$'
+    | '/dash'
   id:
     | '__root__'
     | '/_layout'
+    | '/llms-full.txt'
+    | '/llms.txt'
     | '/api/compile'
+    | '/api/search'
+    | '/docs/$'
     | '/_layout/'
     | '/_layout/dash/keys'
+    | '/llms.mdx/docs/$'
     | '/_layout/dash/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
+  LlmsFullDottxtRoute: typeof LlmsFullDottxtRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   ApiCompileRoute: typeof ApiCompileRoute
+  ApiSearchRoute: typeof ApiSearchRoute
+  DocsSplatRoute: typeof DocsSplatRoute
+  LlmsDotmdxDocsSplatRoute: typeof LlmsDotmdxDocsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms-full.txt': {
+      id: '/llms-full.txt'
+      path: '/llms-full.txt'
+      fullPath: '/llms-full.txt'
+      preLoaderRoute: typeof LlmsFullDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_layout': {
       id: '/_layout'
       path: ''
@@ -95,6 +182,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/docs/$': {
+      id: '/docs/$'
+      path: '/docs/$'
+      fullPath: '/docs/$'
+      preLoaderRoute: typeof DocsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/search': {
+      id: '/api/search'
+      path: '/api/search'
+      fullPath: '/api/search'
+      preLoaderRoute: typeof ApiSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/compile': {
       id: '/api/compile'
       path: '/api/compile'
@@ -108,6 +209,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dash/'
       preLoaderRoute: typeof LayoutDashIndexRouteImport
       parentRoute: typeof LayoutRoute
+    }
+    '/llms.mdx/docs/$': {
+      id: '/llms.mdx/docs/$'
+      path: '/llms.mdx/docs/$'
+      fullPath: '/llms.mdx/docs/$'
+      preLoaderRoute: typeof LlmsDotmdxDocsSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_layout/dash/keys': {
       id: '/_layout/dash/keys'
@@ -136,7 +244,12 @@ const LayoutRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
+  LlmsFullDottxtRoute: LlmsFullDottxtRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   ApiCompileRoute: ApiCompileRoute,
+  ApiSearchRoute: ApiSearchRoute,
+  DocsSplatRoute: DocsSplatRoute,
+  LlmsDotmdxDocsSplatRoute: LlmsDotmdxDocsSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
 
 @font-face {
   font-family: "Satoshi";
@@ -27,7 +29,6 @@
 }
 
 @layer base {
-
   h1,
   h2,
   h3,
