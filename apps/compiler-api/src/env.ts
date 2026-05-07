@@ -8,6 +8,7 @@ export const env = createEnv({
     REQUEST_TIMEOUT_SECS: z.coerce.number().default(30),
     BUILD_TIMEOUT_SECS: z.coerce.number().default(120),
     ENABLE_BUILD: z.coerce.boolean().default(false),
+    COMPILER_API_KEY: z.string().min(1),
   },
 
   runtimeEnv: Bun.env,

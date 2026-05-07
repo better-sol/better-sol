@@ -23,6 +23,8 @@ const RequestSchema = z.object({
 const COMPILER_URL =
   process.env.COMPILER_API_URL ?? "https://api.better-sol.fun";
 
+const COMPILER_API_KEY = process.env.COMPILER_API_KEY;
+
 const ANONYMOUS_LIMIT_PER_HOUR = 3;
 const AUTHENTICATED_LIMIT_PER_HOUR = 50;
 
@@ -163,7 +165,10 @@ export const Route = createFileRoute("/api/compile")({
 
         const compilerResponse = await fetch(`${COMPILER_URL}/compile`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(COMPILER_API_KEY !== undefined ? { "x-api-key": COMPILER_API_KEY } : {}),
+          },
           body: JSON.stringify({
             name: data.name,
             programId: data.programId,

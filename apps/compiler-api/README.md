@@ -13,6 +13,8 @@ This is an internal service. The CLI communicates with it during `deploy`. You d
 
 ### `POST /compile`
 
+Requires `x-api-key` header matching `COMPILER_API_KEY`. Returns 401 if missing or incorrect.
+
 Accepts a JSON body:
 
 ```json
@@ -48,6 +50,7 @@ Returns:
 | `REQUEST_TIMEOUT_SECS` | `30` | HTTP request timeout |
 | `BUILD_TIMEOUT_SECS` | `120` | `cargo build-sbf` timeout |
 | `ENABLE_BUILD` | `false` | Set to `true` to actually run `cargo build-sbf` |
+| `COMPILER_API_KEY` | (required) | API key for authenticating requests via `x-api-key` header |
 
 When `ENABLE_BUILD` is `false`, requests succeed without compiling and return `status: "failed"` with `bytecode: null`. This is the default for development. Set to `true` in production.
 

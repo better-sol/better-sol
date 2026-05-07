@@ -11,6 +11,10 @@ export class ApiError extends Error {
     return new ApiError(message, 400);
   }
 
+  public static unauthorized(): ApiError {
+    return new ApiError("missing or invalid API key", 401);
+  }
+
   public static buildFailed(logs: string): ApiError {
     return new ApiError(logs, 422);
   }

@@ -2,6 +2,11 @@ import { env } from "./env";
 import { compile, type CompileOutput } from "./compile";
 import { ApiError } from "./errors";
 
+function requireApiKey(req: Request): void {
+  const key = req.headers.get("x-api-key");
+  if (key !== env.COMPILER_API_KEY) throw ApiError.unauthorized();
+}
+
 const server = Bun.serve({
   port: env.PORT,
   maxRequestBodySize: env.MAX_BODY_BYTES,
@@ -12,6 +17,8 @@ const server = Bun.serve({
 
     "/compile": {
       POST: async (req): Promise<Response> => {
+        requireApiKey(req);
+
         let body: unknown;
         try {
           body = await req.json();
