@@ -5,5 +5,6 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: "Better Sol",
     },
+    githubUrl: "https://github.com/powxenv/better-sol/",
   };
 }
