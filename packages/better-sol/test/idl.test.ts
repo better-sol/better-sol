@@ -15,14 +15,15 @@ describe("fromIdl", () => {
     expect(Object.keys(prog.accounts)).toEqual([]);
   });
 
-  test("parses an IDL with address in metadata", () => {
+  test("parses an IDL with address at top level", () => {
     const idl = {
-      name: "with_address",
+      address: "MyPr0g11111111111111111111111111111111111",
+      metadata: { name: "my_program", version: "1.0.0", spec: "0.1.0" },
       instructions: [],
-      metadata: { address: "MyPr0g11111111111111111111111111111111111" },
-    };
+    } as AnchorIdl;
     const prog = fromIdl(idl);
     expect(prog.address).toBe("MyPr0g11111111111111111111111111111111111");
+    expect(prog.name).toBe("my_program");
   });
 
   test("parses instructions with accounts and args", () => {
@@ -73,18 +74,22 @@ describe("fromIdl", () => {
     expect(prog.instructions.ping!.args).toBeUndefined();
   });
 
-  test("parses accounts", () => {
+  test("resolves account fields from types array", () => {
     const idl = {
       name: "counter",
+      address: "Ctr11111111111111111111111111111111111111",
       instructions: [],
       accounts: [
+        { name: "Counter", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+      types: [
         {
           name: "Counter",
           type: {
             kind: "struct" as const,
             fields: [
               { name: "count", type: "u64" as const },
-              { name: "authority", type: "publicKey" as const },
+              { name: "authority", type: "pubkey" as const },
             ],
           },
         },
@@ -94,6 +99,18 @@ describe("fromIdl", () => {
     expect(Object.keys(prog.accounts)).toEqual(["Counter"]);
     expect(prog.accounts["Counter"]!.fields.count!.kind).toBe("u64");
     expect(prog.accounts["Counter"]!.fields.authority!.kind).toBe("pubkey");
+  });
+
+  test("skips accounts with no matching type definition", () => {
+    const idl = {
+      name: "test",
+      instructions: [],
+      accounts: [
+        { name: "NoFields", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(Object.keys(prog.accounts)).toEqual([]);
   });
 
   test("parses errors", () => {
@@ -145,7 +162,6 @@ describe("fromIdl", () => {
   test("handles readonly non-signer account", () => {
     const idl = {
       name: "test",
-      metadata: { address: "11111111111111111111111111111111" },
       instructions: [
         {
           name: "read",
@@ -167,8 +183,12 @@ describe("fromIdl", () => {
   test("parses compound IDL types", () => {
     const idl = {
       name: "complex",
+      address: "Cmpx11111111111111111111111111111111111111",
       instructions: [],
       accounts: [
+        { name: "Complex", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+      types: [
         {
           name: "Complex",
           type: {
@@ -204,18 +224,22 @@ describe("fromIdl", () => {
 
   test("parses a realistic multi-instruction IDL", () => {
     const idl = {
-      name: "amm",
+      address: "AMM111111111111111111111111111111111111111",
+      metadata: { name: "amm", version: "1.0.0", spec: "0.1.0" },
       instructions: [
         { name: "initializeConfig", accounts: [{ name: "config", writable: true, signer: false }, { name: "admin", writable: false, signer: true }], args: [] },
         { name: "createPool", accounts: [{ name: "config", writable: true, signer: false }, { name: "pool", writable: true, signer: false }, { name: "creator", writable: false, signer: true }], args: [{ name: "feeBps", type: "u64" as const }] },
         { name: "swap", accounts: [{ name: "pool", writable: true, signer: false }, { name: "reserveIn", writable: true, signer: false }, { name: "reserveOut", writable: true, signer: false }, { name: "trader", writable: false, signer: true }], args: [{ name: "amountIn", type: "u64" as const }, { name: "minOut", type: "u64" as const }] },
       ],
       accounts: [
-        { name: "Config", type: { kind: "struct" as const, fields: [{ name: "admin", type: "publicKey" as const }, { name: "feeBps", type: "u64" as const }, { name: "bump", type: "u8" as const }] } },
-        { name: "Pool", type: { kind: "struct" as const, fields: [{ name: "tokenAMint", type: "publicKey" as const }, { name: "tokenBMint", type: "publicKey" as const }, { name: "lpSupply", type: "u64" as const }] } },
+        { name: "Config", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+        { name: "Pool", discriminator: [9, 10, 11, 12, 13, 14, 15, 16] },
+      ],
+      types: [
+        { name: "Config", type: { kind: "struct" as const, fields: [{ name: "admin", type: "pubkey" as const }, { name: "feeBps", type: "u64" as const }, { name: "bump", type: "u8" as const }] } },
+        { name: "Pool", type: { kind: "struct" as const, fields: [{ name: "tokenAMint", type: "pubkey" as const }, { name: "tokenBMint", type: "pubkey" as const }, { name: "lpSupply", type: "u64" as const }] } },
       ],
       errors: [{ code: 6000, name: "SlippageExceeded", msg: "Output below minimum" }],
-      metadata: { address: "AMM111111111111111111111111111111111111111" },
     } as AnchorIdl;
     const prog = fromIdl(idl);
     expect(prog.name).toBe("amm");
@@ -231,22 +255,15 @@ describe("fromIdl", () => {
     expect(prog.errors).toEqual({ SlippageExceeded: "Output below minimum" });
   });
 
-  test("accepts full Anchor IDL format with address at top level", () => {
-    const idl = {
-      address: "MyPr0g11111111111111111111111111111111111",
-      metadata: { name: "my_program", version: "1.0.0", spec: "0.1.0" },
-      instructions: [],
-    } as AnchorIdl;
-    const prog = fromIdl(idl);
-    expect(prog.address).toBe("MyPr0g11111111111111111111111111111111111");
-    expect(prog.name).toBe("my_program");
-  });
-
   test("accepts coption type", () => {
     const idl = {
       name: "test",
+      address: "Test1111111111111111111111111111111111111",
       instructions: [],
       accounts: [
+        { name: "Data", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+      types: [
         {
           name: "Data",
           type: {
@@ -300,5 +317,32 @@ describe("fromIdl", () => {
     const prog = fromIdl(idl);
     const ix = prog.instructions.maybe!;
     expect(Object.keys(ix.accounts)).toEqual(["required"]);
+  });
+
+  test("resolves event fields from types array", () => {
+    const idl = {
+      name: "test",
+      address: "Test1111111111111111111111111111111111111",
+      instructions: [],
+      events: [
+        { name: "Staked", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+      types: [
+        {
+          name: "Staked",
+          type: {
+            kind: "struct" as const,
+            fields: [
+              { name: "user", type: "pubkey" as const },
+              { name: "amount", type: "u64" as const },
+            ],
+          },
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    expect(Object.keys(prog.events)).toEqual(["Staked"]);
+    const stakedFields = prog.events["Staked"]!;
+    expect(Object.keys(stakedFields)).toEqual(["user", "amount"]);
   });
 });

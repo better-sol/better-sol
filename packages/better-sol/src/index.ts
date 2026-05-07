@@ -31,7 +31,7 @@ export type {
 } from "#program";
 
 export { fromIdl } from "#idl";
-export type { AnchorIdl, IdlProgram, IdlField, IdlType, IdlDiscriminator } from "#idl";
+export type { AnchorIdl, IdlProgram, IdlField, IdlType, IdlDiscriminator, IdlInstruction, IdlInstructionAccount, IdlAccount, IdlTypeDef, IdlMetadata, IdlErrorCode, IdlEvent, TypedIdlProgram, TypedIdlInstructionNames, TypedIdlAccountNames, TypedIdlErrorNames, TypedIdlParams } from "#idl";
 
 export {
   nonDivisibleSequentialInstructionPlan,
