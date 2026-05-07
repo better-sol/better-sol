@@ -21,7 +21,7 @@ const RequestSchema = z.object({
 });
 
 const COMPILER_URL =
-  process.env.COMPILER_API_URL ?? "https://api.better-sol.dev";
+  process.env.COMPILER_API_URL ?? "https://api.better-sol.fun";
 
 const ANONYMOUS_LIMIT_PER_HOUR = 3;
 const AUTHENTICATED_LIMIT_PER_HOUR = 50;
