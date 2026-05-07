@@ -3,7 +3,7 @@
   "imports": {
     "#*": "./src/*"
   },
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "TypeScript-first Solana program tooling — transpile, compile, and deploy to Solana",
   "license": "MIT",
   "type": "module",
@@ -37,6 +37,9 @@
     "type": "git",
     "url": "git+https://github.com/powxenv/better-sol.git",
     "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "homepage": "https://github.com/powxenv/better-sol/tree/main/packages/cli",
   "dependencies": {
