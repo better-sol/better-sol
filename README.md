@@ -1,104 +1,116 @@
-# better-sol monorepo
+# Better Sol
 
-**One TypeScript program definition → on-chain Anchor Rust + typed client SDK + DB schema.**
+Write Solana programs in TypeScript. One file defines your accounts and instructions. Deploy on-chain from that same file, and get a fully typed client with no extra steps.
 
-Stop maintaining separate Anchor Rust programs and hand-written TypeScript clients. Write your Solana program once in TypeScript. Derive everything else from it.
+```ts
+// programs/counter.ts
+import { bs, cpi } from "better-sol/program"
+
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+}).derive(seed => ["counter", seed.authority])
+
+export const counter = bs.program({ name: "counter", address: "<key>" }, ix => ({
+  increment: ix({
+    accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+    args: { amount: bs.u64() },
+    run: ({ counter }, { amount }) => { counter.count += amount },
+  }),
+}))
+```
+
+Deploy:
 
 ```bash
-# Create a program (no installation needed — runs via npx/bunx)
-npx @better-sol/cli create counter
-
-# Edit programs/counter.ts with your logic
-
-# Generate Rust for local review
-npx @better-sol/cli deploy --dry-run
-
-# Compile and deploy to devnet
 npx @better-sol/cli deploy
+```
 
-# Use the typed SDK client-side
+Use from your app:
+
+```ts
+import { betterSol } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs: { counter } })
+const addr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
+await sol.counter.increment({ counter: addr, amount: 5n })
+const data = await sol.counter.accounts.Counter.fetch(addr)
+```
+
+No separate IDL to maintain. No hand-written client types. No code generation step. The same TypeScript file is the source of truth for deployment and for the client.
+
+## Quick start
+
+```bash
+npx @better-sol/cli init                    # scaffold project + payer keypair
+npx @better-sol/cli create counter          # create a program
+npx @better-sol/cli deploy                  # compile and deploy to devnet
+```
+
+Your program is on-chain. Connect from TypeScript:
+
+```bash
 npm install better-sol
 ```
 
----
+Follow the [Getting Started](https://better-sol.dev/docs) guide for the full walkthrough.
 
 ## Packages
 
-| Package | Description | Install |
+| Package | What it does | Install |
 |---|---|---|
-| [`better-sol`](packages/better-sol) | Runtime SDK: program definition DSL, typed client, wallet adapters, token helpers, `fromIdl()` | `bun add better-sol` |
-| [`@better-sol/cli`](packages/cli) | CLI: TypeScript → Anchor Rust transpiler, cloud compiler, deploy, DB schema generation | `bun add -D @better-sol/cli` |
-| `apps/compiler-api` | Rust + Axum cloud compiler API (internal, optional) | — |
+| [better-sol](packages/better-sol) | Program definition DSL, typed client, token helpers, `fromIdl()` | `npm install better-sol` |
+| [@better-sol/cli](packages/cli) | Create, deploy, generate schemas, import external programs | runs via `npx`, no install needed |
 
-The runtime library and CLI are published as separate npm packages so the runtime stays lean — no transpiler code ships to browser bundles.
+The runtime SDK has zero transpiler code. Nothing from the CLI ships to browser bundles.
 
----
+## What you get
 
-## Architecture
+**Program definition.** Define accounts with typed fields, PDA seeds, zero-copy layouts, custom errors, and events. All in TypeScript, all type-checked.
 
-```
-programs/counter.ts (TypeScript definition)
-         │
-         ├── ▶ better-sol (runtime) — typed client SDK
-         │                    instruction calls, PDA derivation,
-         │                    account fetching, token operations
-         │
-         ├── ▶ @better-sol/cli — generates Anchor Rust + IDL
-         │                    parses TS AST → generates lib.rs
-         │                    → compiles → deploys
-         │
-         └── ▶ @better-sol/cli generate db — Drizzle ORM schema
-```
+**Deployment.** The CLI parses your TypeScript, generates Anchor Rust, compiles it via a cloud API, and deploys the `.so` binary to Solana. No local Rust toolchain needed.
 
----
+**Typed client.** Pass your program definition to `betterSol()` and get typed methods for every instruction, typed account fetching, PDA derivation, error parsing, and event parsing. The types come from your definition, not from a separate code generation step.
+
+**Token operations.** Built-in clients for SPL Token and Token-2022. Create mints, mint tokens, transfer, check balances. Associated token accounts are created automatically.
+
+**External programs.** Import any Anchor program by address or IDL file with `generate idl`. Get a typed TypeScript definition you can use the same way as your own programs. Or use `fromIdl()` to load an IDL at runtime.
 
 ## Development
 
 ```bash
-git clone <repo>
-cd better-sol
-bun install              # Install dependencies
-bun run check            # Type-check all packages
-bun run build            # Build all packages
-bun run test             # Run all tests (104 total)
-bun run lint             # Lint (oxlint)
-bun run format:check     # Format check
+bun install
+bun run check        # type-check all packages
+bun run build        # build all packages
+bun run test         # run all tests
+bun run lint         # lint with oxlint
 ```
 
 ### Workspace layout
 
 ```
-├── packages/
-│   ├── better-sol/          # Runtime library
-│   │   ├── src/
-│   │   │   ├── client.ts    # betterSol() client factory
-│   │   │   ├── program.ts   # Program DSL (program, account, p.*)
-│   │   │   ├── coder.ts     # Borsh encoder/decoder
-│   │   │   ├── idl.ts       # fromIdl() — Anchor IDL import
-│   │   │   └── wallets/     # Wallet adapter subpaths
-│   │   └── test/            # 54 tests
-│   └── cli/                 # CLI tool
-│       ├── src/
-│       │   ├── parser/      # ts-morph AST parser
-│       │   ├── generator/   # Rust code generator
-│       │   ├── commands/    # CLI commands
-│       │   └── ir/          # Intermediate representation
-│       └── test/
-│           └── fixtures/    # End-to-end program test fixtures
-└── apps/
-    └── compiler-api/        # Rust cloud compiler API (optional)
+packages/
+  better-sol/        # Runtime SDK
+    src/
+      program.ts     # bs, cpi, account definitions, constraints
+      client/        # betterSol(), typed client, transactions, tokens
+      idl.ts         # fromIdl(), AnchorIdl type
+      codec.ts       # Borsh encoder/decoder
+    test/            # 105 tests
+
+  cli/               # CLI tool
+    src/
+      parser/        # ts-morph AST parser
+      generator/     # Rust code generator + IDL code generator
+      commands/      # init, create, deploy, generate, verify, login
+      lib/           # shared config, auth, keypair, RPC helpers
+    test/
+
+apps/
+  web/               # Documentation site (Fumadocs)
+  compiler-api/      # Cloud compilation service (internal)
 ```
-
-### Tools
-
-| Tool | Purpose |
-|---|---|
-| [Bun](https://bun.sh) | Runtime, package manager, bundler, test runner |
-| TypeScript 6 | Source language |
-| [Oxlint](https://oxc.rs) | Linting |
-| [ts-morph](https://ts-morph.com) | TypeScript AST parsing (CLI only) |
-| Anchor 1.0.1 | Rust framework target |
-| [@solana/kit](https://github.com/solana-foundation/solana-web3.js) | Official Solana JS SDK |
 
 ## License
 

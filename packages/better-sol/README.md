@@ -1,802 +1,191 @@
 # better-sol
 
-**One TypeScript definition → on-chain Anchor Rust + typed client SDK + DB schema.**
+The Better Sol runtime SDK. Define Solana programs in TypeScript and get a fully typed client with no extra steps.
 
-Stop maintaining separate Anchor Rust programs and hand-written TypeScript clients. Write your Solana program once in TypeScript. Derive everything else from it.
+## Install
 
 ```bash
-# Install the runtime library
 npm install better-sol
-
-# Scaffold a program (CLI runs via npx, no install needed)
-npx @better-sol/cli create counter
-# → programs/counter.ts + .better-sol/counter.json (keypair)
-
-# Edit programs/counter.ts with your logic
-
-# Generate Rust locally (dry run — no compile)
-npx @better-sol/cli deploy --dry-run
-# → generated/counter/src/lib.rs + Cargo.toml + idl.json
-
-# Save your API key (one time)
-npx @better-sol/cli login
-
-# Compile and deploy
-npx @better-sol/cli deploy
 ```
 
----
+## Program definition
 
-## Table of Contents
-
-- [Why](#why)
-- [The CLI Flow](#the-cli-flow)
-- [Installation](#installation)
-- [CLI Commands](#cli-commands)
-- [Configuration](#configuration)
-- [Program SDK (`better-sol/program`)](#program-sdk-better-solprogram)
-- [Client SDK](#client-sdk)
-- [Token Operations](#token-operations)
-- [Browser & Wallet Support](#browser--wallet-support)
-- [fromIdl — Use Any Anchor Program](#fromidl--use-any-anchor-program)
-- [Package Exports](#package-exports)
-- [Default Values](#default-values)
-- [Current Limitations](#current-limitations)
-
----
-
-## Why
-
-Building on Solana today means maintaining separate codebases that drift out of sync:
-
-| Layer | Problem |
-|---|---|
-| On-chain logic | Rust (Anchor) — must match client types manually |
-| Client SDK | TypeScript — hand-written, types out of sync with program |
-| DB schema | SQL — manually mapped from Rust structs |
-
-**better-sol** solves this by using a single TypeScript definition as the source of truth for all outputs:
-
-```
-programs/counter.ts  (TypeScript)
-    │
-    ├── ▶ better-sol (runtime)  → typed client SDK (instructions, accounts, PDAs)
-    │
-    ├── ▶ @better-sol/cli       → Anchor Rust + IDL (lib.rs, Cargo.toml, idl.json)
-    │                            compiles via cloud API, deploys to chain
-    │
-    └── ▶ @better-sol/cli generate db → Drizzle ORM schema
-```
-
----
-
-## The CLI Flow
-
-### Create a program
-
-```bash
-bunx @better-sol/cli create <name>
-```
-
-This scaffolds a TypeScript program file and generates a program keypair:
-
-```
-programs/<name>.ts         ← your program definition
-.better-sol/<name>.json    ← keypair (private, git-ignored)
-```
-
-The generated keypair's public key is embedded as your program address. You can replace it later.
-
-### Edit the definition
-
-Edit the generated file to define accounts, instructions, errors, events, and constraints. See [Program SDK](#program-sdk-better-solprogram) below.
-
-### Generate Rust + deploy
-
-```bash
-npx @better-sol/cli deploy
-```
-
-The CLI:
-1. Parses your TypeScript AST
-2. Generates Anchor Rust (`lib.rs`, `Cargo.toml`, `idl.json`)
-3. Compiles via the cloud compiler
-4. Prepares deployment artifacts
-
-For local review without compiling:
-
-```bash
-npx @better-sol/cli deploy --dry-run
-```
-
-### Use the client SDK
+Import from `better-sol/program` to define accounts, instructions, errors, and events:
 
 ```ts
-import { betterSol, keypairFile } from "better-sol";
-import { counter } from "./programs/counter";
+import { bs, cpi } from "better-sol/program"
 
-const sol = await betterSol({
-  cluster: "devnet",
-  payer: keypairFile("./keypair.json"),
-  programs: { counter },
-});
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+}).derive(seed => ["counter", seed.authority])
 
-const addr = await sol.counter.accounts.Counter.derive({ authority: sol.payer });
-await sol.counter.increment({ counter: addr, amount: 5n });
-const data = await sol.counter.accounts.Counter.fetch(addr);
-```
-
----
-
-## Installation
-
-```bash
-# Runtime library (required for both program definition and client SDK)
-npm install better-sol
-# or
-bun add better-sol
-
-# CLI (optional — run via npx/bunx without installing)
-npx @better-sol/cli create counter
-npx @better-sol/cli deploy --src "programs/*.ts" --cluster devnet
-
-# Or install as dev dependency for local use:
-npm install -D @better-sol/cli
-```
-
----
-
-## CLI Commands
-
-### `create <name>` — Scaffold a program
-
-```bash
-bunx @better-sol/cli create counter
-# or with options:
-bunx @better-sol/cli create counter --dir src/programs --force
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--dir <dir>` | `programs` | Output directory |
-| `--force` | `false` | Overwrite existing files |
-
-Creates `programs/<name>.ts` with a working counter example and generates a keypair at `.better-sol/<name>.json`.
-
-### `deploy` — Generate Rust, compile, deploy
-
-```bash
-npx @better-sol/cli deploy
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--src <glob>` | `programs/**/*.ts` (or from config) | Glob pattern for program sources |
-| `--program <name>` | all programs | Target a specific program by name |
-| `--cluster <cluster>` | `devnet` (or from config) | `devnet`, `testnet`, `mainnet`, or `localnet` |
-| `--output <dir>` | `generated` (or from config) | Directory for generated Rust files |
-| `--dry-run` | `false` | Generate Rust only — no compile or deploy |
-| `--verify` | `false` | Write generated Rust files for verified builds |
-
-The `--dry-run` flag generates Rust to the output directory without compiling or deploying, useful for inspecting generated code before committing.
-
-### `login` — Save API key
-
-```bash
-npx @better-sol/cli login
-```
-
-Saves your API key to `~/.better-sol/auth.json`. Required before first `deploy`.
-
-### `generate db` — Generate database schema
-
-```bash
-npx @better-sol/cli generate db
-```
-
-Generates a Drizzle ORM schema from your account definitions.
-
-| Option | Default | Description |
-|---|---|---|
-| `--dialect <dialect>` | `postgres` | `postgres`, `mysql`, or `sqlite` |
-| `--out <path>` | `src/db/better-sol.ts` | Output file path |
-| `--src <glob>` | (from config) | Glob pattern for program sources |
-
-Extracts account field types and generates Drizzle table definitions with proper column types, nullability, and index hints.
-
-### `verify` — Verified builds
-
-```bash
-bunx @better-sol/cli verify <name> --program-id <address>
-```
-
-| Option | Default | Description |
-|---|---|---|
-| `--program-id <id>` | — | On-chain program ID to verify |
-| `--lib-name <name>` | program name | Rust library name |
-| `--mount-path <path>` | `generated/<name>` | Subdirectory containing `Cargo.toml` |
-
-Submits a deployed program for OtterSec verified-builds integration. Use `deploy --verify` first to write the generated Rust files, then deploy manually, then run `verify` against the on-chain program ID.
-
----
-
-## Configuration
-
-Create `better-sol.config.ts` in your project root to set default CLI options:
-
-```ts
-import { defineConfig } from "@better-sol/cli";
-
-export default defineConfig({
-  programs: "programs/**/*.ts",
-  cluster: "devnet",
-  out: "generated",
-});
-```
-
-| Field | Default | Description |
-|---|---|---|
-| `programs` | `programs/**/*.ts` | Glob pattern for finding program source files |
-| `cluster` | `devnet` | Default cluster: `devnet`, `testnet`, `mainnet`, `localnet` |
-| `out` | `generated` | Default output directory for generated Rust |
-
-The config file is optional — all fields can be overridden via CLI flags.
-
----
-
-## Program SDK (`better-sol/program`)
-
-Import from `better-sol/program` to define your Solana program:
-
-```ts
-import {
-  program, account, struct,   // definitions
-  u8, u16, u32, u64,          // number types (number → u8/u16/u32, bigint → u64)
-  i64, i128,                  // signed types (bigint)
-  bool, pubkey, string, bytes,// primitive types
-  f32, f64,                   // float types (rarely used on-chain)
-  option, vec, array,          // compound types
-  p,                          // account constraints
-  token, sol,                 // CPI stubs and sysvars
-  type InstructionAccounts,
-  type InstructionArgs,
-  type ProgramInstructions,
-  type ProgramErrors,
-  type ProgramEvents,
-  type ProgramAccounts,
-} from "better-sol/program";
-```
-
-### Defining accounts
-
-```ts
-// Standard Borsh account
-const Counter = account({
-  count: u64,           // bigint
-  authority: pubkey,    // Address (string)
-  label: option(string),// string | null
-  tags: vec(pubkey),    // Address[], max 32 entries by default
-  bump: u8,             // number
-}).derive((seed) => ["counter", seed.authority]);
-
-// Zero-copy account (Pod-safe types only)
-const Market = account({
-  baseMint: pubkey,
-  quoteMint: pubkey,
-  feeBps: u64,
-  paused: u8,           // bool is NOT allowed — use u8 flag
-  bids: array(Order, 64), // fixed-size array of zero-copy sub-structs
-}).derive((seed) => ["market", seed.baseMint, seed.quoteMint])
- .zeroCopy();
-```
-
-| Method | Description |
-|---|---|
-| `account({ field: type, ... })` | Define an account with field types |
-| `.derive((seed) => [...])` | Attach PDA seeds. Seeds are literals (`"prefix"`) or field references (`seed.fieldName`) |
-| `.zeroCopy()` | Mark account as zero-copy (Pod layout, `AccountLoader` in Rust) |
-
-**Seed rules:**
-- Literal strings become byte prefixes: `"counter"` → `b"counter"`
-- `seed.fieldName` references an account field — only pubkey and integer fields are seedable
-- The transpiler validates that each seed field is provided by an instruction arg or account with the same name during `p.create()`
-- Raw `"{argName}"` string templates are **not supported** — store dynamic values as account fields
-
-### Defining zero-copy sub-structs
-
-```ts
-const Order = struct({
-  trader: pubkey,
-  price: u64,
-  quantity: u64,
-  side: u8,
-});
-```
-
-`struct()` fields must be Pod-safe (no `bool`, `string`, `bytes`, `option`, `vec`).
-
-### Defining instructions
-
-```ts
-const program_definition = program(
-  {
-    name: "counter",
-    address: "CoUnTeR11111111111111111111111111111111111",
-    accounts: { Counter },    // optional — registers account definitions for the typed client
-    errors: {
-      Unauthorized: "Not the authority",
-      NotActive: "Counter is not active",
-    },
-    events: {
-      Incremented: { newCount: u64, authority: pubkey },
-    },
+export const counter = bs.program({
+  name: "counter",
+  address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
+  accounts: { Counter },
+  errors: {
+    Unauthorized: "Only the authority can update this counter",
+    NotActive: "Counter is not active",
   },
-  ix => ({
-    initialize: ix({
-      accounts: { counter: p.create(Counter), authority: p.signer() },
-      args: { initialValue: u64 },
-      run: ({ counter, authority }, { initialValue }) => {
-        counter.count = initialValue;
-        counter.authority = authority;
-      },
-    }),
-    increment: ix({
-      accounts: { counter: p.mut(Counter), authority: p.signer() },
-      args: { amount: u64 },
-      run: ({ counter, authority }, { amount }, ctx) => {
-        ctx.require(authority === counter.authority, "Unauthorized");
-        counter.count += amount;
-      },
-    }),
-    close: ix({
-      accounts: { counter: p.close(Counter, "authority"), authority: p.signer() },
-      run: () => {},
-    }),
-  }),
-);
-```
-
-#### Instruction `run()` signatures
-
-The callback receives only what the definition specifies:
-
-| Pattern | Callback signature |
-|---|---|
-| No accounts, no args | `(ctx) => void` |
-| Accounts only | `(accounts, ctx) => void` |
-| Args only | `(args, ctx) => void` |
-| Accounts + args | `(accounts, args, ctx) => void` |
-
-```ts
-ping: ix({ run: (ctx) => ctx.log("ping") })
-setValue: ix({ args: { value: u64 }, run: ({ value }, ctx) => {} })
-close: ix({ accounts: { vault: p.mut(Vault) }, run: ({ vault }, ctx) => {} })
-increment: ix({ accounts: { counter: p.mut(Counter) }, args: { amount: u64 }, run: ({ counter }, { amount }) => {} })
-```
-
-### Account constraints (`p.*`)
-
-| Expression | Anchor Rust equivalent | Description |
-|---|---|---|
-| `p.create(Account)` | `init, payer, space, seeds` | Create a new PDA account |
-| `p.createIfNeeded(Account)` | `init_if_needed, payer, space, seeds` | Create or reuse an existing PDA |
-| `p.mut(Account)` | `mut` | Read/write existing account |
-| `p.close(Account, "refund")` | `close = refund` | Close account, refund rent |
-| `p.signer()` | `Signer` | Transaction signer (auto-fills from active payer) |
-| `p.mint()` | `Account<Mint>` | SPL Mint account |
-| `p.tokenAccount()` | `Account<TokenAccount>` | SPL Token account |
-| `p.mint().mut()` | `mut` on Mint | Writable mint |
-| `p.tokenAccount().mut()` | `mut` on TokenAccount | Writable token account |
-| `p.tokenProgram()` | `Program<Token>` | Token program address |
-| `p.token2022Program()` | `Interface<TokenInterface>` | Token-2022 program address |
-| `p.systemProgram()` | `Program<System>` | System program |
-| `p.clock()` | `Sysvar<Clock>` | Clock sysvar |
-| `p.remaining(item)` | `ctx.remaining_accounts` | Typed remaining accounts |
-
-### ctx API
-
-Inside `run()` callbacks:
-
-```ts
-ctx.require(condition, "ErrorName");   // → Anchor error with #[msg()]
-ctx.emit("EventName", payload);         // → Anchor #[event]
-ctx.log("message", value1, value2);     // → msg!() with format
-```
-
-Errors and events are validated at transpile time — referencing undefined names produces clear diagnostics.
-
-### CPI stubs
-
-For cross-program invocations, use the built-in stubs:
-
-```ts
-token.transfer({ from, to, authority, amount });
-token.transferChecked({ from, to, authority, mint, amount, decimals });
-token.mintTo({ mint, to, authority, amount });
-token.burn({ from, mint, authority, amount });
-```
-
-These are type-checked at definition time and transpiled to Anchor CPI calls.
-
-### Events
-
-```ts
-import { event, u64, pubkey } from "better-sol/program";
-
-const TransferEvent = event({ from: pubkey, to: pubkey, amount: u64 });
-
-const myProgram = program(
-  {
-    name: "my_program",
-    address: "...",
-    events: { Transfer: TransferEvent },
+  events: {
+    Incremented: { newCount: bs.u64(), authority: bs.pubkey() },
   },
-  ix => ({
-    transfer: ix({
-      accounts: { authority: p.signer() },
-      args: { amount: u64 },
-      run: (accounts, args, ctx) => {
-        ctx.emit("Transfer", { from: accounts.authority, to: accounts.authority, amount: args.amount });
-      },
-    }),
+}, ix => ({
+  initialize: ix({
+    accounts: {
+      counter: bs.init(Counter),
+      authority: bs.signer(),
+    },
+    args: { initialValue: bs.u64() },
+    run: ({ counter, authority }, { initialValue }) => {
+      counter.count = initialValue
+      counter.authority = authority
+      counter.isActive = true
+    },
   }),
-);
+
+  increment: ix({
+    accounts: {
+      counter: bs.mut(Counter),
+      authority: bs.signer(),
+    },
+    args: { amount: bs.u64() },
+    run: ({ counter, authority }, { amount }, ctx) => {
+      ctx.require(authority === counter.authority, "Unauthorized")
+      ctx.require(counter.isActive, "NotActive")
+      counter.count += amount
+      ctx.emit("Incremented", { newCount: counter.count, authority })
+    },
+  }),
+}))
 ```
 
-Events are emitted as Anchor `emit!()` calls in the generated Rust. The transpiler validates event names and field types at compile time.
+The same file is used for deployment (via the CLI) and for the typed client at runtime.
 
-### Sysvar stubs
-
-```ts
-const now = sol.timestamp(); // → Clock::get()?.unix_timestamp
-```
-
----
-
-## Client SDK
+## Typed client
 
 ```ts
-import { betterSol, keypairFile, secretKey } from "better-sol";
-```
+import { betterSol, keypairFile } from "better-sol"
+import { counter } from "./programs/counter"
 
-### Creating a client
-
-```ts
-// Server-side with keypair file
 const sol = await betterSol({
   cluster: "devnet",
   payer: keypairFile("./keypair.json"),
   programs: { counter },
-});
-
-// Server-side with raw secret key bytes
-const sol = await betterSol({
-  cluster: "devnet",
-  payer: secretKey(new Uint8Array(64)),
-  programs: { counter },
-});
-
-// Read-only — balances, PDA derivation, account fetches
-const sol = await betterSol({ cluster: "devnet" });
-
-// Browser — payer passed later via withSigner
-const sol = await betterSol({ cluster: "devnet" });
-const userSol = await sol.withSigner(walletAdapter(wallet));
+})
 ```
 
-| Config field | Default | Description |
+From that single call you get:
+
+```ts
+sol.payer                               // your wallet's address
+sol.counter.increment({ counter, amount: 5n })  // send and confirm
+sol.counter.increment.simulate({ ... }) // simulate without sending
+sol.counter.increment.instruction({ ... }) // get raw Instruction
+sol.counter.accounts.Counter.derive({ authority: sol.payer }) // PDA address
+sol.counter.accounts.Counter.fetch(addr) // typed account data
+sol.counter.parseErrors(logs)           // parse program errors from logs
+sol.counter.parseEvents(logs)           // parse events from logs
+```
+
+Types are inferred from the program definition. No hand-written types, no code generation step.
+
+## Token operations
+
+```ts
+sol.token.createMint({ decimals: 9 })
+sol.token.mintTo({ mint, to: ownerAddr, amount: 1_000_000_000n })
+sol.token.transfer({ mint, to: recipientAddr, amount: 100n })
+sol.token.getBalance({ owner: addr, mint })
+```
+
+`sol.token` for SPL Token, `sol.token2022` for Token-2022. Same API for both.
+
+## Multiple instructions
+
+```ts
+// Batch into one transaction
+const ix1 = await sol.counter.increment.instruction({ counter: addr1, amount: 5n })
+const ix2 = await sol.counter.increment.instruction({ counter: addr2, amount: 10n })
+await sol.send([ix1, ix2])
+
+// Sequential steps with dependencies
+await sol.steps([
+  () => sol.counter.initialize.send({ counter: addr, initialValue: 0n }),
+  () => sol.counter.increment.send({ counter: addr, amount: 5n }),
+])
+```
+
+## Import external programs
+
+### Generate a typed program from an IDL (recommended)
+
+```bash
+npx @better-sol/cli generate idl 12b3t1cNiAUoYLiWFEnFa4w6qYxVAiqCWU7KZuzLPYtH
+```
+
+This produces `generated/staking.ts` with full autocomplete.
+
+### Load at runtime with `fromIdl()`
+
+```ts
+import { fromIdl } from "better-sol"
+
+const idl = await fetch("/staking-idl.json").then(r => r.json())
+const staking = fromIdl(idl)
+const sol = await betterSol({ programs: { staking } })
+```
+
+Instruction and account names are `string` (no autocomplete). Use the CLI generator when you can.
+
+### Write by hand
+
+Define the program yourself with `bs.program()` using the same API as your own programs. Useful when the IDL is incomplete or you need custom behavior.
+
+## Type tokens
+
+All type tokens live under the `bs` namespace:
+
+| Token | TypeScript type | Use for |
 |---|---|---|
-| `cluster` | `devnet` | Predefined RPC URL for devnet/testnet/mainnet/localnet |
-| `rpcUrl` | derived from `cluster` | Custom RPC URL (requires explicit `rpcSubscriptionsUrl`) |
-| `rpcSubscriptionsUrl` | derived from `cluster` | WebSocket URL for RPC subscriptions |
-| `payer` | (none) | Signer configuration — `keypairFile()`, `secretKey()`, or Kit `TransactionSigner` |
-| `programs` | `{}` | Program definitions to register |
-| `commitment` | `"confirmed"` | `"processed"`, `"confirmed"`, or `"finalized"` |
-| `confirmationRetries` | `30` | Transaction confirmation poll retries |
-| `confirmationInterval` | `1000` ms | Poll interval between retries |
-| `rpcRetries` | `3` | RPC call retries on failure |
-| `simulate` | `false` | Pre-flight simulation before sending |
+| `bs.u8()`, `bs.u16()`, `bs.u32()` | `number` | Small integers, bump seeds, indices |
+| `bs.u64()`, `bs.u128()` | `bigint` | Balances, amounts, timestamps |
+| `bs.i8()` through `bs.i128()` | `number` or `bigint` | Signed values |
+| `bs.bool()` | `boolean` | Flags |
+| `bs.pubkey()` | `string` | Solana addresses |
+| `bs.string()` | `string` | UTF-8 text |
+| `bs.bytes()` | `Uint8Array` | Raw binary |
+| `bs.optional(t)` | `T \| null` | Optional fields |
+| `bs.vector(t, max?)` | `T[]` | Dynamic array (default max 32) |
+| `bs.array(t, size)` | fixed-length `T[]` | Fixed-size array |
 
-### Client properties
+## Account constraints
 
-```ts
-sol.payer            // Address | null — the active signer's address (null in read-only mode)
-sol.rpc              // Kit RPC instance — for direct Solana RPC calls
-sol.rpcSubscriptions // Kit RPC subscriptions instance
-sol.token            // Token client (Tokenkeg...)
-sol.token2022        // Token-2022 client (TokenzQd...)
-sol.<programName>    // Typed program client for each registered program
-```
-
-### Instruction calls
-
-Instruction methods match what the definition needs:
-
-```ts
-await sol.app.ping();                                   // no accounts, no params
-await sol.app.setValue({ value: 1n });                  // params only
-await sol.app.closeVault({ vault: vaultAddr });         // accounts only
-await sol.counter.increment({ counter: addr, amount: 5n }); // accounts + params
-```
-
-Five forms per instruction:
-
-```ts
-// 1. Sign, send, confirm — returns Kit Signature
-const sig = await sol.counter.increment({ counter: addr, amount: 5n });
-
-// 2. Same as above but explicit
-const sig = await sol.counter.increment({ counter: addr, amount: 5n }).send();
-
-// 3. Build instruction — returns Kit Instruction for manual composition
-const ix = await sol.counter.increment({ counter: addr, amount: 5n }).instruction();
-
-// 4. Build signed transaction — returns signed sendable transaction
-const tx = await sol.counter.increment({ counter: addr, amount: 5n }).transaction();
-
-// 5. Simulate without sending — returns logs, units consumed, return data
-const sim = await sol.counter.increment({ counter: addr, amount: 5n }).simulate();
-
-// 6. Prepare for external composition
-const { instruction, signers, pubkeys } = await sol.counter.increment({ counter: addr, amount: 5n }).prepare();
-```
-
-### Signer auto-fill
-
-Accounts declared with `p.signer()` are optional at the call site. When omitted, the active signer's address is used:
-
-```ts
-// Authority auto-fills from sol.payer
-await sol.counter.increment({ counter: addr, amount: 5n });
-
-// Explicit override
-await sol.counter.increment({ counter: addr, authority: otherAddr, amount: 5n });
-```
-
-### Account operations
-
-```ts
-// PDA derivation — only requires the seed field values
-const addr: Address = await sol.counter.accounts.Counter.derive({ authority: sol.payer });
-
-// Account fetching — returns typed data or null
-const data: { count: bigint; authority: Address } | null
-  = await sol.counter.accounts.Counter.fetch(addr);
-
-// Fetch multiple accounts at once
-const results = await sol.counter.accounts.Counter.fetchMultiple([addr1, addr2]);
-// → [ { count: 5n, ... }, null ]
-
-// Data is auto-decoded — Borsh for standard accounts, zero-copy layout for zero-copy accounts
-```
-
-### Multi-instruction batching
-
-```ts
-const sig = await sol.send([
-  sol.counter.increment.instruction({ counter: addr1, amount: 1n }),
-  sol.counter.increment.instruction({ counter: addr2, amount: 2n }),
-]);
-// Single transaction, instructions execute sequentially
-```
-
-### Sequential steps with dependencies
-
-```ts
-const [mintResult, mintSig] = await sol.steps([
-  () => sol.token.createMint({ decimals: 9 }),
-  ({ mint }) => sol.token.mintTo({ mint, destination: sol.payer, amount: 1000n }),
-]);
-// Each step receives all previous steps' return values
-```
-
-### SOL operations
-
-```ts
-const balance: bigint = await sol.getBalance("address...");
-
-const sig: string = await sol.transfer({
-  to: "recipient...",
-  amount: 10_000_000n, // lamports
-  // from: defaults to sol.payer; use sol.withSigner() for different source
-});
-```
-
-### Scoped signers
-
-```ts
-const userSol: BetterSolClient<..., true> = await sol.withSigner(walletAdapter(connectedWallet));
-// userSol.payer is now Address (not null)
-// All signer accounts auto-fill from this wallet
-```
-
-`withSigner()` returns a new client with the given signer. The original `sol` is unchanged. This means you can create a shared base client and scope wallet sessions per request or per component.
-
----
-
-## Token Operations
-
-`sol.token` and `sol.token2022` provide identical APIs for Token and Token-2022 programs.
-
-```ts
-// Create a mint
-const { mint, mintSigner, signature } = await sol.token.createMint({
-  decimals: 9,
-  authority: sol.payer,             // optional — defaults to payer
-  freezeAuthority: null,            // optional — defaults to null
-});
-
-// Get associated token account address
-const ata: Address = await sol.token.getATA({ owner: sol.payer, mint });
-
-// Mint tokens
-await sol.token.mintTo({
-  mint,
-  destination: sol.payer,
-  amount: 1_000_000_000n,
-  decimals: 9,                      // optional — fetched from mint if omitted
-});
-
-// Check balance
-const balance: bigint = await sol.token.getBalance({ owner: sol.payer, mint });
-
-// Transfer
-await sol.token.transfer({
-  mint,
-  to: "recipient...",
-  amount: 100n,
-  from: sol.payer,                  // optional — defaults to active signer
-  decimals: 9,                      // optional — fetched from mint if omitted
-});
-
-// Token-2022 (same API, different program address)
-await sol.token2022.createMint({ decimals: 6 });
-```
-
----
-
-## Browser & Wallet Support
-
-better-sol is wallet-agnostic. A shared client stores RPC connections and program definitions. Wallet sessions are scoped per request.
-
-```ts
-import { walletAdapter } from "better-sol/wallets";
-import { useWallet } from "@solana/wallet-adapter-react";
-
-const sol = await betterSol({ cluster: "mainnet" });
-
-function App() {
-  const wallet = useWallet();
-  const handleClick = async () => {
-    const userSol = await sol.withSigner(walletAdapter(wallet));
-    await userSol.counter.increment({ counter: addr, amount: 1n });
-  };
-}
-```
-
-### Available adapters
-
-| Import | Peer library | Adapter function |
-|---|---|---|
-| `better-sol/wallets` | `@solana/wallet-adapter-react` | `walletAdapter(wallet)` |
-| `better-sol/wallets/reown` | Reown AppKit | `reownAppKit(appKitProvider)` |
-| `better-sol/wallets/privy` | `@privy-io/react-auth` Solana | `privyWallet(privySolana)` |
-| `better-sol/wallets/dynamic` | `@dynamic-labs/sdk-react-core` Solana | `dynamicWallet(dynamicSolana)` |
-
-Each adapter converts the wallet library's signer into a Kit-compatible `TransactionSigner`.
-
-You can also pass a Kit `TransactionSigner` directly:
-
-```ts
-const userSol = await sol.withSigner(myKitSigner);
-```
-
----
-
-## fromIdl — Use Any Anchor Program
-
-Consume any external Anchor IDL as a typed program — no TypeScript definition needed:
-
-```ts
-import { betterSol, fromIdl, keypairFile } from "better-sol";
-import mangoIdl from "./mango.json";
-
-const mango = fromIdl(mangoIdl);
-const sol = await betterSol({
-  cluster: "mainnet",
-  payer: keypairFile("./keypair.json"),
-  programs: { mango },
-});
-await sol.mango.someInstruction({ ... });
-```
-
-`fromIdl()` produces a `ProgramDefinition`-compatible object with typed instruction methods, account constraints, and error messages. Zero code generation — all types are derived at runtime from the IDL JSON.
-
----
-
-## Package Exports
-
-| Import path | Exports |
+| Constraint | What it does |
 |---|---|
-| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `ProgramError`, `bs`, `cpi` |
-| `better-sol/program` | `bs`, `cpi`, `AccountDefinition`, `InstructionDefinition`, `ProgramDefinition`, all type tokens (`u8`, `u64`, `pubkey`, `bool`, ...), compound type helpers (`option`, `vec`, `array`), type helpers (`InstructionAccounts`, `InstructionArgs`, ...) |
-| `better-sol/codec` | `encodeField`, `encodeInstruction`, `encodeAccount`, `decodeField`, `decodeAccount`, `decodeZeroCopyAccount`, `anchorDiscriminator`, `accountDiscriminator` |
-| `better-sol/wallets` | `walletAdapter`, `reownWallet`, `privyWallet`, `dynamicWallet` |
-| `better-sol/wallets/reown` | `reownWallet` |
-| `better-sol/wallets/privy` | `privyWallet` |
-| `better-sol/wallets/dynamic` | `dynamicWallet` |
+| `bs.init(Account)` | Create a new account |
+| `bs.initIfNeeded(Account)` | Create if it doesn't exist |
+| `bs.mut(Account)` | Read and write an existing account |
+| `bs.close(Account, "refundTo")` | Close account, reclaim rent |
+| `bs.realloc(Account, space)` | Resize an account |
+| `bs.signer()` | Transaction signer (auto-filled with payer) |
+| `bs.mint()` | SPL Token mint (read-only) |
+| `bs.tokenAccount()` | SPL Token account (read-only) |
+| `bs.clock()` | Clock sysvar (timestamps, slots, epochs) |
+| `bs.systemProgram()` | System program address |
+| `bs.remaining(Account)` | Dynamic list of accounts |
 
----
+Add `.writable()` to `bs.mint()` or `bs.tokenAccount()` for write access.
 
-## Default Values
+## Exports
 
-### CLI defaults
-
-| Setting | Default | Source |
-|---|---|---|
-| `programs` glob | `programs/**/*.ts` | `config.ts` |
-| `cluster` | `devnet` | `config.ts` |
-| `out` directory | `generated` | `config.ts` |
-| `compilerUrl` | `https://api.better-sol.fun` | `api/client.ts` |
-
-### Client SDK defaults
-
-| Setting | Default | Source |
-|---|---|---|
-| `cluster` | `devnet` | `client.ts` |
-| `commitment` | `"confirmed"` | `client.ts` |
-| `simulate` | Removed (use `.simulate()` per instruction) | `client.ts` |
-| `confirmationRetries` | `30` | `client.ts` (internal) |
-| `confirmationInterval` | `1000` ms | `client.ts` (internal) |
-
-### RPC URLs
-
-| Cluster | HTTP | WebSocket |
-|---|---|---|
-| `devnet` | `https://api.devnet.solana.com` | `wss://api.devnet.solana.com` |
-| `testnet` | `https://api.testnet.solana.com` | `wss://api.testnet.solana.com` |
-| `mainnet` | `https://api.mainnet.solana.com` | `wss://api.mainnet.solana.com` |
-| `localnet` | `http://127.0.0.1:8899` | `ws://127.0.0.1:8900` |
-
----
-
-## Generated Rust Output
-
-When you run `better-sol deploy --dry-run`, each program generates:
-
-```
-generated/<program-name>/
-├── Cargo.toml          # Dependencies pinned to Anchor 1.0.1
-├── src/
-│   └── lib.rs          # Anchor program with:
-│                        #   - declare_id!()
-│                        #   - #[program] module with all instructions
-│                        #   - #[derive(Accounts)] structs per instruction
-│                        #   - #[account] / #[account(zero_copy)] structs
-│                        #   - #[error_code] enum with #[msg()]
-│                        #   - #[event] structs
-│                        #   - anchor-spl imports for Token/Token-2022
-└── idl.json            # Anchor-compatible IDL
-```
-
-The generated Rust passes `cargo check` with zero warnings and no `#[allow()]` attributes.
-
----
-
-## Current Limitations
-
-- **`for` loop type mixing**: Loop variables and `u32` bounds can create type mismatches in generated Rust
-- **`struct_zc` outside zero-copy**: Only valid inside `account().zeroCopy()` accounts
-- **PDA-signed token CPI**: Token transfer with `authority: tokenAccount` generates invalid signer seeds — authority must be a PDA from the program or a signer
-- **`bool` in zero-copy**: `bool` is not Pod-safe — use `u8` with explicit `=== 1` checks
-- **`vec()` default max**: `vec(type)` defaults to 32 entries — use `.max(N)` for custom limits
-- **DB schema**: Drizzle only (Postgres, MySQL, SQLite)
-- **Event listeners**: Events are emitted on-chain but no client-side subscription API yet
-- **Parallel execution**: `sol.steps()` executes sequentially — no parallel instruction plan support yet
-- **Compute unit estimation**: Not yet integrated — add `computeUnitLimit` instructions manually
-- **Multi-signer**: One active signer at a time — use `sol.withSigner()` for multiple signers in sequence
-
----
+| Import path | What you get |
+|---|---|
+| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `bs`, `cpi`, `ProgramError`, types |
+| `better-sol/program` | `bs`, `cpi`, all type tokens, constraint helpers, type helpers |
+| `better-sol/codec` | `encodeAccount`, `decodeAccount`, `decodeZeroCopyAccount`, discriminators |
 
 ## License
 
