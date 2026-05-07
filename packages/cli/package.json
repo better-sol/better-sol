@@ -1,33 +1,44 @@
 {
   "name": "@better-sol/cli",
-  "version": "0.0.0",
+  "imports": {
+    "#*": "./src/*"
+  },
+  "version": "0.1.0",
+  "description": "TypeScript-first Solana program tooling — transpile, compile, and deploy to Solana",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "better-sol": "./dist/index.js"
-  },
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
   },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts --outdir dist --target node",
+    "build": "tsdown",
     "check": "tsc --noEmit",
     "test": "bun test",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxlint --fix .",
-    "format:check": "oxlint .",
-    "docs": "typedoc"
+    "format:check": "oxlint ."
   },
+  "keywords": [
+    "solana",
+    "solana-cli",
+    "anchor",
+    "transpiler",
+    "deploy",
+    "blockchain",
+    "web3"
+  ],
+  "author": "powxenv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/powxenv/better-sol.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/powxenv/better-sol/tree/main/packages/cli",
   "dependencies": {
     "@clack/prompts": "^1.3.0",
     "@solana/kit": "^6.8.0",
