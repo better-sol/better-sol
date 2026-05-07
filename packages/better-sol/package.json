@@ -1,8 +1,13 @@
 {
   "name": "better-sol",
+  "imports": {
+    "#*": "./src/*"
+  },
   "version": "0.1.0",
+  "description": "TypeScript-first Solana program SDK — define programs, send transactions, query accounts",
+  "license": "MIT",
   "type": "module",
-  "module": "./dist/index.js",
+  "sideEffects": false,
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -14,10 +19,6 @@
       "import": "./dist/program.js"
     },
     "./wallets": {
-      "types": "./dist/wallets/index.d.ts",
-      "import": "./dist/wallets/index.js"
-    },
-    "./wallets/wallet-adapter": {
       "types": "./dist/wallets/wallet-adapter.d.ts",
       "import": "./dist/wallets/wallet-adapter.js"
     },
@@ -43,16 +44,29 @@
     "README.md"
   ],
   "scripts": {
-    "clean": "rm -rf dist",
-    "build": "bun run clean && tsc -p tsconfig.build.json && bun build src/index.ts src/program.ts src/codec.ts --outdir dist --target bun && bun build src/wallets/index.ts src/wallets/wallet-adapter.ts src/wallets/reown.ts src/wallets/privy.ts src/wallets/dynamic.ts --outdir dist/wallets --target bun --external @solana/wallet-adapter-react --external @solana/wallet-adapter-base --external @privy-io/react-auth --external @dynamic-labs/sdk-react-core --external @dynamic-labs/solana --external @reown/appkit --external @reown/appkit-adapter-solana",
+    "build": "tsdown",
     "check": "tsc --noEmit",
     "test": "bun test",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxlint --fix .",
-    "format:check": "oxlint .",
-    "docs": "typedoc"
+    "format:check": "oxlint ."
   },
+  "keywords": [
+    "solana",
+    "solana-sdk",
+    "anchor",
+    "typescript",
+    "blockchain",
+    "web3"
+  ],
+  "author": "powxenv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/powxenv/better-sol.git",
+    "directory": "packages/better-sol"
+  },
+  "homepage": "https://github.com/powxenv/better-sol/tree/main/packages/better-sol",
   "dependencies": {
     "@solana-program/compute-budget": "^0.15.0",
     "@solana-program/system": "^0.12.0",
@@ -60,7 +74,12 @@
     "@solana/kit": "^6.8.0"
   },
   "peerDependencies": {
-    "typescript": "^6"
+    "typescript": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@solana/wallet-adapter-base": "^0.9.27",
