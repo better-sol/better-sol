@@ -53,7 +53,7 @@ npx @better-sol/cli create counter           # scaffold a program
 npx @better-sol/cli deploy                   # compile and deploy to devnet
 ```
 
-Your program is on-chain. Read the [full guide](https://better-sol.dev/docs).
+Your program is on-chain. Read the [full guide](https://better-sol.fun/docs).
 
 ## Packages
 
