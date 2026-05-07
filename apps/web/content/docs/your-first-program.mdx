@@ -1,0 +1,108 @@
+---
+title: Your First Program
+description: Define and deploy a counter program to Solana devnet.
+---
+
+In this guide you will write a counter program in TypeScript and deploy it to Solana devnet.
+
+## Step 1: Scaffold the project
+
+If you have not already, initialize a project:
+
+```bash
+npx @better-sol/cli@latest init
+```
+
+This creates a `keypair.json` for paying transaction fees, a `programs/` directory, and a `.gitignore`. It also installs `better-sol` if you have a `package.json`.
+
+Then scaffold your first program:
+
+```bash
+npx @better-sol/cli@latest create counter
+```
+
+This generates two things:
+
+- `programs/counter.ts`. Your program definition.
+- `.better-sol/counter.json`. The program keypair for deployment.
+
+<Callout>
+The keypair contains the private key for your program address. **Do not commit it to git.** The `init` command already added `.better-sol/` to your `.gitignore`.
+</Callout>
+
+## Step 2: Understand the template
+
+Open `programs/counter.ts`. The template looks like this:
+
+```tsx ts2js
+import { bs, cpi } from "better-sol/program"
+
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+}).derive((seed) => ["counter", seed.authority])
+
+export const counter = bs.program(
+  {
+    name: "counter",
+    address: "<generated-address>",
+    accounts: { Counter },
+    errors: {
+      Unauthorized: "Only the authority can update this counter",
+      NotActive: "Counter is not active",
+    },
+  },
+  ix => ({
+    initialize: ix({
+      accounts: {
+        counter: bs.init(Counter),
+        authority: bs.signer(),
+      },
+      args: { initialValue: bs.u64() },
+      run: ({ counter, authority }, { initialValue }) => {
+        counter.count = initialValue
+        counter.authority = authority
+        counter.isActive = true
+      },
+    }),
+
+    increment: ix({
+      accounts: {
+        counter: bs.mut(Counter),
+        authority: bs.signer(),
+      },
+      args: { amount: bs.u64() },
+      run: ({ counter, authority }, { amount }, ctx) => {
+        ctx.require(authority === counter.authority, "Unauthorized")
+        ctx.require(counter.isActive, "NotActive")
+        counter.count += amount
+      },
+    }),
+  })
+)
+```
+
+Do not worry about understanding every line right now. The important parts:
+
+- **`bs.account({ ... })`** defines the on-chain data layout
+- **`.derive()`** specifies PDA seeds so the address is deterministic
+- **`bs.program({ ... }, ix => ({ ... }))`** wraps everything into a program with instructions
+- **`ix({ ... })`** defines an instruction with accounts, arguments, and the `run()` body
+- **`ctx.require()`** checks conditions and throws custom errors
+
+Each of these is covered in detail in [Defining Programs](/docs/defining-programs/types).
+
+## Step 3: Deploy
+
+```bash
+npx @better-sol/cli@latest deploy
+```
+
+On devnet and testnet, the CLI automatically funds your payer if the balance is low. On mainnet, make sure your payer has enough SOL.
+
+<Callout type="info">
+First time deploying? The CLI installs the Solana CLI automatically. This takes about a minute.
+</Callout>
+
+Your program is now on-chain.

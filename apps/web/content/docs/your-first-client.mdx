@@ -1,0 +1,92 @@
+---
+title: Your First Client
+description: Connect to your deployed program and call it from TypeScript.
+---
+
+Your counter program is deployed on devnet. Now connect to it, initialize a counter, increment it, and read the data back. All from TypeScript.
+
+If you haven't deployed a program yet, follow the [Your First Program](/docs/your-first-program) guide first. It takes under five minutes.
+
+## Connect
+
+Create a file called `client.ts`:
+
+```tsx ts2js
+import { betterSol, keypairFile } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+```
+
+`betterSol()` creates a client with an RPC connection, your payer wallet, and typed methods for every instruction in your program.
+
+## Derive the PDA
+
+The counter account is a PDA derived from your authority address. The `.derive()` call on the account definition tells the client what seeds it needs:
+
+```tsx ts2js
+const counterAddr = await sol.counter.accounts.Counter.derive({
+  authority: sol.payer,
+})
+```
+
+`sol.payer` returns your payer's public key. `derive()` hashes the seeds and returns the deterministic PDA address. You will use this address in every instruction call.
+
+## Initialize the counter
+
+```tsx ts2js
+await sol.counter.initialize({
+  counter: counterAddr,
+  initialValue: 0n,
+})
+```
+
+Notice that `authority` is omitted. It is declared as `bs.signer()` in the program definition, so the client fills it in with `sol.payer` automatically.
+
+## Increment
+
+```tsx ts2js
+await sol.counter.increment({
+  counter: counterAddr,
+  amount: 5n,
+})
+```
+
+## Read the data
+
+```tsx ts2js
+const data = await sol.counter.accounts.Counter.fetch(counterAddr)
+console.log("count:", data?.count)         // 5n
+console.log("authority:", data?.authority) // your address
+console.log("active:", data?.isActive)     // true
+```
+
+`fetch()` returns the fully typed account data: `{ count: bigint; authority: string; isActive: boolean }`. Returns `null` if the account does not exist. You never write these types yourself. They are inferred from your program definition.
+
+## Close the account
+
+When you are done, reclaim the rent:
+
+```tsx ts2js
+await sol.counter.close({
+  counter: counterAddr,
+})
+```
+
+## Run it
+
+```bash
+npx tsx client.ts
+```
+
+## What just happened
+
+One TypeScript file gave you three things:
+
+1. **A deployed program** on devnet, ready to use
+2. **Typed client methods**: `initialize()`, `increment()`, `close()` with the exact parameters you defined
+3. **Typed account data**: `fetch()` returns `count`, `authority`, `isActive` without you writing a single type

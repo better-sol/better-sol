@@ -14,15 +14,31 @@ Every page should work as a standalone guide. A developer landing on any page fr
 
 ## File Structure
 
+The Fumadocs pattern uses flat files with `---Section Name---` separators for non-collapsible sidebar groups. Subfolders render as collapsible menus. Folder groups (parenthesized names) prevent URL prefixing.
+
+When versioning is needed, wrap the latest version in a parenthesized folder group with `"root": true`. Older versions use regular folders without parentheses so their URLs include the version prefix:
+
+```json
+// content/docs/meta.json
+{ "pages": ["(v2)", "v1"] }
+
+// content/docs/(v2)/meta.json  ← latest version, no URL prefix
+{ "title": "v2", "root": true, "pages": ["---Getting Started---", "index", "..."] }
+
+// content/docs/v1/meta.json    ← old version, /docs/v1/... in URL
+{ "title": "v1", "root": true, "pages": ["---Getting Started---", "index", "..."] }
+```
+
+Root folders auto-render as a version dropdown in the sidebar. With a single root folder the dropdown is hidden.
+
 ```
 content/docs/
   meta.json                          ← root nav
 
-  getting-started/
-    meta.json
-    installation.mdx                 ← zero to deployed in 5 minutes
-    your-first-program.mdx           ← counter program, end to end
-    project-structure.mdx            ← what the scaffolded files do
+  index.mdx                          ← installation + overview (at /docs)
+  your-first-program.mdx             ← counter program, end to end
+  your-first-client.mdx              ← connect and interact from TypeScript
+  project-structure.mdx              ← what the scaffolded files do
 
   defining-programs/
     meta.json
@@ -77,29 +93,38 @@ content/docs/
 
 ### Getting Started
 
-#### `installation.mdx`
+#### `index.mdx`
 
-Goal: Install better-sol and run the CLI. No program yet, just verify the tools work.
+Goal: Landing page at `/docs`. What better-sol is, how it compares, and installation.
 
+- Program SDK comparison: Anchor, Seahorse, Solang
+- Client SDK comparison: @solana/kit, Kite, Umi, web3.js v1
 - `npm install better-sol`
-- `npx @better-sol/cli login`
-- `npx @better-sol/cli create hello` — what it generates
-- `npx @better-sol/cli deploy --dry-run` — verify without deploying
-- Prerequisites: Node.js 22+
+- Optional API key via `npx @better-sol/cli@latest login`
 
 #### `your-first-program.mdx`
 
-Goal: Build, deploy, and interact with a counter program in under 10 minutes.
+Goal: Build and deploy a counter program. Program side only.
 
-- Write a minimal counter program (3 fields, 3 instructions: init, increment, close)
-- Deploy with `npx @better-sol/cli deploy`
-- Connect with `betterSol()` and call instructions
-- Fetch and read account data
-- Full copy-paste code — should work end-to-end on devnet
+- `npx @better-sol/cli@latest init` — creates keypair, .gitignore, programs/ dir
+- `npx @better-sol/cli@latest create counter` — scaffolds the template
+- Walk through the generated template (account, instructions, errors)
+- `npx @better-sol/cli@latest deploy` — deploys to devnet (auto-funded)
+
+#### `your-first-client.mdx`
+
+Goal: Connect to the deployed program from TypeScript. Client side.
+
+- `betterSol({ cluster, payer, programs })` — create the client
+- `derive()` — derive PDA addresses
+- `initialize()`, `increment()` — call instructions
+- `fetch()` — read typed account data
+- `close()` — reclaim rent
+- No codegen, no separate IDL, types inferred from program definition
 
 #### `project-structure.mdx`
 
-Goal: Understand what the CLI generates and where files go.
+Goal: Understand what every generated file does.
 
 - `programs/` — your TypeScript definitions
 - `generated/` — Rust output + compiled `.so`
@@ -434,3 +459,23 @@ Goal: Build a marketplace with `bs.remaining()` for dynamic account lists.
 5. **Cross-link liberally.** Every time a concept appears that's explained elsewhere, link to it.
 6. **No API reference tables.** Types and options are shown in working code, not listed in isolation.
 7. **Error messages are guides.** When something goes wrong, show the error message and explain what it means.
+
+## Code Block Conventions
+
+Use `npm` language tag for package install commands:
+
+```npm
+npm i my-package
+```
+
+Use `tsx ts2js` for TypeScript/TSX code blocks (enables the Fumadocs TS-to-JS tab switcher):
+
+```tsx ts2js
+import { ReactNode } from 'react';
+
+export default function Layout({ children }: { children: ReactNode }) {
+  return <div>{children}</div>;
+}
+```
+
+CLI commands use `bash` language tag.

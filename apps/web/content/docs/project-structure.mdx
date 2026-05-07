@@ -1,0 +1,110 @@
+---
+title: Project Structure
+description: Understand what the CLI generates and where everything lives.
+---
+
+When you run `npx @better-sol/cli@latest init` followed by `npx @better-sol/cli@latest create counter`, the CLI sets up a small, predictable project structure. Here is what each piece does.
+
+## How the project is created
+
+`init` is the first command you run. It creates the project skeleton:
+
+- `keypair.json`. Your payer wallet. Or it detects your existing Solana CLI keypair at `~/.config/solana/id.json`.
+- `.gitignore`. Pre-configured to ignore keypairs and generated artifacts.
+- `programs/`. An empty directory ready for your program files.
+- `better-sol.config.ts`. Only created if you use a global Solana keypair. Points to its path.
+
+Then `create` scaffolds a program template inside `programs/` and generates a program keypair in `.better-sol/`.
+
+## The files
+
+<Files>
+  <Folder name="programs" defaultOpen>
+    <File name="counter.ts" />
+  </Folder>
+  <Folder name=".better-sol" defaultOpen>
+    <File name="counter.json" />
+    <File name="auth.json" />
+  </Folder>
+  <Folder name="generated" disabled>
+    <Folder name="counter" disabled>
+      <Folder name="src" disabled>
+        <File name="lib.rs" />
+      </Folder>
+      <File name="Cargo.toml" />
+    </Folder>
+  </Folder>
+  <File name="better-sol.config.ts" />
+  <File name="keypair.json" />
+</Files>
+
+### `programs/counter.ts`
+
+Your program definition. This is the single source of truth. It defines accounts, instructions, errors, events, and PDA seeds. The same file is used for deployment and for the typed client at runtime. You can have multiple program files. The CLI discovers all of them.
+
+### `.better-sol/counter.json`
+
+The program keypair. This is the public/private key pair that identifies your program on-chain. The CLI generates it when you run `create` and uses it when you run `deploy`.
+
+<Callout type="warn">
+This file contains a private key. **Never commit it to version control.** The `init` command automatically adds `.better-sol/` to your `.gitignore`.
+</Callout>
+
+### `.better-sol/auth.json`
+
+Your API key. Created when you run `npx @better-sol/cli@latest login`. This file is optional. Without it, you can still deploy at a lower rate limit.
+
+### `generated/counter/`
+
+Generated when you run `deploy` (or `deploy --dry-run`). Contains the program output:
+
+- `lib.rs`. The generated program.
+- `Cargo.toml`. Project manifest.
+
+This directory is for reference and for verified builds. You do not need to edit it. If you delete it, the next `deploy` regenerates it.
+
+### `better-sol.config.ts`
+
+Optional CLI configuration file. Created automatically by `init` when you use a global Solana keypair. You can also create it manually. If it does not exist, defaults are used.
+
+```tsx ts2js
+import { defineConfig } from "@better-sol/cli"
+
+export default defineConfig({
+  programs: "programs/**/*.ts",   // glob for program discovery
+  cluster: "devnet",               // default cluster for deploy
+  out: "generated",                // output directory
+  payer: "./keypair.json",         // path to payer keypair
+})
+```
+
+The `payer` field is only needed when you use a keypair outside the project directory (for example, `~/.config/solana/id.json`). When `payer` is set, the CLI reads it from the config rather than looking for `keypair.json` in the project root.
+
+### `keypair.json`
+
+Your payer keypair. Created by `init`. This wallet pays for transaction fees: deployments, instruction calls, token operations. Keep it funded with devnet SOL (or real SOL on mainnet).
+
+## The flow
+
+```
+programs/counter.ts
+        │
+        ├── deploy ──→ on-chain program
+        │
+        └── betterSol({ programs: { counter } })
+                        │
+                        └── typed client
+```
+
+The same file drives both deployment and the client. There is no separate IDL, no code generation step, and nothing to keep in sync.
+
+## Typical `.gitignore`
+
+```
+.better-sol/
+generated/
+keypair.json
+node_modules/
+```
+
+Keep `programs/` and `better-sol.config.ts` in version control. Everything else is either sensitive (keypairs, auth) or generated.

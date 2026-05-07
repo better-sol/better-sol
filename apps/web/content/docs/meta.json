@@ -1,8 +1,10 @@
 {
   "pages": [
     "---Getting Started---",
-    "getting-started/installation",
-    "getting-started/your-first-program",
-    "getting-started/project-structure"
+    "index",
+    "your-first-program",
+    "your-first-client",
+    "project-structure",
+    "comparisons"
   ]
 }

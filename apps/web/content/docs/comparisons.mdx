@@ -1,0 +1,28 @@
+---
+title: Comparisons
+description: How Better Sol compares to other Solana frameworks and client SDKs.
+---
+
+## Program frameworks
+
+| | **Anchor (Rust)** | **Seahorse (Python)** | **Solang (Solidity)** | **Better Sol** |
+|---|---|---|---|---|
+| Language | Rust | Python | Solidity | TypeScript |
+| Local toolchain | Rust, Cargo, Solana CLI, Anchor CLI | Rust, Anchor (transitive) | Rust, Solang compiler | Node.js |
+| IDL | Auto-generated from macros | Generated via Anchor | Manual | Not needed (program definition is the client) |
+| Learning curve | 3 months typical | Lower, but breaks on Anchor updates | Low for Solidity devs | TypeScript fluency |
+| Production use | Jupiter, Marinade, Drift | Prototyping, hackathons | Early adoption | New |
+| Maintenance | Active (Coral team) | Unmaintained, incompatible with recent Anchor | Active but sparse | Active |
+
+## Client SDKs
+
+Code complexity measured by tokens needed for a simple task: create a devnet wallet, airdrop 1 SOL, send a memo. Fewer tokens means less code to write and maintain.
+
+| | **Better Sol** | **@solana/kit** | **Kite** | **Umi** | **web3.js v1** |
+|---|---|---|---|---|---|
+| Bundle size | 41 KB (minified) | 53 KB (minified) | 310 KB (unpacked) | Modular | 81 KB (minified) |
+| Code to send a memo | 0 tokens (program definition reused) | 251 tokens | 79 tokens | 182 tokens | 145 tokens |
+| Typed program methods | Inferred from definition | Manual or codegen via Kinobi | Manual | Codegen via Kinobi | Manual |
+| Account decoding | Automatic from definition | Manual codec per account | Manual | Manual or codegen | Manual |
+| Weekly npm downloads | New | 350K+ (as web3.js) | New | Part of Metaplex | 350K+ |
+| Tree-shakeable | Yes (ESM, code-split) | Yes (functional, zero deps) | Yes | Yes (modular) | No |
