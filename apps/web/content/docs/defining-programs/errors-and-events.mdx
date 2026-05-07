@@ -1,0 +1,98 @@
+---
+title: Errors and Events
+description: Define custom errors and events, then use them in instruction bodies.
+---
+
+Errors and events make your program communicate what went wrong and what happened. Both are defined in the program config and referenced by name inside `run()` bodies.
+
+## Custom errors
+
+Define errors as a `Record<string, string>` in your program config. The key is the error name. The value is the human-readable message.
+
+```typescript
+export const counter = bs.program({
+  name: "counter",
+  address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
+  accounts: { Counter },
+  errors: {
+    Unauthorized: "Only the authority can perform this action",
+    NotActive: "Counter is not active",
+    BelowZero: "Counter would go below zero",
+  },
+}, ix => ({
+  // ...
+}))
+```
+
+### Using errors in run()
+
+Inside a `run()` body, use `ctx.require()` to check conditions and throw named errors:
+
+```typescript
+run: ({ counter, authority }, { amount }, ctx) => {
+  ctx.require(authority === counter.authority, "Unauthorized")
+  ctx.require(counter.isActive, "NotActive")
+  ctx.require(counter.count >= amount, "BelowZero")
+  counter.count -= amount
+},
+```
+
+If the condition is false, the transaction fails with your error name and message. The transpiler validates that every error name exists in the program config. If you reference `"FooError"` but it is not in the `errors` object, you get a compile-time error.
+
+### Error names are type-checked
+
+Because errors are defined in the same program definition, TypeScript knows the exact error names available:
+
+```typescript
+ctx.require(someCondition, "Unauthorized")  // valid
+ctx.require(someCondition, "FooError")       // TypeScript error: "FooError" is not in the errors map
+```
+
+## Events
+
+Events let your program emit structured data that clients can parse from transaction logs. Define events as a `Record<string, FieldSchema>` in your program config:
+
+```typescript
+export const counter = bs.program({
+  name: "counter",
+  address: "91eZUq6pokUtTcucXV1BVCAaarMy7EiHWv3SogYNZ7xs",
+  accounts: { Counter },
+  errors: { Unauthorized: "Only the authority can perform this action" },
+  events: {
+    Incremented: { newCount: bs.u64(), authority: bs.pubkey() },
+    Reset: { previousCount: bs.u64() },
+  },
+}, ix => ({
+  // ...
+}))
+```
+
+Each event name maps to a field schema, just like account definitions. The fields define the data that appears in the event.
+
+### Emitting events in run()
+
+Use `ctx.emit()` inside a `run()` body:
+
+```typescript
+run: ({ counter, authority }, { amount }, ctx) => {
+  ctx.require(authority === counter.authority, "Unauthorized")
+  counter.count += amount
+  ctx.emit("Incremented", { newCount: counter.count, authority })
+},
+```
+
+The first argument is the event name (must exist in the `events` map). The second argument is the payload object. TypeScript checks that the payload matches the field schema. If you forget a field or add an extra one, you get a type error.
+
+### Reading events on the client
+
+The typed client can parse events from transaction logs:
+
+```typescript
+const { value } = await rpc.getTransaction(signature, { commitment: "confirmed" }).send()
+const events = await sol.counter.parseEvents(value.meta.logMessages)
+// events[0].name === "Incremented"
+// events[0].data.newCount === 5n
+// events[0].data.authority === "..."
+```
+
+The client matches SHA-256 discriminators (the same format Anchor uses) to identify events and decodes the Borsh-encoded data using the field schema from your program definition.

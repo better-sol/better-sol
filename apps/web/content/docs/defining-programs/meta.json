@@ -1,0 +1,21 @@
+{
+  "title": "Defining Programs",
+  "icon": "Code2",
+  "root": true,
+  "pages": [
+    "---Types---",
+    "types",
+    "---Accounts---",
+    "accounts",
+    "---Instructions---",
+    "instructions",
+    "---Constraints---",
+    "constraints",
+    "---Errors & Events---",
+    "errors-and-events",
+    "---Program Config---",
+    "program-config",
+    "---Body Language---",
+    "body-language"
+  ]
+}

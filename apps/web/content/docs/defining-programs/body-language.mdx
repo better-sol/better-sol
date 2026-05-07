@@ -1,0 +1,156 @@
+---
+title: Body Language
+description: What you can and cannot write inside run() bodies.
+---
+
+The `run()` body is transpiled to Anchor Rust. It supports a specific subset of TypeScript. Everything else is rejected at transpile time with a clear error message telling you what to use instead.
+
+## Supported features
+
+### Variable assignment and field mutation
+
+```typescript
+counter.count = 5n
+counter.authority = authority
+counter.isActive = true
+counter.count += amount
+counter.count -= 1n
+counter.label = null   // → None in Rust
+```
+
+### Arithmetic
+
+```typescript
+counter.count += amount
+counter.count -= 1n
+counter.count *= 2n
+total = price * quantity
+```
+
+### Control flow
+
+```typescript
+if (counter.isActive) {
+  counter.count += amount
+} else {
+  ctx.require(false, "NotActive")
+}
+
+for (let i = 0; i < limit; i++) {
+  total += items[i].value
+}
+```
+
+For loops must have a bounded end condition. The transpiler converts them to Rust `for i in 0..limit`.
+
+### Require (error checking)
+
+```typescript
+ctx.require(authority === counter.authority, "Unauthorized")
+ctx.require(counter.isActive, "NotActive")
+ctx.require(counter.count >= amount, "BelowZero")
+```
+
+`ctx.require()` is the only way to throw errors. The error name must exist in the program's `errors` config. The transpiler validates this at compile time.
+
+### Event emission
+
+```typescript
+ctx.emit("Incremented", { newCount: counter.count, authority })
+ctx.emit("Transfer", { from: sender, to: recipient, amount })
+```
+
+The event name must exist in the program's `events` config. The payload must match the field schema exactly. Missing or extra fields cause a transpile-time error.
+
+### Logging
+
+```typescript
+ctx.log("Incremented counter by {}", amount)
+ctx.log("Transfer from {} to {}", sender, recipient)
+```
+
+Transpiles to Anchor's `msg!()` macro. Curly braces are format placeholders.
+
+### Return values
+
+```typescript
+run: ({ counter }) => {
+  return counter.count
+}
+```
+
+Requires `returns: bs.u64()` (or any type) in the instruction config. Transpiles to `return Ok(counter.count);` in Rust.
+
+### Conditional assignment
+
+```typescript
+counter.isActive = !counter.isActive
+counter.count = counter.count > 0 ? counter.count - 1n : 0n
+```
+
+Boolean negation and ternary expressions are supported.
+
+### CPI (cross-program invocation)
+
+```typescript
+import { cpi } from "better-sol/program"
+
+cpi.token.mintTo({
+  mint: rewardMint,
+  to: rewardTokenAccount,
+  authority,
+  amount: rewardAmount,
+})
+
+cpi.token.transfer({
+  from,
+  to: recipient,
+  authority,
+  amount: 100n,
+})
+
+cpi.sol.timestamp()  // → Clock::get()?.unix_timestamp (i64)
+```
+
+`cpi` is a separate import from `bs`. It is only meaningful inside `run()` bodies. Calling it at runtime does nothing; the transpiler reads its AST and generates the Anchor CPI code. PDA-signed CPIs automatically use the program's seeds.
+
+### Accessing account fields
+
+All account fields defined in the account definition are accessible in the body:
+
+```typescript
+run: ({ counter, authority }, { amount }, ctx) => {
+  ctx.require(authority === counter.authority, "Unauthorized")  // field comparison
+  counter.count += amount   // field mutation
+  ctx.emit("Message", { authority })  // field in event payload
+}
+```
+
+The transpiler knows the type of each field and generates the correct Rust access pattern.
+
+## Unsupported features
+
+The transpiler rejects everything not listed above. Each rejection comes with a specific error message and a suggestion for what to use instead.
+
+| Pattern | Error message |
+|---|---|
+| `while` / `do-while` | "Use a bounded `for` loop." |
+| `for...of` / `for...in` | "Use a bounded `for` loop." |
+| `switch` | "Use explicit if/else branches." |
+| `try` / `catch` / `finally` | "Use ctx.require() and Result-returning operations." |
+| `throw` | "Use ctx.require(condition, 'ErrorName')." |
+| `return` (without `returns` type) | "Instruction handlers must complete normally. Add `returns: bs.u64()` to the instruction config." |
+| `await` | "On-chain logic cannot await. Move async work to the client." |
+| `Math.max()` / `Math.min()` | "Compare directly: `a > b ? a : b`." |
+| Template strings | "Use string literals only in ctx.log()." |
+| Object spread `{...obj}` | "Write every object field explicitly." |
+| Destructuring | "Declare each local explicitly instead of destructuring." |
+| Nested functions | "Inline the logic." |
+| External constants | "Only instruction accounts, args, and locals are available." |
+| Mutable conditional aliases | "Rewrite as explicit branches." |
+| Unknown error name | "Add the error to the program's `errors` config." |
+| Unknown event name | "Add the event to the program's `events` config." |
+| Unknown account field | "The field does not exist on this account type." |
+| Wrong event payload | "Event payload fields must match the event definition." |
+
+The transpiler is conservative by design. It only accepts patterns it can reliably translate to correct Rust. If something is not supported, there is usually a supported alternative that achieves the same result.

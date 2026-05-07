@@ -1,0 +1,143 @@
+---
+title: Instructions
+description: Define on-chain instructions with accounts, arguments, and return values.
+---
+
+Instructions are the entry points to your program. Each instruction declares which accounts it interacts with, what arguments it accepts, and what the body does.
+
+## Basic structure
+
+```typescript
+ix({
+  accounts: { ... },
+  args: { ... },
+  run: (accounts, args, ctx) => { ... },
+})
+```
+
+An instruction has three parts:
+
+- **accounts** — the on-chain accounts this instruction interacts with (read, write, create, close)
+- **args** — the arguments passed from the client
+- **run** — the body that executes on-chain
+
+Both `accounts` and `args` are optional. The `run` callback adapts its signature based on what you provide.
+
+## Four instruction shapes
+
+### Accounts and args
+
+The most common shape. Both accounts and arguments are present:
+
+```typescript
+increment: ix({
+  accounts: {
+    counter: bs.mut(Counter),
+    authority: bs.signer(),
+  },
+  args: { amount: bs.u64() },
+  run: ({ counter, authority }, { amount }, ctx) => {
+    ctx.require(authority === counter.authority, "Unauthorized")
+    counter.count += amount
+  },
+}),
+```
+
+The callback receives `(accounts, args, ctx)`.
+
+### Accounts only
+
+When the instruction only needs accounts, no arguments:
+
+```typescript
+close: ix({
+  accounts: {
+    counter: bs.close(Counter, "authority"),
+    authority: bs.signer(),
+  },
+  run: ({ counter, authority }, ctx) => {
+    // Account is closed, rent reclaimed
+  },
+}),
+```
+
+The callback receives `(accounts, ctx)`.
+
+### Args only
+
+When the instruction does not reference any on-chain accounts:
+
+```typescript
+ping: ix({
+  args: { message: bs.string() },
+  run: ({ message }, ctx) => {
+    ctx.log(message)
+  },
+}),
+```
+
+The callback receives `(args, ctx)`.
+
+### Neither
+
+The simplest instruction, no accounts and no arguments:
+
+```typescript
+reset: ix({
+  run: (ctx) => {
+    ctx.log("Program reset")
+  },
+}),
+```
+
+The callback receives only `(ctx)`.
+
+## Return values
+
+Instructions can return a value back to the client. Add `returns` to the instruction config and use `return` in the body:
+
+```typescript
+getCount: ix({
+  accounts: {
+    counter: bs.mut(Counter),
+  },
+  returns: bs.u64(),
+  run: ({ counter }) => {
+    return counter.count
+  },
+}),
+```
+
+The return type is a regular `bs` type. The transpiler generates `-> Result<u64>` in Anchor Rust. On the client, the return data is available in the simulation result.
+
+## Account and arg name collisions
+
+If an account name and an arg name are the same, better-sol throws an error at definition time:
+
+```typescript
+// This throws: "Instruction account 'authority' conflicts with an instruction arg"
+badInstruction: ix({
+  accounts: { authority: bs.signer() },
+  args: { authority: bs.pubkey() },
+  run: () => {},
+}),
+```
+
+Rename one of them. A common pattern is to suffix the account: `authorityAccount` for the account, `authority` for the arg.
+
+## What goes inside run()
+
+The `run()` body is transpiled to Anchor Rust. It supports a restricted subset of TypeScript. See [Body Language](/docs/defining-programs/body-language) for the complete reference.
+
+The three operations you will use most often:
+
+```typescript
+// Check a condition and throw a custom error
+ctx.require(authority === counter.authority, "Unauthorized")
+
+// Modify an account field
+counter.count += amount
+
+// Emit an event
+ctx.emit("Incremented", { newCount: counter.count, authority })
+```

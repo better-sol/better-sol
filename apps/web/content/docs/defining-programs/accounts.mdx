@@ -1,0 +1,133 @@
+---
+title: Accounts
+description: Define on-chain data structures with PDA derivation and zero-copy layout.
+---
+
+Accounts store data on Solana. In better-sol, you define them as plain objects with typed fields, then optionally attach PDA seeds and zero-copy flags.
+
+## Basic accounts
+
+```typescript
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+  label: bs.optional(bs.string()),
+})
+```
+
+This creates an account definition with Borsh serialization, an 8-byte discriminator prefix, and automatic space calculation. You do not need to manually specify the account size.
+
+## PDA derivation
+
+Program Derived Addresses (PDAs) are deterministic addresses derived from seeds. You attach seeds to an account with `.derive()`:
+
+```typescript
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+  isActive: bs.bool(),
+}).derive(seed => ["counter", seed.authority])
+```
+
+The `seed` builder exposes field names from the account. Only fields with types that can be used as seeds (integers and pubkeys) appear on the builder.
+
+### Seed types
+
+| Seed type | How it appears in the ledger | Example |
+|---|---|---|
+| Literal string | `"counter"` becomes the bytes `counte...` | `["counter"]` |
+| Field reference | `seed.authority` becomes the address bytes | `["counter", seed.authority]` |
+| Mixed | Combine both | `["vault", seed.tokenA, seed.tokenB]` |
+
+### How seeds work
+
+When you call `.derive(seed => ["counter", seed.authority])`, the transpiler generates the Anchor `seeds` attribute:
+
+```rust
+#[account]
+pub struct Counter {
+    pub count: u64,
+    pub authority: Pubkey,
+    pub is_active: bool,
+}
+
+// Generated PDA logic:
+// seeds = [b"counter", authority.key().as_ref()]
+```
+
+On the client side, `derive()` becomes a typed function that only accepts the fields you referenced:
+
+```typescript
+// Only `authority` is available because that is what the seeds reference
+const address = await sol.counter.accounts.Counter.derive({
+  authority: "Gsb9sERGY...base58...",
+})
+```
+
+If you omit a required seed field, TypeScript will show a type error. If you pass a field that is not a seedable type, it will not appear on the builder.
+
+### No-seed accounts
+
+Not every account needs PDA derivation. Static accounts or accounts created from externally-generated keypairs skip `.derive()`:
+
+```typescript
+const Config = bs.account({
+  admin: bs.pubkey(),
+  feeRate: bs.u32(),
+})
+// No .derive() — this account is created with a separate keypair
+```
+
+## Zero-copy accounts
+
+For high-performance accounts that need fast reads, use `.zeroCopy()`:
+
+```typescript
+const OrderBook = bs.account({
+  bids: bs.array(Order, 64),
+  asks: bs.array(Order, 64),
+  market: bs.pubkey(),
+}).derive(seed => ["orderbook", seed.market]).zeroCopy()
+```
+
+Zero-copy accounts use `AccountLoader` in Anchor instead of `Account`. They are loaded as a byte slice and deserialized on demand, which avoids copying the entire account data into a separate buffer.
+
+Zero-copy has restrictions. Only integer types, `pubkey`, `f32`, `f64`, and other zero-copy structs are allowed. You cannot use `bool`, `string`, `bytes`, `optional`, or `vector` inside a zero-copy account. TypeScript enforces this at the type level.
+
+## Structs for zero-copy sub-types
+
+When a zero-copy account has nested structures, define them with `bs.struct()`:
+
+```typescript
+const Order = bs.struct({
+  trader: bs.pubkey(),
+  price: bs.u64(),
+  quantity: bs.u64(),
+  side: bs.u8(),
+})
+
+const OrderBook = bs.account({
+  bids: bs.array(Order, 64),
+  asks: bs.array(Order, 64),
+  market: bs.pubkey(),
+}).derive(seed => ["orderbook", seed.market]).zeroCopy()
+```
+
+Structs are only valid inside zero-copy accounts. If you try to use `bs.struct()` in a regular Borsh account, TypeScript will show a type error.
+
+## Account constraints
+
+Constraints are defined on accounts, not on their fields. They tell the transpiler how each account is used in an instruction. See [Constraints](/docs/defining-programs/constraints) for the full list.
+
+One constraint worth mentioning here is `hasOne`, which attaches a validation rule to the account definition itself:
+
+```typescript
+const Vault = bs.account({
+  balance: bs.u64(),
+  authority: bs.pubkey(),
+}).derive(seed => ["vault", seed.authority])
+  .hasOne("authority")
+```
+
+This generates `has_one = authority` in the Anchor `#[derive(Accounts)]` struct, ensuring that the `authority` field matches the signer.

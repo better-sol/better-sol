@@ -1,0 +1,156 @@
+---
+title: Constraints
+description: Account constraints tell better-sol how each account is used in an instruction.
+---
+
+Constraints are the bridge between your TypeScript instruction definition and Anchor's `#[derive(Accounts)]` attributes. They determine which accounts are writable, which are signers, which are created, and which are validated.
+
+## User-defined accounts
+
+These constraints reference one of your account definitions. They automatically make the account writable and provide typed access to the account data.
+
+| Constraint | Anchor equivalent | Description |
+|---|---|---|
+| `bs.init(Account)` | `init, payer, space, seeds, bump` | Create a new PDA account. Requires that the account definition has `.derive()` seeds. The payer is the signer. Account space is computed automatically. |
+| `bs.initIfNeeded(Account)` | `init_if_needed, payer, space` | Create the account if it does not exist, or reuse the existing one. Useful for "create or update" patterns. |
+| `bs.mut(Account)` | `mut` | Read and write an existing account. The most common constraint. |
+| `bs.close(Account, "refundTo")` | `mut, close = refundTo` | Close the account and reclaim its rent. The `refundTo` argument names another account that receives the lamports. |
+| `bs.realloc(Account, space)` | `mut, realloc = space, realloc::payer = ..., realloc::zero = ...` | Resize an account to `space` bytes. The system program is automatically included. |
+
+### Examples
+
+```typescript
+// Create a new PDA account
+initialize: ix({
+  accounts: {
+    counter: bs.init(Counter),
+    authority: bs.signer(),
+  },
+  args: { initialValue: bs.u64() },
+  run: ({ counter, authority }, { initialValue }) => {
+    counter.count = initialValue
+    counter.authority = authority
+    counter.isActive = true
+  },
+}),
+
+// Read and write an existing account
+increment: ix({
+  accounts: {
+    counter: bs.mut(Counter),
+    authority: bs.signer(),
+  },
+  args: { amount: bs.u64() },
+  run: ({ counter, authority }, { amount }, ctx) => {
+    ctx.require(authority === counter.authority, "Unauthorized")
+    counter.count += amount
+  },
+}),
+
+// Close an account and reclaim rent
+close: ix({
+  accounts: {
+    counter: bs.close(Counter, "authority"),
+    authority: bs.signer(),
+  },
+  run: () => {},
+}),
+
+// Resize an account
+resize: ix({
+  accounts: {
+    data: bs.realloc(Data, 512),
+    authority: bs.signer(),
+  },
+  run: ({ authority }, ctx) => {
+    ctx.require(authority === data.authority, "Unauthorized")
+  },
+}),
+```
+
+## System accounts
+
+These constraints provide automatic access to well-known Solana programs and sysvars. They do not reference an account definition.
+
+| Constraint | Anchor equivalent | Writable | Description |
+|---|---|---|---|
+| `bs.signer()` | `Signer<'info>` | No | The transaction signer. Auto-filled from `sol.payer` when omitted at the call site. |
+| `bs.mint()` | `Account<'info, Mint>` | No | A SPL Token mint account. |
+| `bs.mint().writable()` | `Account<'info, Mint>, mut` | Yes | A writable mint account. Use when creating or modifying a mint. |
+| `bs.tokenAccount()` | `Account<'info, TokenAccount>` | No | A SPL Token account. |
+| `bs.tokenAccount().writable()` | `Account<'info, TokenAccount>, mut` | Yes | A writable token account. Use for transfers, burns, and mints. |
+| `bs.tokenProgram()` | `Program<'info, Token>` | No | The Token program address. Auto-included when `bs.mint()` or `bs.tokenAccount()` is present. |
+| `bs.token2022Program()` | `Interface<'info, TokenInterface>` | No | The Token-2022 program address. Use when interacting with Token-2022 accounts. |
+| `bs.systemProgram()` | `Program<'info, System>` | No | The System program. Auto-included when `bs.init()` is present. |
+| `bs.clock()` | `Sysvar<'info, Clock>` | No | The Clock sysvar. Provides `unixTimestamp`, `slot`, and `epoch`. |
+
+### Auto-inclusion
+
+Some system accounts are automatically included when specific constraints are present:
+
+- `bs.systemProgram()` is added when `bs.init()` appears
+- `bs.tokenProgram()` is added when `bs.mint()` or `bs.tokenAccount()` appears
+
+You do not need to pass these accounts at the call site. The client SDK fills them in automatically.
+
+### Signer auto-fill
+
+When `bs.signer()` appears in an instruction, the client SDK allows you to omit it at the call site. If you call `sol.counter.increment({ counter: addr, amount: 5n })` without an `authority` field, the client automatically uses the payer's address.
+
+### Writable variants
+
+`bs.mint()` and `bs.tokenAccount()` default to read-only. Chain `.writable()` when you need to modify them:
+
+```typescript
+reward: ix({
+  accounts: {
+    rewardMint: bs.mint().writable(),
+    rewardTokenAccount: bs.tokenAccount().writable(),
+    authority: bs.signer(),
+    tokenProgram: bs.tokenProgram(),
+  },
+  args: { rewardAmount: bs.u64() },
+  run: ({ authority, rewardMint, rewardTokenAccount }, { rewardAmount }) => {
+    cpi.token.mintTo({
+      mint: rewardMint,
+      to: rewardTokenAccount,
+      authority,
+      amount: rewardAmount,
+    })
+  },
+}),
+```
+
+## Remaining accounts
+
+```typescript
+bs.remaining(Account)
+```
+
+References an account definition for a dynamic list of accounts. At the call site, you pass an array of addresses:
+
+```typescript
+await sol.escrow.deposit({
+  escrow: escrowAddr,
+  authority: sol.payer,
+  remainingAccounts: [account1, account2, account3],
+})
+```
+
+In the `run()` body, `remainingAccounts` gives you typed access to the decoded account data for each address.
+
+## Validation constraints
+
+These constraints are defined on the account definition itself, not inside instructions.
+
+### hasOne
+
+```typescript
+const Vault = bs.account({
+  balance: bs.u64(),
+  authority: bs.pubkey(),
+}).derive(seed => ["vault", seed.authority])
+  .hasOne("authority")
+```
+
+This adds a `has_one = authority` constraint in Anchor. At runtime, it verifies that the `authority` field of the account matches the `authority` signer passed to the instruction.
