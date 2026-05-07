@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { bs } from "../src/program";
-import { accountDiscriminator, anchorDiscriminator, decodeAccount, decodeField, decodeZeroCopyAccount, encodeAccount, encodeField, encodeInstruction } from "../src/coder";
+import { accountDiscriminator, anchorDiscriminator, decodeAccount, decodeField, decodeZeroCopyAccount, encodeAccount, encodeField, encodeInstruction } from "../src/codec";
 
 describe("Borsh coder", () => {
   test("encodes and decodes u64", () => {

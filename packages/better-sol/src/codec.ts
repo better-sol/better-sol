@@ -1,5 +1,5 @@
 import { address as kitAddress, getAddressDecoder, getAddressEncoder } from "@solana/kit";
-import type { FieldSchema, InferFields, InferType, TypeKind, TypeToken } from "./program";
+import type { FieldSchema, InferFields, InferType, TypeKind, TypeToken } from "#program";
 
 type HasInner = { readonly kind: string; readonly inner: TypeToken<unknown, TypeKind> };
 type HasInnerAndSize = { readonly kind: string; readonly inner: TypeToken<unknown, TypeKind>; readonly size: number };

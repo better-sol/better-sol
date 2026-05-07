@@ -1,5 +1,5 @@
-import { anchorDiscriminator, decodeField } from "../coder";
-import { type FieldSchema } from "../program";
+import { anchorDiscriminator, decodeField } from "#codec";
+import { type FieldSchema } from "#program";
 
 export type ProgramErrorMap = ReadonlyArray<{
   readonly name: string;

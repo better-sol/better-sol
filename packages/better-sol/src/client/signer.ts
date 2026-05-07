@@ -1,9 +1,9 @@
 import { createKeyPairSignerFromBytes, generateKeyPairSigner, getAddressEncoder, type Address as KitAddress, type TransactionSigner } from "@solana/kit";
-import { encodeField } from "../coder";
-import { type TypeKind, type TypeToken } from "../program";
-import type { SignerInput } from "./types";
+import { encodeField } from "#codec";
+import { type TypeKind, type TypeToken } from "#program";
+import type { SignerInput } from "./types.ts";
 
-export { secretKey, keypairFile } from "./types";
+export { secretKey, keypairFile } from "./types.ts";
 
 export function requireSigner(signer: TransactionSigner | undefined): TransactionSigner {
   if (signer !== undefined) return signer;
