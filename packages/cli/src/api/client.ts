@@ -1,8 +1,8 @@
-import type { IrProgram } from "../ir/types";
+import type { IrProgram } from "#ir/types";
 
-const DEFAULT_API_URL = "https://better-sol.dev";
+const DEFAULT_API_URL = "https://better-sol.fun";
 
-export function getApiUrl(): string {
+function getApiUrl(): string {
   return process.env.BETTER_SOL_API_URL ?? DEFAULT_API_URL;
 }
 

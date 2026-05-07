@@ -1,8 +1,8 @@
 import { intro, outro, spinner } from "@clack/prompts";
-import { loadConfig } from "../config";
-import { cwdPath } from "../path";
-import type { GenerateDbOptions } from "../types";
-import { isDbDialect, writeDrizzleSchema } from "../generator/db";
+import { loadConfig } from "#config";
+import { cwdPath } from "#path";
+import type { GenerateDbOptions } from "#types";
+import { isDbDialect, writeDrizzleSchema } from "#generator/db";
 import { discoverProgramsWithSpinner } from "./shared";
 
 export async function generateDb(options: GenerateDbOptions): Promise<void> {

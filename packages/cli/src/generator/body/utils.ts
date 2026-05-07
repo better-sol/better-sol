@@ -1,5 +1,5 @@
 import { Node, Project, type Statement } from "ts-morph";
-import type { IrType } from "../../ir/types";
+import type { IrType } from "#ir/types";
 
 export function isIntegerSeedType(type: IrType): boolean {
   return (

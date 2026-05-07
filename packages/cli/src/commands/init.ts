@@ -1,11 +1,11 @@
 import { intro, outro, spinner, confirm, select as clackSelect, isCancel, cancel, log } from "@clack/prompts";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { createKeypair } from "../keypair";
-import { cwdJoin, fileExists } from "../path";
-import type { InitOptions } from "../types";
+import { createKeypair } from "#keypair";
+import { cwdJoin, fileExists } from "#path";
+import type { InitOptions } from "#types";
 
 const PAYER_KEYPAIR_PATH = "keypair.json";
 const GITIGNORE_ENTRIES = [".better-sol/", "generated/", "keypair.json", "node_modules/"];
@@ -36,7 +36,7 @@ export async function init(options: InitOptions): Promise<void> {
   }
 
   await ensureGitignore();
-  await ensureProgramsDir();
+  ensureProgramsDir();
 
   if (!options.skipInstall) {
     await installDependencies();
@@ -86,11 +86,10 @@ async function ensureGitignore(): Promise<void> {
   log.step("Updated .gitignore");
 }
 
-async function ensureProgramsDir(): Promise<void> {
+function ensureProgramsDir(): void {
   const programsDir = cwdJoin("programs");
   if (!existsSync(programsDir)) {
-    const { mkdir } = await import("node:fs/promises");
-    await mkdir(programsDir, { recursive: true });
+    mkdirSync(programsDir, { recursive: true });
     log.step("Created programs/ directory");
   }
 }

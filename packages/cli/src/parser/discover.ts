@@ -1,7 +1,7 @@
 import { opendir } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import type { IrProgram } from "../ir/types";
+import type { IrProgram } from "#ir/types";
 import { parseProgramsFromFile } from "./ast";
 
 function globToRegex(pattern: string): RegExp {

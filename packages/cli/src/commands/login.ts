@@ -1,5 +1,5 @@
 import { intro, log, outro, text, isCancel, cancel } from "@clack/prompts";
-import { storeApiKey } from "../auth";
+import { storeApiKey } from "#auth";
 import { CLI_COMMAND } from "./shared";
 
 export async function login(): Promise<void> {

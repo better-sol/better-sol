@@ -1,6 +1,6 @@
 import { intro, log, outro, spinner } from "@clack/prompts";
 import { execSync } from "node:child_process";
-import type { VerifyOptions } from "../types";
+import type { VerifyOptions } from "#types";
 import { CLI_COMMAND } from "./shared";
 
 const OTTERSEC_API = "https://verify.osec.io";

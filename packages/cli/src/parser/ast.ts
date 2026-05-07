@@ -2,7 +2,7 @@ import type {
   IrAccount, IrAccountField, IrError, IrEvent, IrEventField,
   IrInstruction, IrInstructionAccount, IrInstructionArg, IrProgram,
   IrSeed, IrStructZC, IrType, PrimitiveType,
-} from "../ir/types";
+} from "#ir/types";
 
 import {
   Project, SyntaxKind,
@@ -32,7 +32,7 @@ import {
   unwrapMethodChain,
 } from "./helpers";
 
-import { paddingFor } from "../generator/layout";
+import { paddingFor } from "#generator/layout";
 
 type RawAccount = {
   readonly name: string;

@@ -1,4 +1,4 @@
-import { generateKeyPairSigner } from "@solana/kit";
+import { generateKeyPairSigner, getAddressDecoder } from "@solana/kit";
 import { readFile, writeFile } from "node:fs/promises";
 import { ensureParent, fileExists } from "./path";
 
@@ -43,8 +43,7 @@ export async function readKeypair(path: string): Promise<KeypairData> {
   throw new Error(`Invalid keypair file: ${path}`);
 }
 
-export async function derivePublicKeyFromBytes(keypairBytes: readonly number[]): Promise<string> {
-  const { getAddressDecoder } = await import("@solana/kit");
+function derivePublicKeyFromBytes(keypairBytes: readonly number[]): string {
   const publicKeyBytes = new Uint8Array(keypairBytes.slice(32));
   return getAddressDecoder().decode(publicKeyBytes);
 }

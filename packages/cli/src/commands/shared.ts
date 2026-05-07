@@ -1,6 +1,6 @@
 import { spinner } from "@clack/prompts";
-import type { IrProgram } from "../ir/types";
-import { discoverPrograms } from "../parser/discover";
+import type { IrProgram } from "#ir/types";
+import { discoverPrograms } from "#parser/discover";
 
 export const CLI_COMMAND = "npx @better-sol/cli";
 

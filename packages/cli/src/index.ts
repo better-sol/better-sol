@@ -19,7 +19,7 @@ const cli = new Command();
 cli
   .name("better-sol")
   .description("TypeScript-first Solana program tooling — run with npx @better-sol/cli")
-  .version("0.0.0");
+  .version(process.env.BETTER_SOL_CLI_VERSION ?? "0.1.0");
 
 cli
   .command("init")

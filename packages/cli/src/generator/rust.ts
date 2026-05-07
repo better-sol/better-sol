@@ -1,9 +1,9 @@
 import type {
   IrAccount, IrError, IrEvent, IrInstruction, IrInstructionAccount, IrInstructionArg, IrProgram,
   IrStructZC, IrType,
-} from "../ir/types";
+} from "#ir/types";
 import { CodeWriter } from "./code-writer";
-import { toSnake, toPascal } from "../naming";
+import { toSnake, toPascal } from "#naming";
 import { transpileBody } from "./body";
 import { paddingFor } from "./layout";
 

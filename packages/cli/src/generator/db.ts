@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
-import { ensureParent } from "../path";
-import { type IrProgram, type IrAccountField, type IrType } from "../ir/types";
-import { toSnake, toCamel } from "../naming";
+import { ensureParent } from "#path";
+import { type IrProgram, type IrAccountField, type IrType } from "#ir/types";
+import { toSnake, toCamel } from "#naming";
 
 type DbDialect = "postgres" | "mysql" | "sqlite";
 
