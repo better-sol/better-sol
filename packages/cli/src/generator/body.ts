@@ -1,10 +1,5 @@
-import {
-  Node,
-  SyntaxKind,
-  type Expression,
-  type ObjectLiteralExpression,
-  type Statement,
-} from "ts-morph";
+import type { Node } from "oxc-parser";
+
 import type {
   IrAccount,
   IrAccountField,
@@ -22,6 +17,66 @@ import {
   formatSeedType,
   parseBodyStatements,
 } from "./body/utils";
+
+import {
+  type CallExpression,
+  type MemberExpression,
+  type IfStatement,
+  type ForStatement,
+  type AssignmentExpression,
+  type ObjectExpression,
+  type BinaryExpression,
+  type LogicalExpression,
+  type ConditionalExpression,
+  type UnaryExpression,
+  type UpdateExpression,
+  type ArrayExpression,
+  type NewExpression,
+  type VariableDeclaration,
+  isCallExpression,
+  isMemberExpression,
+  isIdentifier,
+  isObjectExpression,
+  isStringLiteral,
+  isNumericLiteral,
+  isBooleanLiteral,
+  isNullLiteral,
+  isBinaryExpression,
+  isLogicalExpression,
+  isAssignmentExpression,
+  isParenthesizedExpression,
+  isTSNonNullExpression,
+  isConditionalExpression,
+  isArrowFunctionExpression,
+  isProperty,
+  isSpreadElement,
+  isAwaitExpression,
+  isTemplateLiteral,
+  isFunctionExpression,
+  isNewExpression,
+  isArrayExpression,
+  isTSAsExpression,
+  isIfStatement,
+  isForStatement,
+  isBlockStatement,
+  isReturnStatement,
+  isExpressionStatement,
+  isUnaryExpression,
+  isUpdateExpression,
+  isContinueStatement,
+  isBreakStatement,
+  isWhileStatement,
+  isDoWhileStatement,
+  isForOfStatement,
+  isForInStatement,
+  isSwitchStatement,
+  isTryStatement,
+  isThrowStatement,
+  isVariableDeclaration,
+  isVariableDeclarator,
+  getObjectProperty,
+  nodeTextOf,
+} from "../parser/node-helpers";
 
 type SymbolInfo = {
   readonly kind: "account";
@@ -61,21 +116,23 @@ type CpiCall = {
   readonly functionName: "transfer" | "transfer_checked" | "mint_to" | "burn";
   readonly accountsType: "Transfer" | "TransferChecked" | "MintTo" | "Burn";
   readonly accounts: readonly CpiAccountField[];
-  readonly amount: Expression;
-  readonly decimals: Expression | undefined;
+  readonly amount: Node;
+  readonly decimals: Node | undefined;
   readonly authority: string;
 };
 
 type CpiAccountField = {
   readonly name: string;
-  readonly expression: Expression;
+  readonly expression: Node;
 };
 
 export function transpileBody(ix: IrInstruction, program: IrProgram): string {
-  const statements = parseBodyStatements(ix.body);
-  const context = new BodyContext(ix, program, statements);
+  const { statements, source } = parseBodyStatements(ix.body);
+  const context = new BodyContext(ix, program, statements, source);
   return context.transpile();
 }
+
+const ASSIGNMENT_OPS = new Set(["=", "+=", "-=", "*=", "/="]);
 
 class BodyContext {
   private readonly symbols = new Map<string, SymbolInfo>();
@@ -83,16 +140,20 @@ class BodyContext {
   private readonly mutatedLocals = new Set<string>();
   private readonly mutatedAccounts = new Set<string>();
   private readonly deferredInitializers = new Set<string>();
-  private readonly elementAliases = new Map<string, import("ts-morph").ElementAccessExpression>();
+  private readonly elementAliases = new Map<string, MemberExpression>();
   private readonly referencedAccounts = new Set<string>();
   private cpiIndex = 0;
   private remainingWriteIndex = 0;
 
-  public constructor(
+  private readonly source: string;
+
+  constructor(
     private readonly ix: IrInstruction,
     private readonly program: IrProgram,
-    private readonly statements: readonly Statement[],
+    private readonly statements: readonly Node[],
+    source: string,
   ) {
+    this.source = source;
     for (const account of ix.accounts) {
       this.symbols.set(account.name, {
         kind: "account",
@@ -115,7 +176,7 @@ class BodyContext {
     this.collectLocalsAndReferences();
   }
 
-  public transpile(): string {
+  transpile(): string {
     const cw = new CodeWriter();
     cw.indent(2);
 
@@ -136,10 +197,11 @@ class BodyContext {
 
   private collectLocalsAndReferences(): void {
     const visit = (node: Node): void => {
-      if (Node.isVariableStatement(node)) {
-        for (const declaration of node.getDeclarations()) {
-          const name = declaration.getName();
-          const initializer = declaration.getInitializer();
+      if (isVariableDeclaration(node) && (node.kind === "const" || node.kind === "let")) {
+        for (const decl of node.declarations) {
+          if (!isVariableDeclarator(decl) || !isIdentifier(decl.id)) continue;
+          const name = decl.id.name;
+          const initializer = decl.init ?? undefined;
           const inferred = this.inferExpressionType(initializer);
           const local = {
             kind: "local" as const,
@@ -152,27 +214,24 @@ class BodyContext {
         }
       }
 
-      if (Node.isIdentifier(node)) {
-        const symbol = this.symbols.get(node.getText());
+      if (isIdentifier(node)) {
+        const symbol = this.symbols.get(node.name);
         if (symbol?.kind === "account" && !this.isPropertyName(node)) {
           this.referencedAccounts.add(symbol.sourceName);
         }
       }
 
-      if (Node.isBinaryExpression(node) && this.isAssignmentOperator(node.getOperatorToken().getText())) {
-        const left = node.getLeft();
-        this.collectMutatedAccounts(left);
-        if (Node.isIdentifier(left)) this.mutatedLocals.add(left.getText());
-        if (Node.isPropertyAccessExpression(left) && Node.isIdentifier(left.getExpression())) this.mutatedLocals.add(left.getExpression().getText());
-        if (Node.isElementAccessExpression(left) && Node.isIdentifier(left.getExpression())) this.mutatedLocals.add(left.getExpression().getText());
+      if (isAssignmentExpression(node)) {
+        this.collectMutatedAccounts(node.left);
+        if (isIdentifier(node.left)) this.mutatedLocals.add(node.left.name);
+        if (isMemberExpression(node.left) && isIdentifier(node.left.object)) this.mutatedLocals.add(node.left.object.name);
       }
 
-      if (Node.isPostfixUnaryExpression(node) || Node.isPrefixUnaryExpression(node)) {
-        const operand = node.getOperand();
-        if (Node.isIdentifier(operand)) this.mutatedLocals.add(operand.getText());
+      if (isUpdateExpression(node) && isIdentifier(node.argument)) {
+        this.mutatedLocals.add(node.argument.name);
       }
 
-      for (const child of node.getChildren()) visit(child);
+      for (const child of childrenOf(node)) visit(child);
     };
 
     for (const statement of this.statements) visit(statement);
@@ -180,44 +239,44 @@ class BodyContext {
   }
 
   private collectMutatedAccounts(node: Node): void {
-    if (Node.isIdentifier(node) && !this.isPropertyName(node)) {
-      const symbol = this.symbols.get(node.getText());
+    if (isIdentifier(node) && !this.isPropertyName(node)) {
+      const symbol = this.symbols.get(node.name);
       if (symbol?.kind === "account") this.mutatedAccounts.add(symbol.sourceName);
     }
-    for (const child of node.getChildren()) this.collectMutatedAccounts(child);
+    for (const child of childrenOf(node)) this.collectMutatedAccounts(child);
   }
 
-  private collectDeferredInitializers(statements: readonly Statement[]): void {
+  private collectDeferredInitializers(statements: readonly Node[]): void {
     for (let i = 0; i < statements.length - 1; i++) {
-      const statement = statements[i];
+      const statement = statements[i]!;
       const next = statements[i + 1];
-      if (!Node.isVariableStatement(statement) || !Node.isIfStatement(next)) continue;
-      const declaration = statement.getDeclarations()[0];
-      if (declaration === undefined) continue;
-      const initializer = declaration.getInitializer();
-      if (initializer === undefined || !this.isZeroLiteral(initializer)) continue;
-      const name = declaration.getName();
-      const elseStatement = next.getElseStatement();
-      if (elseStatement === undefined) continue;
-      if (this.statementAssignsTo(next.getThenStatement(), name) && this.statementAssignsTo(elseStatement, name)) {
-        this.deferredInitializers.add(name);
+      if (!isVariableDeclaration(statement) || !isIfStatement(next)) continue;
+      for (const decl of statement.declarations) {
+        if (!isVariableDeclarator(decl) || !isIdentifier(decl.id)) continue;
+        const initializer = decl.init ?? undefined;
+        if (initializer === undefined || initializer === null || !this.isZeroLiteral(initializer)) continue;
+        const name = decl.id.name;
+        const alternate = next.alternate;
+        if (alternate === undefined || alternate === null) continue;
+        if (this.statementAssignsTo(next.consequent, name) && this.statementAssignsTo(alternate, name)) {
+          this.deferredInitializers.add(name);
+        }
       }
     }
   }
 
-  private statementAssignsTo(statement: Statement, name: string): boolean {
-    const statements = Node.isBlock(statement) ? statement.getStatements() : [statement];
-    return statements.some((candidate) => {
-      if (!Node.isExpressionStatement(candidate)) return false;
-      const expression = candidate.getExpression();
-      if (!Node.isBinaryExpression(expression) || !this.isAssignmentOperator(expression.getOperatorToken().getText())) return false;
-      const left = expression.getLeft();
-      return Node.isIdentifier(left) && left.getText() === name;
+  private statementAssignsTo(statement: Node, name: string): boolean {
+    const stmts = isBlockStatement(statement) ? statement.body : [statement];
+    return stmts.some((candidate) => {
+      if (!isExpressionStatement(candidate)) return false;
+      const expression = candidate.expression;
+      if (!isAssignmentExpression(expression) || expression.operator !== "=") return false;
+      return isIdentifier(expression.left) && expression.left.name === name;
     });
   }
 
   private isZeroLiteral(node: Node): boolean {
-    return (Node.isNumericLiteral(node) || Node.isBigIntLiteral(node)) && node.getText().replace(/n$/, "") === "0";
+    return isNumericLiteral(node) && node.value === 0;
   }
 
   private hasAccountBindings(): boolean {
@@ -244,39 +303,39 @@ class BodyContext {
       : `let ${rustName} = &ctx.accounts.${rustName};`;
   }
 
-  private writeStatement(cw: CodeWriter, statement: Statement): void {
-    if (Node.isVariableStatement(statement)) {
+  private writeStatement(cw: CodeWriter, statement: Node): void {
+    if (isVariableDeclaration(statement)) {
       for (const line of this.renderVariableStatement(statement)) cw.line(line);
       return;
     }
 
-    if (Node.isExpressionStatement(statement)) {
-      for (const line of this.renderExpressionStatement(statement.getExpression())) cw.line(line);
+    if (isExpressionStatement(statement)) {
+      for (const line of this.renderExpressionStatement(statement)) cw.line(line);
       return;
     }
 
-    if (Node.isIfStatement(statement)) {
+    if (isIfStatement(statement)) {
       this.writeIfStatement(cw, statement);
       return;
     }
 
-    if (Node.isForStatement(statement)) {
+    if (isForStatement(statement)) {
       this.writeForStatement(cw, statement);
       return;
     }
 
-    if (Node.isContinueStatement(statement)) {
+    if (isContinueStatement(statement)) {
       cw.line("continue;");
       return;
     }
 
-    if (Node.isBreakStatement(statement)) {
+    if (isBreakStatement(statement)) {
       cw.line("break;");
       return;
     }
 
-    if (Node.isReturnStatement(statement)) {
-      const returnExpr = statement.getExpression();
+    if (isReturnStatement(statement)) {
+      const returnExpr = statement.argument ?? undefined;
       if (returnExpr !== undefined) {
         cw.line(`return Ok(${this.renderExpression(returnExpr, "value")});`);
       } else {
@@ -284,32 +343,33 @@ class BodyContext {
       }
       return;
     }
-    if (Node.isForOfStatement(statement) || Node.isForInStatement(statement)) this.unsupported("for...of/for...in loops", statement, "Use a bounded index loop: for (let i = 0; i < limit; i++). On-chain programs need explicit bounds.");
-    if (Node.isWhileStatement(statement) || Node.isDoStatement(statement)) this.unsupported("while/do loops", statement, "Use a bounded for loop: for (let i = 0; i < limit; i++). On-chain programs need explicit bounds.");
-    if (Node.isSwitchStatement(statement)) this.unsupported("switch statements", statement, "Use explicit if/else branches.");
-    if (Node.isTryStatement(statement)) this.unsupported("try/catch/finally", statement, "Use ctx.require(...) and Result-returning supported operations instead.");
-    if (Node.isThrowStatement(statement)) this.unsupported("throw statements", statement, "Use ctx.require(condition, 'ErrorName') with inline program errors.");
 
-    if (Node.isBlock(statement)) {
-      for (const nested of statement.getStatements()) this.writeStatement(cw, nested);
+    if (isForOfStatement(statement) || isForInStatement(statement)) this.unsupported("for...of/for...in loops", statement, "Use a bounded index loop: for (let i = 0; i < limit; i++). On-chain programs need explicit bounds.");
+    if (isWhileStatement(statement) || isDoWhileStatement(statement)) this.unsupported("while/do loops", statement, "Use a bounded for loop: for (let i = 0; i < limit; i++). On-chain programs need explicit bounds.");
+    if (isSwitchStatement(statement)) this.unsupported("switch statements", statement, "Use explicit if/else branches.");
+    if (isTryStatement(statement)) this.unsupported("try/catch/finally", statement, "Use ctx.require(...) and Result-returning supported operations instead.");
+    if (isThrowStatement(statement)) this.unsupported("throw statements", statement, "Use ctx.require(condition, 'ErrorName') with inline program errors.");
+
+    if (isBlockStatement(statement)) {
+      for (const nested of statement.body) this.writeStatement(cw, nested);
       return;
     }
 
-    this.unsupported(`statement syntax '${statement.getKindName()}'`, statement);
+    this.unsupported(`statement syntax '${statement.type}'`, statement);
   }
 
-  private renderVariableStatement(statement: import("ts-morph").VariableStatement): readonly string[] {
+  private renderVariableStatement(statement: VariableDeclaration): readonly string[] {
     const lines: string[] = [];
-    for (const declaration of statement.getDeclarations()) {
-      const name = declaration.getName();
-      if (name.startsWith("{") || name.startsWith("[")) {
-        this.unsupported("destructuring variable declarations", declaration, "Declare each local explicitly instead of using object/array destructuring.");
+    for (const decl of statement.declarations) {
+      if (!isVariableDeclarator(decl) || !isIdentifier(decl.id)) {
+        this.unsupported("destructuring variable declarations", decl, "Declare each local explicitly instead of using object/array destructuring.");
       }
+      const name = decl.id.name;
       const rustName = toSnake(name);
-      const init = declaration.getInitializer();
+      const init = decl.init ?? undefined;
       const mutable = this.mutatedLocals.has(name) && !this.deferredInitializers.has(name);
       const keyword = mutable ? "let mut" : "let";
-      if (init === undefined || this.deferredInitializers.has(name)) {
+      if (init === undefined || init === null || this.deferredInitializers.has(name)) {
         lines.push(`${keyword} ${rustName};`);
         continue;
       }
@@ -320,10 +380,10 @@ class BodyContext {
         this.locals.set(name, updated);
         this.symbols.set(name, updated);
       }
-      if (Node.isConditionalExpression(init) && this.mutatedLocals.has(name)) {
+      if (isConditionalExpression(init) && this.mutatedLocals.has(name)) {
         throw new Error(`Instruction '${this.ix.name}' creates a mutable conditional alias '${name}'. Rewrite it as explicit branches so generated Rust preserves account mutations.`);
       }
-      if (Node.isElementAccessExpression(init) && this.mutatedLocals.has(name)) {
+      if (isMemberExpression(init) && init.computed && this.mutatedLocals.has(name)) {
         this.elementAliases.set(name, init);
         continue;
       }
@@ -332,52 +392,55 @@ class BodyContext {
     return lines;
   }
 
-  private renderExpressionStatement(expression: Expression): readonly string[] {
-    const cpi = this.tryParseCpiCall(expression);
+  private renderExpressionStatement(expression: Node): readonly string[] {
+    if (!isExpressionStatement(expression)) return [];
+
+    const expr = expression.expression;
+    const cpi = this.tryParseCpiCall(expr);
     if (cpi !== undefined) return this.renderCpiCall(cpi);
 
-    if (Node.isCallExpression(expression)) {
-      const requireLine = this.tryRenderRequire(expression);
+    if (isCallExpression(expr)) {
+      const requireLine = this.tryRenderRequire(expr);
       if (requireLine !== undefined) return [requireLine];
-      const emitLine = this.tryRenderEmit(expression);
+      const emitLine = this.tryRenderEmit(expr);
       if (emitLine !== undefined) return [emitLine];
-      const logLine = this.tryRenderLog(expression);
+      const logLine = this.tryRenderLog(expr);
       if (logLine !== undefined) return [logLine];
     }
 
-    if (Node.isBinaryExpression(expression) && this.isAssignmentOperator(expression.getOperatorToken().getText())) {
-      const remainingAssignment = this.tryRenderRemainingAssignment(expression);
+    if (isAssignmentExpression(expr) && ASSIGNMENT_OPS.has(expr.operator)) {
+      const remainingAssignment = this.tryRenderRemainingAssignment(expr);
       if (remainingAssignment !== undefined) return remainingAssignment;
-      const indexedAssignment = this.tryRenderIndexedAssignment(expression);
+      const indexedAssignment = this.tryRenderIndexedAssignment(expr);
       if (indexedAssignment !== undefined) return indexedAssignment;
-      return [this.renderAssignment(expression)];
+      return [this.renderAssignment(expr)];
     }
 
-    return [`${this.renderExpression(expression, "value")};`];
+    return [`${this.renderExpression(expr, "value")};`];
   }
 
-  private writeIfStatement(cw: CodeWriter, statement: import("ts-morph").IfStatement): void {
-    const condition = this.renderExpression(statement.getExpression(), "condition");
+  private writeIfStatement(cw: CodeWriter, statement: IfStatement): void {
+    const condition = this.renderExpression(statement.test, "condition");
     cw.block(`if ${condition}`, () => {
-      this.writeNestedStatement(cw, statement.getThenStatement());
+      this.writeNestedStatement(cw, statement.consequent);
     });
-    const elseStatement = statement.getElseStatement();
-    if (elseStatement === undefined) return;
+    const alternate = statement.alternate;
+    if (alternate === undefined || alternate === null) return;
     cw.block("else", () => {
-      this.writeNestedStatement(cw, elseStatement);
+      this.writeNestedStatement(cw, alternate);
     });
   }
 
-  private writeForStatement(cw: CodeWriter, statement: import("ts-morph").ForStatement): void {
-    const initializer = statement.getInitializer();
-    const condition = statement.getCondition();
-    if (initializer === undefined || condition === undefined) {
+  private writeForStatement(cw: CodeWriter, statement: ForStatement): void {
+    const init = statement.init;
+    const test = statement.test;
+    if (init === undefined || init === null || test === undefined || test === null) {
       this.unsupported("for loops without initializer or condition", statement, "Use: for (let i = 0; i < limit; i++). ");
     }
 
-    const loopVariable = this.getForLoopVariable(initializer);
-    const start = this.getForLoopStart(initializer);
-    const end = this.getForLoopEnd(condition);
+    const loopVariable = this.getForLoopVariable(init);
+    const start = this.getForLoopStart(init);
+    const end = this.getForLoopEnd(test);
     if (loopVariable === undefined || start === undefined || end === undefined) {
       this.unsupported("unsupported for-loop shape", statement, "Use the supported shape: for (let i = 0; i < limit; i++). ");
     }
@@ -392,103 +455,105 @@ class BodyContext {
     this.symbols.set(loopVariable, local);
 
     cw.block(`for ${toSnake(loopVariable)} in ${start}..(${end} as usize)`, () => {
-      this.writeNestedStatement(cw, statement.getStatement());
+      this.writeNestedStatement(cw, statement.body);
     });
   }
 
-  private writeNestedStatement(cw: CodeWriter, statement: Statement): void {
-    if (Node.isBlock(statement)) {
-      for (const nested of statement.getStatements()) this.writeStatement(cw, nested);
+  private writeNestedStatement(cw: CodeWriter, statement: Node): void {
+    if (isBlockStatement(statement)) {
+      for (const nested of statement.body) this.writeStatement(cw, nested);
       return;
     }
     this.writeStatement(cw, statement);
   }
 
-  private tryRenderIndexedAssignment(expression: import("ts-morph").BinaryExpression): readonly string[] | undefined {
-    const left = expression.getLeft();
-    if (!Node.isElementAccessExpression(left)) return undefined;
-    const base = left.getExpression();
-    const index = left.getArgumentExpression();
-    if (!Node.isPropertyAccessExpression(base) || index === undefined) return undefined;
-    const owner = base.getExpression();
-    if (!Node.isIdentifier(owner) || !this.expressionReferencesIdentifier(index, owner.getText())) return undefined;
-    const variable = `${toSnake(owner.getText())}_${toSnake(base.getName())}_index_${this.remainingWriteIndex++}`;
+  private tryRenderIndexedAssignment(expression: AssignmentExpression): readonly string[] | undefined {
+    const left = expression.left;
+    if (!isMemberExpression(left) || !left.computed) return undefined;
+    const indexArg = left.property;
+    const base = left.object;
+    if (!isMemberExpression(base)) return undefined;
+    const owner = base.object;
+    if (!isIdentifier(owner)) return undefined;
+    if (!this.expressionReferencesIdentifier(indexArg, owner.name)) return undefined;
+    const variable = `${toSnake(owner.name)}_${toSnake(memberPropertyName(base))}_index_${this.remainingWriteIndex++}`;
     const targetType = this.inferAssignmentTargetType(left);
     const expected = targetType?.kind === "value" ? targetType.type : undefined;
     return [
-      `let ${variable} = ${this.renderExpression(index, "value")} as usize;`,
-      `${this.renderExpression(base, "value")}[${variable}] ${expression.getOperatorToken().getText()} ${this.renderExpression(expression.getRight(), "value", expected)};`,
+      `let ${variable} = ${this.renderExpression(indexArg, "value")} as usize;`,
+      `${this.renderExpression(base, "value")}[${variable}] ${expression.operator} ${this.renderExpression(expression.right, "value", expected)};`,
     ];
   }
 
-  private expressionReferencesIdentifier(node: Node, name: string): boolean {
-    if (Node.isIdentifier(node) && node.getText() === name) return true;
-    return node.getChildren().some((child) => this.expressionReferencesIdentifier(child, name));
+  private expressionReferencesIdentifier(node: Node | undefined | null, name: string): boolean {
+    if (node === undefined || node === null) return false;
+    if (isIdentifier(node) && node.name === name) return true;
+    return childrenOf(node).some((child) => this.expressionReferencesIdentifier(child, name));
   }
 
-  private tryRenderRemainingAssignment(expression: import("ts-morph").BinaryExpression): readonly string[] | undefined {
-    const operator = expression.getOperatorToken().getText();
-    if (operator !== "=") return undefined;
-    const left = expression.getLeft();
-    if (!Node.isPropertyAccessExpression(left)) return undefined;
-    const rawBase = left.getExpression();
-    const base = Node.isNonNullExpression(rawBase) ? rawBase.getExpression() : rawBase;
-    if (!Node.isElementAccessExpression(base)) return undefined;
-    const remainingBase = base.getExpression();
-    if (!Node.isIdentifier(remainingBase)) return undefined;
-    const symbol = this.symbols.get(remainingBase.getText());
+  private tryRenderRemainingAssignment(expression: AssignmentExpression): readonly string[] | undefined {
+    if (expression.operator !== "=") return undefined;
+    const left = expression.left;
+    if (!isMemberExpression(left) || left.computed) return undefined;
+    const rawBase = left.object;
+    const base = isTSNonNullExpression(rawBase) ? rawBase.expression : rawBase;
+    if (!isMemberExpression(base) || !base.computed) return undefined;
+    const remainingBase = base.object;
+    if (!isIdentifier(remainingBase)) return undefined;
+    const symbol = this.symbols.get(remainingBase.name);
     if (symbol?.kind !== "account" || symbol.account.constraint.kind !== "remaining") return undefined;
     const accountName = symbol.account.constraint.accountName;
     if (accountName === undefined) return undefined;
-    const index = base.getArgumentExpression();
-    const renderedIndex = index === undefined ? "0" : this.renderExpression(index, "value");
+    const index = base.property;
+    const renderedIndex = this.renderExpression(index, "value");
     const variable = `${symbol.rustName}_item_${this.remainingWriteIndex++}`;
-    const fieldName = left.getName();
+    const fieldName = memberPropertyName(left);
     const accountDef = this.program.accounts.find((account) => account.name === accountName);
     const field = accountDef?.fields.find((candidate) => candidate.name === fieldName);
     const expected = field?.type;
     return [
       `let mut ${variable} = Account::<${toPascal(accountName)}>::try_from(&ctx.remaining_accounts[(${renderedIndex}) as usize])?;`,
-      `${variable}.${toSnake(fieldName)} = ${this.renderExpression(expression.getRight(), "value", expected)};`,
+      `${variable}.${toSnake(fieldName)} = ${this.renderExpression(expression.right, "value", expected)};`,
       `${variable}.exit(ctx.program_id)?;`,
     ];
   }
 
-  private renderAssignment(expression: import("ts-morph").BinaryExpression): string {
-    const operator = expression.getOperatorToken().getText() as AssignmentOperator;
-    const left = expression.getLeft();
+  private renderAssignment(expression: AssignmentExpression): string {
+    const operator = expression.operator as AssignmentOperator;
+    const left = expression.left;
     const targetType = this.inferAssignmentTargetType(left);
-    const right = expression.getRight();
+    const right = expression.right;
     const fieldType = targetType?.kind === "value" ? targetType.zeroCopyBool ? "u8" : targetType.type : undefined;
     const renderedRight = this.renderExpression(right, "value", fieldType);
     const isOption = fieldType !== undefined && typeof fieldType === "object" && fieldType.kind === "option";
-    const isNull = right.getKind() === SyntaxKind.NullKeyword;
+    const isNull = isNullLiteral(right);
     const wrappedRight = isOption && !isNull ? `Some(${renderedRight})` : renderedRight;
     return `${this.renderAssignmentTarget(left)} ${operator} ${wrappedRight};`;
   }
 
-  private tryRenderRequire(expression: import("ts-morph").CallExpression): string | undefined {
-    const callee = expression.getExpression();
-    if (!Node.isPropertyAccessExpression(callee)) return undefined;
-    if (callee.getExpression().getText() !== "ctx" || callee.getName() !== "require") return undefined;
-    const args = expression.getArguments();
+  private tryRenderRequire(expression: CallExpression): string | undefined {
+    const callee = expression.callee;
+    if (!isMemberExpression(callee)) return undefined;
+    if (!isIdentifier(callee.object) || callee.object.name !== "ctx") return undefined;
+    if (!isIdentifier(callee.property) || callee.property.name !== "require") return undefined;
+    const args = expression.arguments;
     const condition = args[0];
     const error = args[1];
-    if (condition === undefined || error === undefined || !Node.isStringLiteral(error)) return undefined;
-    const errorName = error.getLiteralValue();
+    if (condition === undefined || error === undefined || !isStringLiteral(error)) return undefined;
+    const errorName = error.value;
     this.assertKnownError(errorName, error);
     return `require!(${this.renderExpression(condition, "condition")}, ProgramError::${toPascal(errorName)});`;
   }
 
-  private tryRenderEmit(expression: import("ts-morph").CallExpression): string | undefined {
-    const callee = expression.getExpression();
-    const args = expression.getArguments();
+  private tryRenderEmit(expression: CallExpression): string | undefined {
+    const callee = expression.callee;
+    const args = expression.arguments;
 
-    if (Node.isPropertyAccessExpression(callee) && callee.getExpression().getText() === "ctx" && callee.getName() === "emit") {
+    if (isMemberExpression(callee) && isIdentifier(callee.object) && callee.object.name === "ctx" && isIdentifier(callee.property) && callee.property.name === "emit") {
       const eventName = args[0];
       const payload = args[1];
-      if (eventName === undefined || payload === undefined || !Node.isStringLiteral(eventName) || !Node.isObjectLiteralExpression(payload)) return undefined;
-      const eventNameValue = eventName.getLiteralValue();
+      if (eventName === undefined || payload === undefined || !isStringLiteral(eventName) || !isObjectExpression(payload)) return undefined;
+      const eventNameValue = eventName.value;
       const fields = this.findEventFields(eventNameValue);
       this.assertEventPayload(eventNameValue, payload, fields);
       return `emit!(${toPascal(eventNameValue)} { ${this.renderObjectFields(payload, fields)} });`;
@@ -497,15 +562,16 @@ class BodyContext {
     return undefined;
   }
 
-  private tryRenderLog(expression: import("ts-morph").CallExpression): string | undefined {
-    const callee = expression.getExpression();
-    if (!Node.isPropertyAccessExpression(callee)) return undefined;
-    if (callee.getExpression().getText() !== "ctx" || callee.getName() !== "log") return undefined;
-    const args = expression.getArguments();
+  private tryRenderLog(expression: CallExpression): string | undefined {
+    const callee = expression.callee;
+    if (!isMemberExpression(callee)) return undefined;
+    if (!isIdentifier(callee.object) || callee.object.name !== "ctx") return undefined;
+    if (!isIdentifier(callee.property) || callee.property.name !== "log") return undefined;
+    const args = expression.arguments;
     const message = args[0];
-    if (message === undefined || !Node.isStringLiteral(message)) return undefined;
+    if (message === undefined || !isStringLiteral(message)) return undefined;
     const renderedArgs = args.slice(1).map((arg) => this.renderExpression(arg, "value"));
-    const messageText = message.getLiteralValue();
+    const messageText = message.value;
     const hasPlaceholders = messageText.includes("{}");
     return renderedArgs.length === 0
       ? `msg!(${JSON.stringify(messageText)});`
@@ -514,35 +580,42 @@ class BodyContext {
         : `msg!("${messageText} ${renderedArgs.map(() => "{}").join(" ")}", ${renderedArgs.join(", ")});`;
   }
 
-  private renderExpression(node: Node, mode: ExpressionMode, expectedType?: IrType): string {
-    if (Node.isParenthesizedExpression(node)) return `(${this.renderExpression(node.getExpression(), mode, expectedType)})`;
-    if (Node.isNonNullExpression(node)) return this.renderExpression(node.getExpression(), mode, expectedType);
-    if (Node.isIdentifier(node)) return this.renderIdentifier(node.getText(), mode, expectedType);
-    if (Node.isNumericLiteral(node)) return node.getText();
-    if (Node.isBigIntLiteral(node)) return node.getText().replace(/n$/, "");
-    if (Node.isStringLiteral(node)) {
-      if (expectedType === "pubkey" && node.getLiteralValue() === "") return "Pubkey::default()";
-      return expectedType === "string" ? `${JSON.stringify(node.getLiteralValue())}.to_string()` : JSON.stringify(node.getLiteralValue());
+  private renderExpression(node: Node | undefined | null, mode: ExpressionMode, expectedType?: IrType): string {
+    if (node === undefined || node === null) return "/* undefined */";
+    if (isParenthesizedExpression(node)) return `(${this.renderExpression(node.expression, mode, expectedType)})`;
+    if (isTSNonNullExpression(node)) return this.renderExpression(node.expression, mode, expectedType);
+    if (isIdentifier(node)) return this.renderIdentifier(node.name, mode, expectedType);
+    if (isNumericLiteral(node)) return String(node.value);
+    if (isStringLiteral(node)) {
+      if (expectedType === "pubkey" && node.value === "") return "Pubkey::default()";
+      return expectedType === "string" ? `${JSON.stringify(node.value)}.to_string()` : JSON.stringify(node.value);
     }
-    if (Node.isTrueLiteral(node)) return this.renderBooleanLiteral(true, expectedType);
-    if (Node.isFalseLiteral(node)) return this.renderBooleanLiteral(false, expectedType);
-    if (node.getKind() === SyntaxKind.NullKeyword) return this.renderNullLiteral(expectedType);
-    if (Node.isPropertyAccessExpression(node)) return this.renderPropertyAccess(node, mode, expectedType);
-    if (Node.isElementAccessExpression(node)) return this.renderElementAccess(node, mode, expectedType);
-    if (Node.isBinaryExpression(node)) return this.renderBinaryExpression(node, mode, expectedType);
-    if (Node.isConditionalExpression(node)) return this.renderConditionalExpression(node, expectedType);
-    if (Node.isPrefixUnaryExpression(node)) return this.renderPrefixUnaryExpression(node, mode, expectedType);
-    if (Node.isPostfixUnaryExpression(node)) return this.renderPostfixUnaryExpression(node);
-    if (Node.isCallExpression(node)) return this.renderCallExpression(node, expectedType);
-    if (Node.isAsExpression(node)) return this.renderExpression(node.getExpression(), mode, expectedType);
-    if (Node.isAwaitExpression(node)) this.unsupported("await expressions", node, "On-chain instruction logic cannot await. Move async work to the client/off-chain code.");
-    if (Node.isTemplateExpression(node) || Node.isNoSubstitutionTemplateLiteral(node)) this.unsupported("template string expressions", node, "Use string literals only in supported log/message contexts.");
-    if (Node.isSpreadElement(node)) this.unsupported("spread expressions", node, "Write fields or array elements explicitly.");
-    if (Node.isArrowFunction(node) || Node.isFunctionExpression(node)) this.unsupported("nested functions", node, "Inline the logic or move it into a supported DSL primitive.");
-    if (Node.isNewExpression(node)) return this.renderNewExpression(node, expectedType);
-    if (Node.isObjectLiteralExpression(node)) return this.renderObjectLiteral(node, expectedType);
-    if (Node.isArrayLiteralExpression(node)) return this.renderArrayLiteral(node, expectedType);
-    this.unsupported(`expression syntax '${node.getKindName()}'`, node);
+    if (isBooleanLiteral(node, true)) return this.renderBooleanLiteral(true, expectedType);
+    if (isBooleanLiteral(node, false)) return this.renderBooleanLiteral(false, expectedType);
+    if (isNullLiteral(node)) return this.renderNullLiteral(expectedType);
+    if (isMemberExpression(node)) return this.renderPropertyAccess(node, mode, expectedType);
+    if (isBinaryExpression(node)) return this.renderBinaryExpression(node, mode, expectedType);
+    if (isLogicalExpression(node)) return this.renderBinaryExpression(node, mode, expectedType);
+    if (isAssignmentExpression(node) && ASSIGNMENT_OPS.has(node.operator)) return this.renderAssignmentAsExpression(node);
+    if (isConditionalExpression(node)) return this.renderConditionalExpression(node, expectedType);
+    if (isUnaryExpression(node)) return this.renderPrefixUnaryExpression(node, mode, expectedType);
+    if (isUpdateExpression(node)) return this.renderPostfixUnaryExpression(node);
+    if (isCallExpression(node)) return this.renderCallExpression(node, expectedType);
+    if (isTSAsExpression(node)) return this.renderExpression(node.expression, mode, expectedType);
+    if (isAwaitExpression(node)) this.unsupported("await expressions", node, "On-chain instruction logic cannot await. Move async work to the client/off-chain code.");
+    if (isTemplateLiteral(node)) this.unsupported("template string expressions", node, "Use string literals only in supported log/message contexts.");
+    if (isSpreadElement(node)) this.unsupported("spread expressions", node, "Write fields or array elements explicitly.");
+    if (isArrowFunctionExpression(node) || isFunctionExpression(node)) this.unsupported("nested functions", node, "Inline the logic or move it into a supported DSL primitive.");
+    if (isNewExpression(node)) return this.renderNewExpression(node, expectedType);
+    if (isObjectExpression(node)) return this.renderObjectLiteral(node, expectedType);
+    if (isArrayExpression(node)) return this.renderArrayLiteral(node, expectedType);
+
+    if (node.type === "Literal" && "bigint" in node) {
+      const raw = (node as { readonly raw: string | null }).raw;
+      return raw !== null ? raw.replace(/n$/, "") : "0";
+    }
+
+    this.unsupported(`expression syntax '${node.type}'`, node);
   }
 
   private renderIdentifier(name: string, mode: ExpressionMode, expectedType?: IrType): string {
@@ -556,10 +629,10 @@ class BodyContext {
     return this.coerceRendered(symbol.rustName, inferred, expectedType);
   }
 
-  private renderPropertyAccess(node: import("ts-morph").PropertyAccessExpression, mode: ExpressionMode, expectedType?: IrType): string {
-    const rawBase = node.getExpression();
-    const base = Node.isIdentifier(rawBase) ? this.elementAliases.get(rawBase.getText()) ?? rawBase : rawBase;
-    const property = node.getName();
+  private renderPropertyAccess(node: MemberExpression, mode: ExpressionMode, expectedType?: IrType): string {
+    const rawBase = node.object;
+    const base = isIdentifier(rawBase) ? (this.elementAliases.get(rawBase.name) ?? rawBase) : rawBase;
+    const property = memberPropertyName(node);
     const baseType = this.inferExpressionType(base);
 
     if (property === "length" && baseType?.kind === "remaining") return "ctx.remaining_accounts.len() as u64";
@@ -583,22 +656,10 @@ class BodyContext {
     return this.coerceRendered(value, inferred, expectedType);
   }
 
-  private renderElementAccess(node: import("ts-morph").ElementAccessExpression, mode: ExpressionMode, expectedType?: IrType): string {
-    const base = node.getExpression();
-    const arg = node.getArgumentExpression();
-    const renderedArg = arg === undefined ? "0" : this.renderExpression(arg, "value");
-    const baseType = this.inferExpressionType(base);
-    const renderedBase = baseType?.kind === "remaining" ? "ctx.remaining_accounts" : this.renderExpression(base, "value");
-    const value = `${renderedBase}[(${renderedArg}) as usize]`;
-    const inferred = this.inferExpressionType(node);
-    if (mode === "condition" && inferred?.kind === "value" && inferred.type === "bool") return `${value} != 0`;
-    return this.coerceRendered(value, inferred, expectedType);
-  }
-
-  private renderBinaryExpression(node: import("ts-morph").BinaryExpression, mode: ExpressionMode, expectedType?: IrType): string {
-    const operator = this.renderBinaryOperator(node.getOperatorToken().getText());
-    const left = node.getLeft();
-    const right = node.getRight();
+  private renderBinaryExpression(node: BinaryExpression | LogicalExpression, mode: ExpressionMode, expectedType?: IrType): string {
+    const operator = this.renderBinaryOperator(node.operator);
+    const left = node.left;
+    const right = node.right;
     if (operator === "==" || operator === "!=") {
       const leftExpected = this.shouldCoerceToPubkey(left, right) ? "pubkey" : undefined;
       const rightExpected = this.shouldCoerceToPubkey(right, left) ? "pubkey" : undefined;
@@ -612,46 +673,49 @@ class BodyContext {
     return this.coerceRendered(rendered, this.inferExpressionType(node), expectedType);
   }
 
-  private renderConditionalExpression(node: import("ts-morph").ConditionalExpression, expectedType?: IrType): string {
-    return `if ${this.renderExpression(node.getCondition(), "condition")} { ${this.renderExpression(node.getWhenTrue(), "value", expectedType)} } else { ${this.renderExpression(node.getWhenFalse(), "value", expectedType)} }`;
+  private renderAssignmentAsExpression(node: AssignmentExpression): string {
+    const leftStr = this.renderAssignmentTarget(node.left);
+    const rightStr = this.renderExpression(node.right, "value");
+    return `${leftStr} ${node.operator} ${rightStr}`;
   }
 
-  private renderPrefixUnaryExpression(node: import("ts-morph").PrefixUnaryExpression, mode: ExpressionMode, expectedType?: IrType): string {
-    const operator = node.getOperatorToken();
-    const operand = this.renderExpression(node.getOperand(), mode, expectedType);
-    if (operator === SyntaxKind.ExclamationToken) return `!${operand}`;
-    if (operator === SyntaxKind.MinusToken) return `-${operand}`;
-    if (operator === SyntaxKind.PlusToken) return operand;
-    return `${node.getOperatorToken()}${operand}`;
+  private renderConditionalExpression(node: ConditionalExpression, expectedType?: IrType): string {
+    return `if ${this.renderExpression(node.test, "condition")} { ${this.renderExpression(node.consequent, "value", expectedType)} } else { ${this.renderExpression(node.alternate, "value", expectedType)} }`;
   }
 
-  private renderPostfixUnaryExpression(node: import("ts-morph").PostfixUnaryExpression): string {
-    const operand = this.renderAssignmentTarget(node.getOperand());
-    const operator = node.getOperatorToken();
-    if (operator === SyntaxKind.PlusPlusToken) return `${operand} += 1`;
-    if (operator === SyntaxKind.MinusMinusToken) return `${operand} -= 1`;
+  private renderPrefixUnaryExpression(node: UnaryExpression, mode: ExpressionMode, expectedType?: IrType): string {
+    const operand = this.renderExpression(node.argument, mode, expectedType);
+    if (node.operator === "!") return `!${operand}`;
+    if (node.operator === "-") return `-${operand}`;
+    if (node.operator === "+") return operand;
+    return `${node.operator}${operand}`;
+  }
+
+  private renderPostfixUnaryExpression(node: UpdateExpression): string {
+    const operand = this.renderAssignmentTarget(node.argument);
+    if (node.operator === "++") return `${operand} += 1`;
+    if (node.operator === "--") return `${operand} -= 1`;
     return `${operand}`;
   }
 
-  private renderCallExpression(node: import("ts-morph").CallExpression, expectedType?: IrType): string {
-    const expression = node.getExpression();
-    if (Node.isPropertyAccessExpression(expression)) {
-      const base = expression.getExpression();
-      const method = expression.getName();
-      if (isCpiSol(base) && method === "timestamp") {
+  private renderCallExpression(node: CallExpression, expectedType?: IrType): string {
+    const expression = node.callee;
+    if (isMemberExpression(expression)) {
+      const method = memberPropertyName(expression);
+      if (isCpiSol(expression.object) && method === "timestamp") {
         return expectedType === "u64" ? "Clock::get()?.unix_timestamp as u64" : "Clock::get()?.unix_timestamp";
       }
-      if (method === "abs") return this.coerceRendered(`${this.renderExpression(base, "value")}.abs()`, this.inferExpressionType(base), expectedType);
+      if (method === "abs") return this.coerceRendered(`${this.renderExpression(expression.object, "value")}.abs()`, this.inferExpressionType(expression.object), expectedType);
     }
-    this.unsupported(`function call '${node.getExpression().getText()}'`, node, "Supported calls are ctx.require, ctx.emit, ctx.log, sol.timestamp(), .abs(), and token CPI helpers.");
+    this.unsupported(`function call '${nodeTextOf(this.source, node.callee)}'`, node, "Supported calls are ctx.require, ctx.emit, ctx.log, sol.timestamp(), .abs(), and token CPI helpers.");
   }
 
-  private renderNewExpression(node: import("ts-morph").NewExpression, expectedType?: IrType): string {
-    const expression = node.getExpression().getText();
+  private renderNewExpression(node: NewExpression, expectedType?: IrType): string {
+    const expression = nodeTextOf(this.source, node.callee);
     if (expression === "Uint8Array") {
-      const arg = node.getArguments()[0];
-      if (arg !== undefined && Node.isArrayLiteralExpression(arg)) {
-        return `vec![${arg.getElements().map((el) => `${this.renderExpression(el, "value")}u8`).join(", ")}]`;
+      const arg = node.arguments[0];
+      if (arg !== undefined && isArrayExpression(arg)) {
+        return `vec![${arg.elements.map((el) => `${this.renderExpression(el, "value")}u8`).join(", ")}]`;
       }
       return "Vec::new()";
     }
@@ -659,7 +723,7 @@ class BodyContext {
     this.unsupported(`constructor '${expression}'`, node, "Only new Uint8Array([...]) is supported in instruction bodies.");
   }
 
-  private renderObjectLiteral(node: ObjectLiteralExpression, expectedType?: IrType): string {
+  private renderObjectLiteral(node: ObjectExpression, expectedType?: IrType): string {
     if (expectedType !== undefined && typeof expectedType !== "string" && expectedType.kind === "struct_zc_ref") {
       const struct = this.program.structsZC.find((candidate) => candidate.name === expectedType.name);
       const fields = this.renderObjectFields(node, struct?.fields ?? []);
@@ -668,62 +732,57 @@ class BodyContext {
     return `{ ${this.renderObjectFields(node, [])} }`;
   }
 
-  private renderArrayLiteral(node: import("ts-morph").ArrayLiteralExpression, expectedType?: IrType): string {
-    const values = node.getElements().map((element) => this.renderExpression(element, "value")).join(", ");
+  private renderArrayLiteral(node: ArrayExpression, expectedType?: IrType): string {
+    const values = node.elements.map((element) => element !== null ? this.renderExpression(element, "value") : "/* null */").join(", ");
     if (expectedType === "bytes") return `vec![${values}]`;
     return `[${values}]`;
   }
 
-  private renderObjectFields(node: ObjectLiteralExpression, fields: readonly IrAccountField[]): string {
-    return node.getProperties().map((property) => {
-      if (Node.isShorthandPropertyAssignment(property)) {
-        const name = property.getName();
+  private renderObjectFields(node: ObjectExpression, fields: readonly IrAccountField[]): string {
+    return node.properties.map((property) => {
+      if (isProperty(property) && property.shorthand) {
+        const name = memberPropertyName(property);
         const fieldType = fields.find((field) => field.name === name)?.type;
         return `${toSnake(name)}: ${this.renderIdentifier(name, "value", fieldType)}`;
       }
-      if (Node.isPropertyAssignment(property)) {
-        const name = property.getName().replace(/^['"]|['"]$/g, "");
-        const initializer = property.getInitializer();
+      if (isProperty(property) && !property.shorthand) {
+        const name = isIdentifier(property.key) ? property.key.name.replace(/^['"]|['"]$/g, "") : nodeTextOf(this.source, property.key);
+        const initializer = property.value;
         const fieldType = fields.find((field) => field.name === name)?.type;
-        return `${toSnake(name)}: ${initializer === undefined ? toSnake(name) : this.renderExpression(initializer, "value", fieldType)}`;
+        return `${toSnake(name)}: ${this.renderExpression(initializer, "value", fieldType)}`;
       }
-      if (Node.isSpreadAssignment(property)) this.unsupported("object spread", property, "Write every object field explicitly.");
-      this.unsupported(`object literal property '${property.getKindName()}'`, property);
+      if (isSpreadElement(property)) this.unsupported("object spread", property, "Write every object field explicitly.");
+      this.unsupported(`object literal property '${property.type}'`, property);
     }).join(", ");
   }
 
   private renderAssignmentTarget(node: Node): string {
-    if (Node.isIdentifier(node)) return this.renderIdentifier(node.getText(), "value");
-    if (Node.isNonNullExpression(node)) return this.renderAssignmentTarget(node.getExpression());
-    if (Node.isPropertyAccessExpression(node)) {
-      const rawBase = node.getExpression();
-      const aliasedBase = Node.isIdentifier(rawBase) ? this.elementAliases.get(rawBase.getText()) ?? rawBase : rawBase;
+    if (isIdentifier(node)) return this.renderIdentifier(node.name, "value");
+    if (isTSNonNullExpression(node)) return this.renderAssignmentTarget(node.expression);
+    if (isMemberExpression(node)) {
+      const rawBase = node.object;
+      const aliasedBase = isIdentifier(rawBase) ? (this.elementAliases.get(rawBase.name) ?? rawBase) : rawBase;
       const base = this.renderExpression(aliasedBase, "value");
       const baseType = this.inferExpressionType(aliasedBase);
-      this.assertKnownProperty(baseType, node.getName(), node);
-      return `${base}.${this.renderFieldName(baseType, node.getName())}`;
+      const property = memberPropertyName(node);
+      this.assertKnownProperty(baseType, property, node);
+      return `${base}.${this.renderFieldName(baseType, property)}`;
     }
-    if (Node.isElementAccessExpression(node)) {
-      const base = this.renderExpression(node.getExpression(), "value");
-      const arg = node.getArgumentExpression();
-      const renderedArg = arg === undefined ? "0" : this.renderExpression(arg, "value");
-      return `${base}[(${renderedArg}) as usize]`;
-    }
-    this.unsupported(`assignment target '${node.getKindName()}'`, node);
+    this.unsupported(`assignment target '${node.type}'`, node);
   }
 
-  private tryParseCpiCall(expression: Expression): CpiCall | undefined {
-    if (!Node.isCallExpression(expression)) return undefined;
-    const callee = expression.getExpression();
-    if (!Node.isPropertyAccessExpression(callee)) return undefined;
-    const calleeBase = callee.getExpression();
-    const isTokenCall = Node.isPropertyAccessExpression(calleeBase) && calleeBase.getExpression().getText() === "cpi" && calleeBase.getName() === "token";
+  private tryParseCpiCall(expression: Node): CpiCall | undefined {
+    if (!isCallExpression(expression)) return undefined;
+    const callee = expression.callee;
+    if (!isMemberExpression(callee)) return undefined;
+    const calleeBase = callee.object;
+    const isTokenCall = isMemberExpression(calleeBase) && isIdentifier(calleeBase.object) && calleeBase.object.name === "cpi" && isIdentifier(calleeBase.property) && calleeBase.property.name === "token";
     if (!isTokenCall) return undefined;
-    const arg = expression.getArguments()[0];
-    if (arg === undefined || !Node.isObjectLiteralExpression(arg)) return undefined;
+    const arg = expression.arguments[0];
+    if (arg === undefined || !isObjectExpression(arg)) return undefined;
 
     const usesToken2022 = this.ix.accounts.some((account) => account.constraint.kind === "token2022Program");
-    const method = callee.getName();
+    const method = memberPropertyName(callee);
     const moduleName = usesToken2022 ? "token_interface" : "token";
 
     if (method === "transfer") {
@@ -738,7 +797,7 @@ class BodyContext {
         accounts: [{ name: "from", expression: from }, { name: "to", expression: to }, { name: "authority", expression: authority }],
         amount,
         decimals: undefined,
-        authority: authority.getText(),
+        authority: nodeTextOf(this.source, authority),
       };
     }
 
@@ -756,7 +815,7 @@ class BodyContext {
         accounts: [{ name: "from", expression: from }, { name: "mint", expression: mint }, { name: "to", expression: to }, { name: "authority", expression: authority }],
         amount,
         decimals,
-        authority: authority.getText(),
+        authority: nodeTextOf(this.source, authority),
       };
     }
 
@@ -772,7 +831,7 @@ class BodyContext {
         accounts: [{ name: "mint", expression: mint }, { name: "to", expression: to }, { name: "authority", expression: authority }],
         amount,
         decimals: undefined,
-        authority: authority.getText(),
+        authority: nodeTextOf(this.source, authority),
       };
     }
 
@@ -788,7 +847,7 @@ class BodyContext {
         accounts: [{ name: "mint", expression: mint }, { name: "from", expression: from }, { name: "authority", expression: authority }],
         amount,
         decimals: undefined,
-        authority: authority.getText(),
+        authority: nodeTextOf(this.source, authority),
       };
     }
 
@@ -858,22 +917,23 @@ class BodyContext {
     return `${bytesName}.as_ref()`;
   }
 
-  private renderAccountInfoExpression(expression: Expression): string {
-    if (Node.isIdentifier(expression)) {
-      const symbol = this.symbols.get(expression.getText());
+  private renderAccountInfoExpression(expression: Node): string {
+    if (isIdentifier(expression)) {
+      const symbol = this.symbols.get(expression.name);
       if (symbol?.kind === "account" && symbol.accountDef?.zeroCopy === true) return `ctx.accounts.${symbol.rustName}.to_account_info()`;
       if (symbol !== undefined) return `${symbol.rustName}.to_account_info()`;
     }
     return `${this.renderExpression(expression, "value")}.to_account_info()`;
   }
 
-  private requireObjectExpression(obj: ObjectLiteralExpression, name: string): Expression {
-    const property = obj.getProperty(name);
-    if (property !== undefined && Node.isPropertyAssignment(property)) {
-      const initializer = property.getInitializer();
-      if (initializer !== undefined) return initializer;
+  private requireObjectExpression(obj: ObjectExpression, name: string): Node {
+    const property = getObjectProperty(obj, name);
+    if (property !== undefined) return property;
+    for (const prop of obj.properties) {
+      if (isProperty(prop) && prop.shorthand && isIdentifier(prop.key) && prop.key.name === name) {
+        return prop.key;
+      }
     }
-    if (property !== undefined && Node.isShorthandPropertyAssignment(property)) return property.getNameNode();
     throw new Error(`Missing token CPI property '${name}' in ${this.ix.name}`);
   }
 
@@ -947,36 +1007,38 @@ class BodyContext {
     return Number.isFinite(width) ? width : 0;
   }
 
-  private inferExpressionType(node: Node | undefined): InferredType | undefined {
-    if (node === undefined) return undefined;
-    if (Node.isParenthesizedExpression(node)) return this.inferExpressionType(node.getExpression());
-    if (Node.isNonNullExpression(node)) return this.inferExpressionType(node.getExpression());
-    if (Node.isIdentifier(node)) {
-      const symbol = this.symbols.get(node.getText());
+  private inferExpressionType(node: Node | undefined | null): InferredType | undefined {
+    if (node === undefined || node === null) return undefined;
+    if (isParenthesizedExpression(node)) return this.inferExpressionType(node.expression);
+    if (isTSNonNullExpression(node)) return this.inferExpressionType(node.expression);
+    if (isIdentifier(node)) {
+      const symbol = this.symbols.get(node.name);
       if (symbol?.kind === "account" && symbol.account.constraint.kind === "remaining") return { kind: "remaining" };
       if (symbol?.kind === "account") return { kind: "account", symbol };
       if (symbol?.kind === "arg" || symbol?.kind === "local") return symbol.type !== undefined ? { kind: "value", type: symbol.type, zeroCopyBool: false } : undefined;
       return undefined;
     }
-    if (Node.isPropertyAccessExpression(node)) return this.inferPropertyType(this.inferExpressionType(node.getExpression()), node.getName());
-    if (Node.isElementAccessExpression(node)) {
-      const baseType = this.inferExpressionType(node.getExpression());
-      if (baseType?.kind === "remaining") return undefined;
-      if (baseType?.kind === "value" && typeof baseType.type !== "string" && baseType.type.kind === "array") {
-        return { kind: "value", type: baseType.type.inner, zeroCopyBool: false };
+    if (isMemberExpression(node)) {
+      if (node.computed) {
+        const baseType = this.inferExpressionType(node.object);
+        if (baseType?.kind === "remaining") return undefined;
+        if (baseType?.kind === "value" && typeof baseType.type !== "string" && baseType.type.kind === "array") {
+          return { kind: "value", type: baseType.type.inner, zeroCopyBool: false };
+        }
+        return undefined;
       }
-      return undefined;
+      return this.inferPropertyType(this.inferExpressionType(node.object), memberPropertyName(node));
     }
-    if (Node.isBinaryExpression(node)) return this.inferNumericBinaryType(node);
-    if (Node.isConditionalExpression(node)) return this.inferExpressionType(node.getWhenTrue()) ?? this.inferExpressionType(node.getWhenFalse());
-    if (Node.isBigIntLiteral(node)) return { kind: "value", type: "u64", zeroCopyBool: false };
-    if (Node.isNumericLiteral(node)) return { kind: "value", type: "u64", zeroCopyBool: false };
-    if (Node.isStringLiteral(node)) return { kind: "value", type: "string", zeroCopyBool: false };
-    if (Node.isTrueLiteral(node) || Node.isFalseLiteral(node)) return { kind: "value", type: "bool", zeroCopyBool: false };
-    if (node.getKind() === SyntaxKind.NullKeyword) return { kind: "value", type: { kind: "option", inner: "pubkey" }, zeroCopyBool: false };
-    if (Node.isCallExpression(node)) {
-      const expression = node.getExpression();
-      if (Node.isPropertyAccessExpression(expression) && isCpiSol(expression.getExpression()) && expression.getName() === "timestamp") {
+    if (isBinaryExpression(node) || isLogicalExpression(node)) return this.inferNumericBinaryType(node);
+    if (isConditionalExpression(node)) return this.inferExpressionType(node.consequent) ?? this.inferExpressionType(node.alternate);
+    if (node.type === "Literal" && "bigint" in node) return { kind: "value", type: "u64", zeroCopyBool: false };
+    if (isNumericLiteral(node)) return { kind: "value", type: "u64", zeroCopyBool: false };
+    if (isStringLiteral(node)) return { kind: "value", type: "string", zeroCopyBool: false };
+    if (isBooleanLiteral(node)) return { kind: "value", type: "bool", zeroCopyBool: false };
+    if (isNullLiteral(node)) return { kind: "value", type: { kind: "option", inner: "pubkey" }, zeroCopyBool: false };
+    if (isCallExpression(node)) {
+      const callee = node.callee;
+      if (isMemberExpression(callee) && isCpiSol(callee.object) && isIdentifier(callee.property) && callee.property.name === "timestamp") {
         return { kind: "value", type: "i64", zeroCopyBool: false };
       }
     }
@@ -1015,17 +1077,17 @@ class BodyContext {
     return undefined;
   }
 
-  private inferNumericBinaryType(node: import("ts-morph").BinaryExpression): InferredType | undefined {
-    const operator = node.getOperatorToken().getText();
+  private inferNumericBinaryType(node: BinaryExpression | LogicalExpression): InferredType | undefined {
+    const operator = node.operator;
     if (["===", "!==", "==", "!=", ">", ">=", "<", "<=", "&&", "||"].includes(operator)) return { kind: "value", type: "bool", zeroCopyBool: false };
-    return this.inferExpressionType(node.getLeft()) ?? this.inferExpressionType(node.getRight());
+    return this.inferExpressionType(node.left) ?? this.inferExpressionType(node.right);
   }
 
   private inferAssignmentTargetType(node: Node): InferredType | undefined {
-    if (Node.isIdentifier(node)) return this.inferExpressionType(node);
-    if (Node.isNonNullExpression(node)) return this.inferAssignmentTargetType(node.getExpression());
-    if (Node.isPropertyAccessExpression(node)) return this.inferPropertyType(this.inferExpressionType(node.getExpression()), node.getName());
-    if (Node.isElementAccessExpression(node)) return this.inferExpressionType(node);
+    if (isIdentifier(node)) return this.inferExpressionType(node);
+    if (isTSNonNullExpression(node)) return this.inferAssignmentTargetType(node.expression);
+    if (isMemberExpression(node) && !node.computed) return this.inferPropertyType(this.inferExpressionType(node.object), memberPropertyName(node));
+    if (isMemberExpression(node) && node.computed) return this.inferExpressionType(node);
     return undefined;
   }
 
@@ -1055,21 +1117,21 @@ class BodyContext {
   private assertKnownError(errorName: string, node: Node): void {
     if (this.program.errors.some((error) => error.name === errorName)) return;
     const available = this.program.errors.map((error) => error.name).join(", ") || "none";
-    throw new Error(`Instruction '${this.ix.name}' requires unknown error '${errorName}'. Add it to program.errors or use one of: ${available}. Offending code: ${node.getText()}.`);
+    throw new Error(`Instruction '${this.ix.name}' requires unknown error '${errorName}'. Add it to program.errors or use one of: ${available}. Offending code: ${nodeTextOf(this.source, node)}.`);
   }
 
-  private assertEventPayload(eventName: string, payload: ObjectLiteralExpression, fields: readonly IrAccountField[]): void {
+  private assertEventPayload(eventName: string, payload: ObjectExpression, fields: readonly IrAccountField[]): void {
     const expected = new Set(fields.map((field) => field.name));
     const provided = new Set<string>();
 
-    for (const property of payload.getProperties()) {
-      if (Node.isSpreadAssignment(property)) this.unsupported("object spread", property, "Write every event payload field explicitly.");
-      const name = Node.isShorthandPropertyAssignment(property)
-        ? property.getName()
-        : Node.isPropertyAssignment(property)
-          ? property.getName().replace(/^['"]|['"]$/g, "")
+    for (const property of payload.properties) {
+      if (isSpreadElement(property)) this.unsupported("object spread", property, "Write every event payload field explicitly.");
+      const name = isProperty(property) && property.shorthand
+        ? memberPropertyName(property)
+        : isProperty(property) && !property.shorthand && isIdentifier(property.key)
+          ? property.key.name.replace(/^['"]|['"]$/g, "")
           : undefined;
-      if (name === undefined) this.unsupported(`event payload property '${property.getKindName()}'`, property);
+      if (name === undefined) this.unsupported(`event payload property '${property.type}'`, property);
       provided.add(name);
       if (!expected.has(name)) {
         const available = [...expected].join(", ") || "none";
@@ -1100,13 +1162,8 @@ class BodyContext {
       (constraint.kind === "mint" && constraint.mutable);
   }
 
-  private isAssignmentOperator(operator: string): operator is AssignmentOperator {
-    return operator === "=" || operator === "+=" || operator === "-=" || operator === "*=" || operator === "/=";
-  }
-
-  private isPropertyName(node: import("ts-morph").Identifier): boolean {
-    const parent = node.getParent();
-    return Node.isPropertyAccessExpression(parent) && parent.getNameNode() === node;
+  private isPropertyName(_node: Node): boolean {
+    return false;
   }
 
   private assertKnownProperty(baseType: InferredType | undefined, property: string, node: Node): void {
@@ -1120,28 +1177,62 @@ class BodyContext {
   }
 
   private unsupported(feature: string, node: Node | undefined, guidance?: string): never {
-    const snippet = node?.getText().replace(/\s+/g, " ").slice(0, 160) ?? feature;
+    const snippet = node !== undefined ? nodeTextOf(this.source, node).replace(/\s+/g, " ").slice(0, 160) : feature;
     const suffix = guidance === undefined ? "" : ` ${guidance}`;
     throw new Error(`Instruction '${this.ix.name}' uses unsupported TypeScript: ${feature}. Offending code: ${snippet}.${suffix}`);
   }
 
-  private getForLoopVariable(initializer: import("ts-morph").ForStatement["getInitializer"] extends () => infer T ? NonNullable<T> : never): string | undefined {
-    if (Node.isVariableDeclarationList(initializer)) return initializer.getDeclarations()[0]?.getName();
-    if (Node.isBinaryExpression(initializer) && Node.isIdentifier(initializer.getLeft())) return initializer.getLeft().getText();
-    return undefined;
-  }
-
-  private getForLoopStart(initializer: import("ts-morph").ForStatement["getInitializer"] extends () => infer T ? NonNullable<T> : never): string | undefined {
-    if (Node.isVariableDeclarationList(initializer)) {
-      const init = initializer.getDeclarations()[0]?.getInitializer();
-      return init === undefined ? "0" : this.renderExpression(init, "value");
+  private getForLoopVariable(initializer: Node): string | undefined {
+    if (isVariableDeclaration(initializer)) {
+      for (const decl of initializer.declarations) {
+        if (isIdentifier(decl.id)) return decl.id.name;
+      }
     }
-    if (Node.isBinaryExpression(initializer)) return this.renderExpression(initializer.getRight(), "value");
+    if (isAssignmentExpression(initializer) && isIdentifier(initializer.left)) return initializer.left.name;
     return undefined;
   }
 
-  private getForLoopEnd(condition: Expression): string | undefined {
-    if (!Node.isBinaryExpression(condition)) return undefined;
-    return this.renderExpression(condition.getRight(), "value");
+  private getForLoopStart(initializer: Node): string | undefined {
+    if (isVariableDeclaration(initializer)) {
+      for (const decl of initializer.declarations) {
+        if (decl.init !== undefined && decl.init !== null) return this.renderExpression(decl.init, "value");
+      }
+      return "0";
+    }
+    if (isAssignmentExpression(initializer)) return this.renderExpression(initializer.right, "value");
+    return undefined;
   }
+
+  private getForLoopEnd(condition: Node): string | undefined {
+    if (!isBinaryExpression(condition) && !isLogicalExpression(condition)) return undefined;
+    return this.renderExpression(condition.right, "value");
+  }
+}
+
+function memberPropertyName(node: Node): string {
+  if (isMemberExpression(node) && isIdentifier(node.property)) return node.property.name;
+  if (isIdentifier(node)) return node.name;
+  if (isProperty(node) && isIdentifier(node.key)) return node.key.name;
+  return "";
+}
+
+function childrenOf(node: Node): readonly Node[] {
+  const result: Node[] = [];
+  const record = node as unknown as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc" || key === "range" || key === "parent") continue;
+    const value = record[key];
+    if (isNodeLike(value)) {
+      result.push(value);
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (isNodeLike(item)) result.push(item);
+      }
+    }
+  }
+  return result;
+}
+
+function isNodeLike(value: unknown): value is Node {
+  return typeof value === "object" && value !== null && "type" in value && "start" in value && "end" in value;
 }

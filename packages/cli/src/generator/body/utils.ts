@@ -1,4 +1,9 @@
-import { Node, Project, type Statement } from "ts-morph";
+import { parseSync } from "oxc-parser";
+import type { Node } from "oxc-parser";
+import {
+  isMemberExpression,
+  isIdentifier,
+} from "#parser/node-helpers";
 import type { IrType } from "#ir/types";
 
 export function isIntegerSeedType(type: IrType): boolean {
@@ -13,25 +18,32 @@ export function formatSeedType(type: IrType): string {
 }
 
 export function isCpiSol(node: Node): boolean {
-  if (!Node.isPropertyAccessExpression(node)) return false;
-  return (
-    node.getExpression().getText() === "cpi" && node.getName() === "sol"
-  );
+  if (!isMemberExpression(node)) return false;
+  return isIdentifier(node.object) && node.object.name === "cpi" && isIdentifier(node.property) && node.property.name === "sol";
 }
 
-export function parseBodyStatements(body: string): readonly Statement[] {
+export function parseBodyStatements(body: string): { readonly statements: readonly Node[]; readonly source: string } {
   const trimmed = body.trim();
-  if (trimmed.length === 0) return [];
-  const project = new Project({ useInMemoryFileSystem: true });
-  const sourceFile = project.createSourceFile(
-    "body.ts",
-    `const __run = () => ${trimmed};`,
-  );
-  const declaration = sourceFile.getVariableDeclarationOrThrow("__run");
-  const initializer = declaration.getInitializer();
-  if (initializer === undefined || !Node.isArrowFunction(initializer))
-    return [];
-  const arrowBody = initializer.getBody();
-  if (Node.isBlock(arrowBody)) return arrowBody.getStatements();
-  return [];
+  if (trimmed.length === 0) return { statements: [], source: "" };
+  const wrappedSource = `const __run = ${trimmed};`;
+  const result = parseSync("body.ts", wrappedSource, {
+    lang: "ts",
+    sourceType: "module",
+    astType: "ts",
+    preserveParens: true,
+  });
+
+  if (result.errors.length > 0) {
+    const first = result.errors[0]!;
+    throw new Error(`Body parse error: ${first.message}`);
+  }
+
+  const stmt = result.program.body[0];
+  if (stmt === undefined || stmt.type !== "VariableDeclaration") return { statements: [], source: wrappedSource };
+  const declarator = stmt.declarations[0];
+  if (declarator === undefined || declarator.init === null || declarator.init === undefined) return { statements: [], source: wrappedSource };
+  if (declarator.init.type !== "ArrowFunctionExpression") return { statements: [], source: wrappedSource };
+  const arrowBody = declarator.init.body;
+  if (arrowBody.type === "BlockStatement") return { statements: arrowBody.body, source: wrappedSource };
+  return { statements: [], source: wrappedSource };
 }
