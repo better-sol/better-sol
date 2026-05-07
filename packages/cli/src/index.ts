@@ -2,16 +2,17 @@
 import { cancel, log } from "@clack/prompts";
 import { Command } from "commander";
 import { fileURLToPath } from "node:url";
+import { init } from "./commands/init";
 import { create } from "./commands/create";
 import { deploy } from "./commands/deploy";
 import { generateDb } from "./commands/generate";
 import { login } from "./commands/login";
 import { verify } from "./commands/verify";
 import { defineConfig } from "./config";
-import type { CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
+import type { InitOptions, CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
 
 export { defineConfig };
-export type { CliConfig, CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
+export type { CliConfig, InitOptions, CreateOptions, DeployOptions, GenerateDbOptions, VerifyOptions } from "./types";
 
 const cli = new Command();
 
@@ -19,6 +20,13 @@ cli
   .name("better-sol")
   .description("TypeScript-first Solana program tooling — run with npx @better-sol/cli")
   .version("0.0.0");
+
+cli
+  .command("init")
+  .description("Initialize a better-sol project")
+  .option("--force", "overwrite existing files", false)
+  .option("--skip-install", "skip installing dependencies", false)
+  .action((options: InitOptions) => run(() => init(options)));
 
 cli
   .command("create")
@@ -38,6 +46,7 @@ cli
   .description("Generate Rust, compile, and deploy programs")
   .option("--src <glob>", "program source glob")
   .option("--program <name>", "target a specific program by name")
+  .option("--payer <path>", "payer keypair path")
   .option("--cluster <cluster>", "devnet, testnet, mainnet, or localnet")
   .option("--verify", "write generated Rust for verified builds", false)
   .option("--dry-run", "generate and validate without compiling or deploying", false)

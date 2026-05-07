@@ -1,15 +1,28 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { intro, log, outro, spinner } from "@clack/prompts";
 import { execSync } from "node:child_process";
 import { getStoredApiKey } from "../auth";
 import { loadConfig, parseCluster } from "../config";
-import { BETTER_SOL_DIR, cwdJoin, cwdPath, ensureDirectory } from "../path";
-import type { DeployOptions } from "../types";
+import { readKeypair } from "../keypair";
+import { BETTER_SOL_DIR, cwdJoin, cwdPath, ensureDirectory, fileExists } from "../path";
+import type { Cluster, DeployOptions } from "../types";
 import { compileProgram, getApiUrl } from "../api/client";
 import { generateAnchorProject } from "../generator/rust";
 import { discoverProgramsWithSpinner, CLI_COMMAND } from "./shared";
+
+const DEFAULT_PAYER_PATH = "keypair.json";
+const SOLANA_DEFAULT_KEYPAIR = join(homedir(), ".config", "solana", "id.json");
+const AIRDROP_LAMPORTS = 2_000_000_000n;
+const MIN_DEPLOY_BALANCE = 1_500_000_000n;
+
+const CLUSTER_URLS: Record<Cluster, string> = {
+  devnet: "https://api.devnet.solana.com",
+  testnet: "https://api.testnet.solana.com",
+  mainnet: "https://api.mainnet.solana.com",
+  localnet: "http://127.0.0.1:8899",
+};
 
 export async function deploy(options: DeployOptions): Promise<void> {
   intro("better-sol deploy");
@@ -21,6 +34,12 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const src = options.src ?? config.programs;
   const out = options.output ?? config.out;
   const outDir = cwdPath(out);
+
+  const payerPath = resolvePayerPath(options.payer);
+  const payer = await readKeypair(payerPath);
+  const clusterUrl = CLUSTER_URLS[cluster];
+
+  await ensureFunded(payer.publicKey, cluster, clusterUrl);
 
   const programs = await discoverProgramsWithSpinner(src);
 
@@ -92,7 +111,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
     if (result.status === "success" && result.bytecode !== null) {
       const soDir = join(outDir, project.program.name, "target", "deploy");
       const soPath = join(soDir, `${project.program.name}.so`);
-      const keypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
+      const programKeypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
 
       mkdirSync(soDir, { recursive: true });
       writeFileSync(soPath, Buffer.from(result.bytecode, "base64"));
@@ -102,7 +121,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
       try {
         execSync(
-          `"${solanaPath}" program deploy "${soPath}" --program-id "${keypairPath}" --url ${cluster}`,
+          `"${solanaPath}" program deploy "${soPath}" --program-id "${programKeypairPath}" --keypair "${payerPath}" --url ${cluster}`,
           { encoding: "utf8", timeout: 120_000, stdio: "pipe" },
         );
         s.stop(`Deployed to ${cluster}`);
@@ -130,6 +149,91 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   outro("Deploy complete.");
+}
+
+function resolvePayerPath(payerFlag: string | undefined): string {
+  if (payerFlag !== undefined) return cwdPath(payerFlag);
+  if (fileExists(cwdJoin(DEFAULT_PAYER_PATH))) return cwdJoin(DEFAULT_PAYER_PATH);
+  if (existsSync(SOLANA_DEFAULT_KEYPAIR)) return SOLANA_DEFAULT_KEYPAIR;
+  throw new Error(
+    `No payer keypair found. Run \`${CLI_COMMAND} init\` to create one, or use --payer <path>.`,
+  );
+}
+
+async function ensureFunded(address: string, cluster: Cluster, clusterUrl: string): Promise<void> {
+  const s = spinner();
+  s.start(`Checking balance for ${address.slice(0, 8)}...`);
+
+  const balance = await getBalance(address, clusterUrl);
+
+  if (balance >= MIN_DEPLOY_BALANCE) {
+    s.stop(`Balance: ${(Number(balance) / 1e9).toFixed(2)} SOL`);
+    return;
+  }
+
+  if (cluster === "mainnet") {
+    s.stop(`Balance: ${(Number(balance) / 1e9).toFixed(4)} SOL`);
+    throw new Error(`Insufficient SOL for deployment. Fund ${address} and try again.`);
+  }
+
+  if (cluster === "localnet") {
+    s.stop(`Balance: ${(Number(balance) / 1e9).toFixed(4)} SOL`);
+    return;
+  }
+
+  s.message(`Low balance (${(Number(balance) / 1e9).toFixed(4)} SOL). Requesting airdrop on ${cluster}...`);
+
+  try {
+    const signature = await requestAirdrop(address, clusterUrl, AIRDROP_LAMPORTS);
+    await confirmAirdrop(signature, clusterUrl);
+    const newBalance = await getBalance(address, clusterUrl);
+    s.stop(`Funded. Balance: ${(Number(newBalance) / 1e9).toFixed(2)} SOL`);
+  } catch {
+    s.stop("Airdrop failed");
+    throw new Error(`Failed to airdrop SOL on ${cluster}. Fund ${address} manually or try again.`);
+  }
+}
+
+async function getBalance(address: string, clusterUrl: string): Promise<bigint> {
+  const response = await fetch(clusterUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [address] }),
+  });
+  const result = (await response.json()) as { result?: { value?: number | string } };
+  if (result.result?.value === undefined) throw new Error("Failed to get balance");
+  return BigInt(result.result.value);
+}
+
+async function requestAirdrop(address: string, clusterUrl: string, lamports: bigint): Promise<string> {
+  const response = await fetch(clusterUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "requestAirdrop", params: [address, Number(lamports)] }),
+  });
+  const result = (await response.json()) as { result?: string; error?: { message: string } };
+  if (result.error !== undefined) throw new Error(result.error.message);
+  if (result.result === undefined) throw new Error("No airdrop signature returned");
+  return result.result;
+}
+
+async function confirmAirdrop(signature: string, clusterUrl: string): Promise<void> {
+  const maxAttempts = 30;
+  for (let i = 0; i < maxAttempts; i++) {
+    // oxlint-disable-next-line no-await-in-loop — intentional polling for confirmation
+    const response = await fetch(clusterUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getSignatureStatuses", params: [[signature]] }),
+    });
+    // oxlint-disable-next-line no-await-in-loop — intentional polling for confirmation
+    const result = (await response.json()) as { result?: { value?: Array<{ confirmationStatus?: string } | null> } };
+    const status = result.result?.value?.[0];
+    if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") return;
+    // oxlint-disable-next-line no-await-in-loop — intentional sleep between polling retries
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error("Airdrop confirmation timed out");
 }
 
 const SOLANA_INSTALL_DIR = join(

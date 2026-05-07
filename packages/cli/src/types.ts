@@ -6,10 +6,16 @@ export type CliConfig = {
   readonly out: string;
 };
 
+export type InitOptions = {
+  readonly force: boolean;
+  readonly skipInstall: boolean;
+};
+
 export type DeployOptions = {
   readonly src: string | undefined;
   readonly program: string | undefined;
   readonly cluster: Cluster | undefined;
+  readonly payer: string | undefined;
   readonly verify: boolean;
   readonly dryRun: boolean;
   readonly output: string | undefined;

@@ -1,6 +1,6 @@
 import { intro, outro, spinner, text, confirm, isCancel, cancel } from "@clack/prompts";
 import { writeFile } from "node:fs/promises";
-import { createProgramKeypair } from "../keypair";
+import { createKeypair } from "../keypair";
 import { BETTER_SOL_DIR, cwdJoin, ensureDirectory, fileExists } from "../path";
 import type { CreateOptions } from "../types";
 
@@ -22,7 +22,7 @@ export async function create(nameArg: string | undefined, options: CreateOptions
 
   const s = spinner();
   s.start("Generating program keypair");
-  const keypair = await createProgramKeypair(keypairPath, options.force);
+  const keypair = await createKeypair(keypairPath, options.force);
   s.message("Writing program template");
   await ensureDirectory(cwdJoin(directory));
   await writeFile(programPath, template(programName, keypair.publicKey));
