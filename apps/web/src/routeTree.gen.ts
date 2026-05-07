@@ -18,7 +18,6 @@ import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiCompileRouteImport } from './routes/api/compile'
 import { Route as LayoutDashIndexRouteImport } from './routes/_layout.dash.index'
 import { Route as LlmsDotmdxDocsSplatRouteImport } from './routes/llms[.]mdx.docs.$'
-import { Route as LayoutDashKeysRouteImport } from './routes/_layout.dash.keys'
 
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
@@ -64,11 +63,6 @@ const LlmsDotmdxDocsSplatRoute = LlmsDotmdxDocsSplatRouteImport.update({
   path: '/llms.mdx/docs/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LayoutDashKeysRoute = LayoutDashKeysRouteImport.update({
-  id: '/dash/keys',
-  path: '/dash/keys',
-  getParentRoute: () => LayoutRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -77,7 +71,6 @@ export interface FileRoutesByFullPath {
   '/api/compile': typeof ApiCompileRoute
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
-  '/dash/keys': typeof LayoutDashKeysRoute
   '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/dash/': typeof LayoutDashIndexRoute
 }
@@ -88,7 +81,6 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
   '/': typeof LayoutIndexRoute
-  '/dash/keys': typeof LayoutDashKeysRoute
   '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/dash': typeof LayoutDashIndexRoute
 }
@@ -101,7 +93,6 @@ export interface FileRoutesById {
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
   '/_layout/': typeof LayoutIndexRoute
-  '/_layout/dash/keys': typeof LayoutDashKeysRoute
   '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/_layout/dash/': typeof LayoutDashIndexRoute
 }
@@ -114,7 +105,6 @@ export interface FileRouteTypes {
     | '/api/compile'
     | '/api/search'
     | '/docs/$'
-    | '/dash/keys'
     | '/llms.mdx/docs/$'
     | '/dash/'
   fileRoutesByTo: FileRoutesByTo
@@ -125,7 +115,6 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/docs/$'
     | '/'
-    | '/dash/keys'
     | '/llms.mdx/docs/$'
     | '/dash'
   id:
@@ -137,7 +126,6 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/docs/$'
     | '/_layout/'
-    | '/_layout/dash/keys'
     | '/llms.mdx/docs/$'
     | '/_layout/dash/'
   fileRoutesById: FileRoutesById
@@ -217,25 +205,16 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LlmsDotmdxDocsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_layout/dash/keys': {
-      id: '/_layout/dash/keys'
-      path: '/dash/keys'
-      fullPath: '/dash/keys'
-      preLoaderRoute: typeof LayoutDashKeysRouteImport
-      parentRoute: typeof LayoutRoute
-    }
   }
 }
 
 interface LayoutRouteChildren {
   LayoutIndexRoute: typeof LayoutIndexRoute
-  LayoutDashKeysRoute: typeof LayoutDashKeysRoute
   LayoutDashIndexRoute: typeof LayoutDashIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutIndexRoute: LayoutIndexRoute,
-  LayoutDashKeysRoute: LayoutDashKeysRoute,
   LayoutDashIndexRoute: LayoutDashIndexRoute,
 }
 
