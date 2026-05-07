@@ -660,7 +660,7 @@ await sol.token2022.createMint({ decimals: 6 });
 better-sol is wallet-agnostic. A shared client stores RPC connections and program definitions. Wallet sessions are scoped per request.
 
 ```ts
-import { walletAdapter } from "better-sol/wallets/wallet-adapter";
+import { walletAdapter } from "better-sol/wallets";
 import { useWallet } from "@solana/wallet-adapter-react";
 
 const sol = await betterSol({ cluster: "mainnet" });
@@ -678,7 +678,7 @@ function App() {
 
 | Import | Peer library | Adapter function |
 |---|---|---|
-| `better-sol/wallets/wallet-adapter` | `@solana/wallet-adapter-react` | `walletAdapter(wallet)` |
+| `better-sol/wallets` | `@solana/wallet-adapter-react` | `walletAdapter(wallet)` |
 | `better-sol/wallets/reown` | Reown AppKit | `reownAppKit(appKitProvider)` |
 | `better-sol/wallets/privy` | `@privy-io/react-auth` Solana | `privyWallet(privySolana)` |
 | `better-sol/wallets/dynamic` | `@dynamic-labs/sdk-react-core` Solana | `dynamicWallet(dynamicSolana)` |
@@ -718,20 +718,13 @@ await sol.mango.someInstruction({ ... });
 
 | Import path | Exports |
 |---|---|
-| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `version` |
-| `better-sol/program` | `program`, `account`, `struct`, `event`, `p`, `token`, `sol`, all type tokens (`u8`, `u64`, `pubkey`, `bool`, ...), compound type helpers (`option`, `vec`, `array`), type helpers (`InstructionAccounts`, `InstructionArgs`, ...) |
+| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `ProgramError`, `bs`, `cpi` |
+| `better-sol/program` | `bs`, `cpi`, `AccountDefinition`, `InstructionDefinition`, `ProgramDefinition`, all type tokens (`u8`, `u64`, `pubkey`, `bool`, ...), compound type helpers (`option`, `vec`, `array`), type helpers (`InstructionAccounts`, `InstructionArgs`, ...) |
+| `better-sol/codec` | `encodeField`, `encodeInstruction`, `encodeAccount`, `decodeField`, `decodeAccount`, `decodeZeroCopyAccount`, `anchorDiscriminator`, `accountDiscriminator` |
 | `better-sol/wallets` | `walletAdapter`, `reownWallet`, `privyWallet`, `dynamicWallet` |
-| `better-sol/wallets/wallet-adapter` | `walletAdapter` |
 | `better-sol/wallets/reown` | `reownWallet` |
 | `better-sol/wallets/privy` | `privyWallet` |
 | `better-sol/wallets/dynamic` | `dynamicWallet` |
-
-### Version
-
-```ts
-import { version } from "better-sol";
-console.log(version); // "0.1.0"
-```
 
 ---
 
@@ -744,7 +737,7 @@ console.log(version); // "0.1.0"
 | `programs` glob | `programs/**/*.ts` | `config.ts` |
 | `cluster` | `devnet` | `config.ts` |
 | `out` directory | `generated` | `config.ts` |
-| `compilerUrl` | `https://api.better-sol.dev` | `api/client.ts` |
+| `compilerUrl` | `https://api.better-sol.fun` | `api/client.ts` |
 
 ### Client SDK defaults
 
