@@ -5,7 +5,6 @@ import { createServerFn } from '@tanstack/react-start';
 import browserCollections from 'collections/browser';
 import { useFumadocsLoader } from 'fumadocs-core/source/client';
 import { InlineTOC } from 'fumadocs-ui/components/inline-toc';
-import { Suspense } from 'react';
 
 const serverLoader = createServerFn({
   method: "GET",
@@ -38,7 +37,7 @@ const clientLoader = browserCollections.blog.createClientLoader({
     _props: undefined,
   ) {
     return (
-      <div className='inner pb-20 pt-30 px-8 border-x'>
+      <div className='inner pb-20 pt-40 sm:px-8 px-6 border-x'>
         <div className='flex flex-col gap-12'>
           <div className='flex flex-col gap-8 text-center max-w-xl mx-auto'>
             <div className='flex flex-wrap gap-2 justify-center items-center'>
@@ -50,7 +49,7 @@ const clientLoader = browserCollections.blog.createClientLoader({
             <p className='text-xl'>{frontmatter.description}</p>
           </div>
 
-          <div className='max-w-2xl mx-auto flex flex-col gap-6'>
+          <div className='max-w-2xl w-full mx-auto flex flex-col gap-6'>
             <InlineTOC items={toc} />
 
             <div className='prose lg:text-lg'>
@@ -66,6 +65,5 @@ const clientLoader = browserCollections.blog.createClientLoader({
 function RouteComponent() {
   const data = useFumadocsLoader(Route.useLoaderData());
 
-  return <Suspense>{clientLoader.useContent(data.path)}</Suspense>
-
+  return clientLoader.useContent(data.path)
 }
