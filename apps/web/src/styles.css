@@ -159,3 +159,7 @@
     @apply mx-auto w-9/10 max-w-300;
   }
 }
+
+w3m-modal {
+  z-index: 9999999999999999;
+}
