@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { saveAccount } from "#/functions/account.functions";
 import { useTheme } from "#/hooks/use-theme.tsx";
+import SolarArrowRightLineDuotone from '~icons/solar/arrow-right-line-duotone'
 
 function GithubIcon() {
   return (
@@ -43,15 +44,21 @@ const Header = () => {
 
   return (
     <header className="fixed top-0 inset-x-0 border-b z-10 bg-background/60 backdrop-blur-3xl">
+      <Link to="/blog/$slug" params={{ slug: "alpha-launch" }} className="bg-surface block hover:bg-accent/40 transition-all">
+        <div className="inner py-2 px-8 border-x text-accent-foreground text-center flex items-center justify-center gap-1">
+          Better Sol Alpha Release, Read the Blog Here <SolarArrowRightLineDuotone />
+        </div>
+      </Link>
       <div className="inner border-x px-8 h-14 flex items-center justify-between">
-        <Link to="/" className="text-xl font-bold tracking-tighter">
+        <Link to="/" className="text-xl flex items-center gap-1 font-bold tracking-tighter">
+          <img className="size-5" src="/icon.svg" alt="Better Sol" />
           Better Sol
         </Link>
         <div className="flex items-center gap-1">
           <Link to="/" className={buttonVariants({ variant: "ghost" })}>
             Home
           </Link>
-          <Link to="/docs" className={buttonVariants({ variant: "ghost" })}>
+          <Link to="/docs/$" className={buttonVariants({ variant: "ghost" })}>
             Documentation
           </Link>
           <a

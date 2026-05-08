@@ -1,0 +1,154 @@
+---
+title: The Design Decisions Behind Better Sol
+description: Why we chose a single TypeScript definition as the source of truth, what the transpiler actually does, and every trade-off along the way.
+date: 2025-05-08
+author: pow
+summary: Not a feature announcement. An engineering walkthrough of the architecture, the hard choices, and the reasoning behind how Better Sol works.
+tags:
+  - engineering
+  - design
+---
+
+This post assumes you already know what Better Sol is. If not, the [introductory post](/blog/alpha-launch) covers that. Here I want to talk about the harder part: why it works the way it does, where the design came from, and what we gave up to get there.
+
+## Where the idea started
+
+Most Solana programs follow the same lifecycle. You write Rust using Anchor. Anchor generates an IDL from your Rust code. You take that IDL and either run a code generator to produce TypeScript types, or you write those types by hand. Then you build your app against those types.
+
+This works fine on day one. On day two, you add a field to an account. Now you recompile the Rust, regenerate the IDL, re-run the code generator, and update the client. If you forget any of those steps, your client types still compile. Your RPC calls still succeed. But the data coming back is wrong, and you will not find out until something breaks in production.
+
+The problem is not that the tools are bad. The problem is structural. You have three representations of the same program (Rust source, IDL JSON, TypeScript types) and no mechanism for keeping them aligned except developer discipline. That discipline works for small projects. It fails under time pressure, team growth, or rapid iteration.
+
+We asked a simple question: what if there were only one representation? Not three things kept in sync by convention, but one thing that serves both purposes natively.
+
+## The single definition principle
+
+In Better Sol, one TypeScript file defines your accounts, instructions, errors, events, and on-chain logic. The CLI reads that file and produces an on-chain program. The SDK reads the same file and produces a typed client. No IDL in between. No code generation step for the client.
+
+This works because of a specific property of the `bs.*` constructors. When you write `bs.account({ count: bs.u64() })`, the function returns a real JavaScript object with real metadata: field names, type kinds, Borsh sizes, seed definitions. The SDK can read this object directly at runtime to build typed methods, encode instructions, and decode accounts. The CLI can read the source code that produces this object to generate Rust.
+
+The key insight is that the program definition is not a schema that gets processed into two separate outputs. It is a runtime value that the SDK consumes directly, and a source text that the CLI parses. One artifact, two consumers, zero intermediate format.
+
+This idea is not new. Drizzle ORM uses the same pattern: your schema definition is your query builder. You do not define a schema and then generate queries from it. The schema is the query builder. We applied the same thinking to Solana programs.
+
+## Why TypeScript at all
+
+Solana programs compile to BPF bytecode. The natural language for that is Rust. Writing a transpiler that goes TypeScript to Rust, rather than just writing Rust, is an extra layer of indirection. Why add it?
+
+Because the people building Solana frontends, wallets, indexers, and tools are already writing TypeScript. They have `@solana/kit` installed, TypeScript configured, editors set up. If the program definition is TypeScript, it fits directly into that world. They get autocomplete, type checking, linting, go-to-definition, all the editor features they already use, without any additional tooling.
+
+A custom DSL or a new file format would mean building all of that from scratch: a language server, syntax support in editors, a separate build pipeline. TypeScript gives us that for free because our program definitions are just TypeScript code.
+
+The cost of this choice is that TypeScript is more expressive than what can run on-chain. A Solana program lives in a deterministic execution environment with compute limits. You cannot `await` on-chain. You cannot write an unbounded `while` loop. `try/catch` does not map to the Solana runtime. So we had to draw a boundary between what TypeScript allows and what Better Sol accepts. That boundary is the body language.
+
+## The body language
+
+The `run()` function in each instruction is where the on-chain logic lives. It looks like TypeScript, and it is TypeScript in the sense that it parses as valid TypeScript, but it is a deliberately small subset.
+
+We support variable declarations, assignments, arithmetic, comparisons, boolean logic, if/else, bounded for loops, `ctx.require()` for validation, `ctx.emit()` for events, and `cpi.*` for cross-program invocations. That covers the vast majority of what real Solana programs do: read accounts, check conditions, update fields, call token programs, emit events.
+
+Everything else is rejected. Not silently, not with a generic error, but with one of 18 specific diagnostics. Write a `while` loop and you get told to use a bounded `for` loop instead. Write `try/catch` and you get told to use `ctx.require()`. Write a template literal and you get told to use a plain string.
+
+The goal of each diagnostic is not just to say "no." It is to say "here is the alternative that works." If we cannot provide a clear suggestion for how to express something within the supported subset, that is a sign that the subset is too small, and we should expand it rather than add another rejection.
+
+This is the biggest trade-off in the whole architecture. The body language will never be as expressive as Rust. For anything it cannot express, the escape hatch is the generated Rust itself, which is standard Anchor and can be edited directly. The `--dry-run` flag writes it to disk without deploying, so you always have access to the output.
+
+## How the transpiler works
+
+The transpiler has three stages, and the boundaries between them matter.
+
+The first stage is parsing. We use `oxc-parser` to turn TypeScript source into an AST, then walk that AST looking for calls to `bs.account()`, `bs.program()`, `bs.init()`, and the rest. What comes out is structured data: account names, field types, instruction signatures, constraint kinds, PDA seed definitions, error and event schemas, and the raw source text of each `run()` body.
+
+The second stage is the intermediate representation, or IR. This is a plain data structure that describes the program in language-agnostic terms. It knows about accounts and fields and instructions, but it knows nothing about TypeScript or Rust. The parser produces IR. The code generators consume IR. They never talk to each other directly.
+
+This separation exists for a practical reason. The parser is coupled to the TypeScript AST. The code generator is coupled to Anchor Rust. If we ever want to target Pinocchio, or a different framework, or a different output format entirely, we write a new generator against the same IR. The parser does not change. The IR does not change. Only the output changes.
+
+The third stage is code generation. The Rust generator takes the IR and produces a complete Anchor project: `lib.rs`, `Cargo.toml`, and an IDL JSON. The body transpiler converts each `run()` body statement by statement, tracking symbol types, mutability, and scope as it goes. `ctx.require(authority === counter.authority, "Unauthorized")` becomes `require!(authority == counter.authority, ProgramError::Unauthorized);`. `cpi.token.mintTo(...)` becomes a full Anchor CPI invocation with `CpiContext`, account infos, and signer seeds derived from PDA definitions automatically.
+
+## Why Anchor specifically
+
+The code generator targets Anchor rather than raw `solana-program` or Pinocchio because Anchor is the standard. Block explorers parse Anchor IDLs. Auditors review Anchor programs. Verified build services accept Anchor projects. The constraint model (`init`, `mut`, `close`, `seeds`, `bump`, `has_one`) covers the patterns that most programs need.
+
+By generating standard Anchor, we inherit all of that ecosystem infrastructure. The output is not a custom dialect. It is the same Rust you would write by hand, produced mechanically from the TypeScript definition. If you show the generated code to an Anchor developer, they will recognize every pattern.
+
+## The boundary between runtime and build time
+
+The SDK and the CLI never share code. The SDK ships to browsers at 41 KB minified. It contains the `bs.*` constructors, the client factory, the Borsh codec, the token client, and wallet adapters. No parser, no transpiler, no Rust output. None of that can reach a browser bundle because it does not exist in the SDK package.
+
+The CLI is a dev dependency. It contains the parser, the IR, the generators, and the deploy commands. It has no client code.
+
+The `bs.*` constructors sit exactly on the boundary. They are runtime objects that the SDK reads directly to build typed methods and encode data. They are also source-level constructs that the CLI parses to generate Rust. The `run()` bodies and `cpi.*` calls are on the CLI side only: they are read from source, never executed as JavaScript.
+
+This split is what keeps the SDK small. The entire program definition DSL, the typed client, the codec, the token operations, and all four wallet adapters together weigh less than half of `@solana/web3.js` v1.
+
+## Building the client on `@solana/kit`
+
+The client does not reimplement anything that `@solana/kit` already does. RPC calls, transaction building, address encoding, codecs, all of that comes from the official SDK. Better Sol adds one thing on top: the program definition layer.
+
+When you call `betterSol({ programs: { counter } })`, the factory creates a Proxy-based client for each registered program. The Proxy intercepts property access and dynamically creates instruction methods, account objects, and parsing functions from the program definition. This is the same approach tRPC uses for its router: instead of pre-enumerating every possible route or method, you create them on demand based on the schema.
+
+Each instruction method gives you seven ways to interact. The default call signs and sends. `.instruction()` gives you a raw `Instruction` for composing with other instructions. `.simulate()` runs against the chain without sending. `.send()`, `.transaction()`, `.prepare()`, and `.plan()` cover the remaining workflows. These are all backed by the same instruction construction and signing pipeline; they just expose different points in that pipeline.
+
+One detail worth mentioning: signer accounts can be omitted at the call site. If an instruction declares `authority: bs.signer()`, and you do not pass an authority when calling it, the client fills in the active signer automatically. This removes the most common source of boilerplate in Solana transaction construction. You only pass the addresses you actually know about.
+
+## The `withSigner` pattern
+
+Browser apps face a problem that scripts do not: the private key lives in the user's wallet, not on disk. Better Sol handles this by separating the client from the signer.
+
+You create a read-only client with `betterSol({ programs: { counter } })`. No payer, no keypair. When a user connects their wallet, you call `sol.withSigner(walletAdapter(wallet))` and get back a scoped client that signs with that wallet. The original client is not modified. Each scoped client shares the same RPC connection and program definitions but uses a different signer.
+
+TypeScript tracks this at the type level. The base client has `payer: Address | null`. A scoped client has `payer: Address`. Methods that require a signer are only callable on scoped clients. You get a compile error if you try to send a transaction on a client that has no signer, rather than a runtime error after the RPC call fails.
+
+Adapters are included for the four wallet providers we see most often: the standard Solana wallet adapter, Reown AppKit, Privy, and Dynamic. Each one converts the provider's signing interface into the `TransactionSigner` type that `@solana/kit` expects.
+
+## Error messages as a design principle
+
+There are two places where Better Sol produces error messages: the transpiler and the runtime argument validator.
+
+The transpiler has 18 diagnostics for unsupported patterns. Each one names the specific construct that was rejected and suggests what to use instead. This is not accidental. We treat diagnostics as part of the API. A confusing error message is a bug in the same way that a wrong code generation is a bug.
+
+The runtime validator checks every argument before encoding. A `u64` must be a `bigint`. A `pubkey` must be a `string`. An `array` must be an actual array, and each element must match the inner type. The error messages include the instruction name, the argument name, the expected type, and the actual value. `better-sol: instruction "increment" arg "amount" expects u64 (bigint), got 5` is typical. The goal is that you never have to guess what went wrong.
+
+## Token operations without ceremony
+
+Most Solana programs interact with tokens at some point. The client includes `sol.token` and `sol.token2022` with the same API. Create a mint, mint tokens, transfer, check a balance. Associated token accounts are created automatically when they do not exist yet. Decimals are optional because the client fetches them from the mint.
+
+These are not thin wrappers around raw instructions. The token client derives ATAs, builds multi-instruction transactions (create ATA plus mint or transfer), signs them, and confirms them. What would normally be a sequence of derivation checks, instruction construction, and transaction assembly becomes one function call.
+
+## External programs
+
+Sooner or later, every Solana app needs to call a program someone else wrote. Better Sol handles this with three approaches, all using the same `bs.program()` API.
+
+The CLI can generate a typed definition from an on-chain IDL. You give it a program address, it fetches the IDL from mainnet, and it writes a `.ts` file with full autocomplete on every instruction, account, and argument. This is the recommended approach when you know the program at build time.
+
+`fromIdl()` does the same thing at runtime. You lose autocomplete because the names become `string` rather than string literals, but encoding and decoding work correctly. This is useful when you load program addresses from a database or config.
+
+You can also write the definition by hand. Same `bs.account()` and `bs.program()` APIs. Useful when the IDL is incomplete or you want to describe only the instructions you actually call.
+
+## What we gave up
+
+No architecture gives you everything. Here is what this one does not.
+
+The body language is not, and will never be, a general-purpose programming language. It covers the patterns that most Solana programs need. For anything outside that set, the generated Rust is there for you to modify. We accept this limit because the alternative is either a language so permissive that it produces incorrect on-chain behavior, or a language so complex that it has its own learning curve, which defeats the purpose.
+
+Better Sol does not replace `@solana/kit`. It builds on top of it. Everything the client does underneath is standard `@solana/kit` RPC, transaction building, and codecs. If Better Sol does not support a specific transaction pattern, you can use `.instruction()` to get the raw instruction and compose it yourself.
+
+Better Sol does not hide the compilation target. The generated Rust is standard Anchor, and it is yours to read, audit, and modify. The framework is a way to produce that Rust more quickly. It is not a replacement for understanding what runs on-chain.
+
+## The internal type discipline
+
+One thing that might interest other TypeScript library authors: the codebase has zero `any`, zero `@ts-ignore`, and zero `@ts-expect-error`. There are three `as unknown as` casts in total, all three in places where TypeScript's generic inference cannot express the constraint we need (a tuple type from a variadic step chain, and a function overload variance mismatch).
+
+The program definition types use `Symbol`-branded fields on type tokens to prevent structural collapse. Without this, `TypeToken<string, "pubkey">` and `TypeToken<string, "string">` would be the same type, since TypeScript would see them as structurally identical objects. The branded symbols force the type system to treat them as distinct.
+
+Account constraints use a `constraintKind` discriminator string instead of `instanceof` checks. TypeScript cannot reliably narrow types across class hierarchies, especially when the classes are constructed dynamically. A literal string field (`"init"`, `"mut"`, `"signer"`) gives you narrowing through discriminated unions, which works consistently.
+
+This discipline caught real design issues during development. Several times the type checker flagged a place where the client could accept parameters that did not match the program definition. Each of those would have been a silent encoding error at runtime.
+
+## The scale of it
+
+The SDK is about 1,600 lines of TypeScript. The CLI is about 4,500 lines. The body transpiler, which is the most complex single component, is about 1,200 lines. The test suite has over 170 tests.
+
+These numbers are worth stating because they say something about the approach. A TypeScript-to-Anchor transpiler that handles real programs does not need to be tens of thousands of lines. The IR keeps the pipeline honest. The constrained body language keeps the transpiler tractable. The separation between SDK and CLI keeps each one small enough to reason about.
+
+The full source is on [GitHub](https://github.com/powxenv/better-sol). The [documentation](/docs) covers every feature in detail.

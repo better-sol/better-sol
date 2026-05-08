@@ -18,6 +18,7 @@ import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiCompileRouteImport } from './routes/api/compile'
 import { Route as LayoutDashIndexRouteImport } from './routes/_layout.dash.index'
 import { Route as LlmsDotmdxDocsSplatRouteImport } from './routes/llms[.]mdx.docs.$'
+import { Route as LayoutBlogSlugRouteImport } from './routes/_layout.blog.$slug'
 
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
@@ -63,6 +64,11 @@ const LlmsDotmdxDocsSplatRoute = LlmsDotmdxDocsSplatRouteImport.update({
   path: '/llms.mdx/docs/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LayoutBlogSlugRoute = LayoutBlogSlugRouteImport.update({
+  id: '/blog/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -71,6 +77,7 @@ export interface FileRoutesByFullPath {
   '/api/compile': typeof ApiCompileRoute
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
+  '/blog/$slug': typeof LayoutBlogSlugRoute
   '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/dash/': typeof LayoutDashIndexRoute
 }
@@ -81,6 +88,7 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
   '/': typeof LayoutIndexRoute
+  '/blog/$slug': typeof LayoutBlogSlugRoute
   '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/dash': typeof LayoutDashIndexRoute
 }
@@ -93,6 +101,7 @@ export interface FileRoutesById {
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/blog/$slug': typeof LayoutBlogSlugRoute
   '/llms.mdx/docs/$': typeof LlmsDotmdxDocsSplatRoute
   '/_layout/dash/': typeof LayoutDashIndexRoute
 }
@@ -105,6 +114,7 @@ export interface FileRouteTypes {
     | '/api/compile'
     | '/api/search'
     | '/docs/$'
+    | '/blog/$slug'
     | '/llms.mdx/docs/$'
     | '/dash/'
   fileRoutesByTo: FileRoutesByTo
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/docs/$'
     | '/'
+    | '/blog/$slug'
     | '/llms.mdx/docs/$'
     | '/dash'
   id:
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/docs/$'
     | '/_layout/'
+    | '/_layout/blog/$slug'
     | '/llms.mdx/docs/$'
     | '/_layout/dash/'
   fileRoutesById: FileRoutesById
@@ -205,16 +217,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LlmsDotmdxDocsSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_layout/blog/$slug': {
+      id: '/_layout/blog/$slug'
+      path: '/blog/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof LayoutBlogSlugRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
   LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutBlogSlugRoute: typeof LayoutBlogSlugRoute
   LayoutDashIndexRoute: typeof LayoutDashIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutIndexRoute: LayoutIndexRoute,
+  LayoutBlogSlugRoute: LayoutBlogSlugRoute,
   LayoutDashIndexRoute: LayoutDashIndexRoute,
 }
 

@@ -1,0 +1,148 @@
+---
+title: Introducing Better Sol
+description: Better Sol lets you write Solana programs in TypeScript and get a fully typed client from the same file. The alpha is now available.
+date: 2025-05-08
+author: pow
+summary: Writing Solana programs has always meant learning Rust, wrangling IDLs, and keeping client types in sync by hand. Better Sol replaces all of that with a single TypeScript definition that becomes your on-chain program, your typed client, and your source of truth.
+tags:
+  - announcement
+  - alpha
+---
+
+Writing a Solana program today means learning Rust. Not just the language, but the full toolchain: Cargo, the Solana CLI, the Anchor framework, and the BPF compiler. That is months of ramp-up before you ship your first instruction.
+
+Then there is the client side. Anchor generates an IDL from your Rust code, and you use that IDL to build a typed SDK. Sometimes you run a code generator. Sometimes you write the types by hand. Either way, you now have two representations of the same program that can drift apart every time you change an account field or add an instruction argument.
+
+This is the gap Better Sol fills.
+
+## What Better Sol is
+
+Better Sol is a TypeScript-first framework for Solana development. You define your program in a single `.ts` file: accounts, instructions, errors, events, PDA seeds, the full on-chain logic. That file is the source of truth for everything. The CLI reads it to compile and deploy your program. The SDK reads it to give you a fully typed client. There is no IDL, no code generation step, and nothing to keep in sync.
+
+```ts
+import { bs } from "better-sol/program"
+
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+}).derive(seed => ["counter", seed.authority])
+
+export const counter = bs.program({ name: "counter", address: "<key>" }, ix => ({
+  initialize: ix({
+    accounts: { counter: bs.init(Counter), authority: bs.signer() },
+    args: { initialValue: bs.u64() },
+    run: ({ counter, authority }, { initialValue }) => {
+      counter.count = initialValue
+      counter.authority = authority
+    },
+  }),
+
+  increment: ix({
+    accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+    args: { amount: bs.u64() },
+    run: ({ counter }, { amount }) => { counter.count += amount },
+  }),
+}))
+```
+
+From that one file you deploy to devnet:
+
+```bash
+npx @better-sol/cli@alpha deploy
+```
+
+And connect from your app with full autocomplete on every instruction, account, and argument:
+
+```ts
+import { betterSol, keypairFile } from "better-sol"
+import { counter } from "./programs/counter"
+
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
+
+const addr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
+await sol.counter.increment({ counter: addr, amount: 5n })
+```
+
+The types come from your program definition. You never write them by hand, and they cannot drift because there is only one definition.
+
+## The problem with the current workflow
+
+If you have built on Solana before, this probably sounds familiar.
+
+You write your program in Rust using Anchor. You learn macros, account validation structs, error codes, and the Constraint attribute. You install the Rust toolchain, the Solana CLI, and the Anchor CLI. You wait for compilation. You debug Rust compiler errors for something that could have been a three-line TypeScript function.
+
+Once the program compiles, Anchor generates an IDL: a JSON file describing your program's interface. You take that IDL and feed it into a code generator, or you write client types by hand, or you use an untyped RPC wrapper. If you change a field in your Rust program, you recompile, regenerate, and update the client. Miss any step and your client is out of sync.
+
+If you want to call another team's program, you find their IDL somewhere, write wrapper types, and hope the IDL is current. If the program has no IDL, you are reading instruction layouts from a block explorer and encoding arguments by hand.
+
+Every step is a chance for things to break. Every layer is something you maintain separately. The friction is not just the language. It is the distance between writing the program and using it.
+
+## What changes with Better Sol
+
+Better Sol removes that distance. One TypeScript file replaces your Rust program, your IDL, and your hand-written client types.
+
+**No Rust toolchain.** The CLI parses your TypeScript, generates Anchor-compatible Rust internally, and compiles it through a cloud service. You do not install Cargo, the Solana CLI, or anything else. The `deploy` command handles all of it.
+
+**No IDL.** Your program definition is the interface. There is no JSON file to generate, version, or keep in sync. The client reads the same TypeScript you wrote and infers every type.
+
+**No code generation step.** Types flow directly from your definition into the client. Add a field to an account, and it appears in `fetch()`. Add an instruction, and it appears as a method. Change an argument type, and the client reflects it immediately.
+
+**A real body language.** The `run()` function in your instructions is not a string template or a DSL. It is TypeScript: assignments, arithmetic, if/else, bounded loops, `ctx.require()` for validation, `ctx.emit()` for events, and `cpi.*` for cross-program invocations. The CLI transpiles it into on-chain logic. If you write something that cannot be expressed on-chain, you get a specific error telling you what to use instead.
+
+**Built-in token operations.** The client includes `sol.token` for SPL Token and `sol.token2022` for Token-2022. Create mints, mint tokens, transfer, and check balances without constructing raw Token program instructions. Associated token accounts are created automatically.
+
+```ts
+const { mint } = await sol.token.createMint({ decimals: 9 })
+await sol.token.mintTo({ mint, to: ownerAddr, amount: 1_000_000_000n })
+await sol.token.transfer({ mint, to: recipientAddr, amount: 100n })
+```
+
+**External programs.** You can import any on-chain program into your project. Run `npx @better-sol/cli@alpha generate idl <address>` and the CLI fetches the IDL from mainnet and produces a typed `.ts` file with full autocomplete on instruction names, account names, and arguments. If you need runtime flexibility, `fromIdl()` loads an IDL dynamically. You can also write the definition by hand using the same `bs.program()` API.
+
+**Browser-ready.** The SDK is 41 KB minified, tree-shakeable, and contains no compiler logic. Create a read-only client with `betterSol()`, then scope wallet sessions with `withSigner()`. Adapters are included for the standard Solana wallet adapter, Reown AppKit, Privy, and Dynamic.
+
+```ts
+const sol = await betterSol({ cluster: "mainnet", programs: { counter } })
+const userSol = await sol.withSigner(walletAdapter(wallet))
+await userSol.counter.increment({ counter: addr, amount: 5n })
+```
+
+## What is in the alpha
+
+The alpha ships with two packages.
+
+**better-sol** (`npm install better-sol@alpha`) is the runtime SDK. It contains the program definition DSL (`bs.account`, `bs.program`, all type tokens), the typed client with instruction methods, PDA derivation, account fetching, and event and error parsing, token helpers for both SPL Token and Token-2022, `fromIdl()` for loading external programs at runtime, and the full Borsh codec.
+
+**@better-sol/cli** runs via `npx` with no install. It provides `init` to scaffold a project, `create` to generate a program template, `deploy` to compile and deploy to any cluster, `generate idl` to import external programs, `generate db` to produce a Drizzle ORM schema from your account definitions, `verify` to submit to OtterSec verified builds, and `login` to save your API key for higher compilation limits.
+
+Documentation covers the full workflow: [defining programs](/docs/defining-programs/types), [body language](/docs/defining-programs/body-language), [connecting the client](/docs/the-client/connecting), [tokens](/docs/the-client/tokens), [multi-instruction transactions](/docs/the-client/multi-instruction), [advanced topics](/docs/advanced/compute-budget), and three complete [recipes](/docs/recipes/counter) that walk through real programs from scratch.
+
+## What to expect
+
+This is an alpha. There are a few things worth knowing before you start.
+
+APIs may change. We are still learning what works and what does not, and we will make breaking changes when the alternative is shipping something poorly designed. Pin your versions if you need stability.
+
+The `run()` body language is intentionally conservative. It covers the most common on-chain patterns: arithmetic, conditionals, bounded loops, validation, events, and CPI calls. If you write something outside that subset, you get a specific error with a suggestion for what to use instead. We will expand it over time based on what people actually need.
+
+Compilation happens in the cloud. Without an API key you get 3 compiles per hour. With a free key from the dashboard, you get 50. The generated Rust follows Anchor conventions, so you can inspect it, modify it, or use it for verified builds.
+
+The test suite covers over 170 tests across the SDK and CLI.
+
+## Get started
+
+Three commands and your program is on devnet:
+
+```bash
+npx @better-sol/cli@alpha init
+npx @better-sol/cli@alpha create counter
+npx @better-sol/cli@alpha deploy
+```
+
+Then follow the [quickstart guide](/docs/your-first-program) to connect a client and call your program.
+
+The code is on [GitHub](https://github.com/powxenv/better-sol). Feedback, bug reports, and feature requests are all welcome. This is early, and your input will shape what comes next.

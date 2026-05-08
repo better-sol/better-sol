@@ -1,9 +1,9 @@
 import { Button, Surface, Tabs } from "@heroui/react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import SolarArrowRightLineDuotone from "~icons/solar/arrow-right-line-duotone";
 import SolarConfettiLineDuotone from "~icons/solar/confetti-line-duotone";
-import SolarPlayLineDuotone from "~icons/solar/play-line-duotone";
 import { HighlightCode } from "#/components/highlight-code";
+import UnicornScene from "unicornstudio-react";
 
 export const Route = createFileRoute("/_layout/")({ component: Home });
 
@@ -95,9 +95,9 @@ function Home() {
         <div className="inner relative flex h-full flex-col gap-20 border-x">
           <div className="grid grid-cols-2 items-end gap-12 px-8 pt-20">
             <div className="flex flex-col items-start gap-4">
-              <a href="#" className="inline-flex h-10 items-center gap-2 rounded-xl border-[0.5px] bg-surface pl-2 pr-4 text-sm font-medium transition-all hover:bg-surface-secondary">
-                <SolarConfettiLineDuotone /> TypeScript-first Solana DX
-              </a>
+              <Link to="/blog/$slug" params={{ slug: "dx-decisions" }} className="inline-flex h-10 items-center gap-2 rounded-xl border-[0.5px] bg-surface pl-2 pr-4 text-sm font-medium transition-all hover:bg-surface-secondary">
+                <SolarConfettiLineDuotone /> TypeScript-first Solana DX, Read More <SolarArrowRightLineDuotone />
+              </Link>
               <h1 className="text-5xl font-bold">
                 The fastest way to go from idea to Solana program.
               </h1>
@@ -106,21 +106,16 @@ function Home() {
               <p className="text-xl">
                 Better Sol gives you one TypeScript definition for program logic, account types, client calls, and SDK autocomplete. Less boilerplate. Fewer mismatches. Faster shipping.
               </p>
-              <div className="flex gap-1">
-                <Button>
-                  Get Started <SolarArrowRightLineDuotone />
-                </Button>
-                <Button variant="outline">
-                  <SolarPlayLineDuotone /> Open Playground
-                </Button>
-              </div>
+              <Button>
+                Get Started <SolarArrowRightLineDuotone />
+              </Button>
             </div>
           </div>
 
           <div className="relative h-full flex flex-col gap-8 px-8 pt-8">
-            <video src="/hero.mp4" autoPlay loop muted playsInline className="absolute left-0 top-0 size-full object-cover" />
+            <UnicornScene projectId="JQufMz8tqz7Bnn9sk23U" className="absolute! left-0 top-0 size-full object-cover" />
 
-            <Tabs>
+            <Tabs className="relative z-999999999">
               <Tabs.ListContainer className="mx-auto max-w-max">
                 <Tabs.List aria-label="Better Sol examples">
                   <Tabs.Tab className="whitespace-nowrap" id="overview">
