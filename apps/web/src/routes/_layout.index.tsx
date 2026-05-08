@@ -15,7 +15,6 @@ import SolarStarBoldDuotone from "~icons/solar/star-bold-duotone";
 import SolarDocumentTextLineDuotone from "~icons/solar/document-text-line-duotone";
 import SolarGlobalLineDuotone from "~icons/solar/global-line-duotone";
 import { HighlightCode } from "#/components/highlight-code";
-import UnicornScene from "unicornstudio-react";
 
 export const Route = createFileRoute("/_layout/")({
   loader: async () => {
@@ -125,17 +124,17 @@ function Home() {
     <>
       <div className="relative min-h-lvh flex items-end">
         <div className="inner relative flex h-full flex-col gap-20 border-x">
-          <div className="grid grid-cols-2 items-end gap-12 px-8 pt-40">
+          <div className="grid grid-cols-1 md:grid-cols-2 items-end gap-8 md:gap-12 px-6 md:px-8 pt-30 md:pt-40">
             <div className="flex flex-col items-start gap-4">
               <Link to="/blog/$slug" params={{ slug: "dx-decisions" }} className="inline-flex h-10 items-center gap-2 rounded-xl border-[0.5px] bg-surface pl-2 pr-4 text-sm font-medium transition-all hover:bg-surface-secondary">
                 <SolarConfettiLineDuotone /> TypeScript-first Solana DX, Read More <SolarArrowRightLineDuotone />
               </Link>
-              <h1 className="text-5xl">
+              <h1 className="text-3xl md:text-5xl">
                 The fastest way to go from idea to Solana program.
               </h1>
             </div>
             <div className="flex flex-col gap-4">
-              <p className="text-xl">
+              <p className="text-lg md:text-xl">
                 Better Sol gives you one TypeScript definition for program logic, account types, client calls, and SDK autocomplete. Less boilerplate. Fewer mismatches. Faster shipping.
               </p>
               <Button>
@@ -144,9 +143,8 @@ function Home() {
             </div>
           </div>
 
-          <div className="relative h-full flex flex-col gap-8 px-8 pt-8">
-            {/* <video src="/hero.mp4" autoPlay loop muted playsInline className="absolute! left-0 top-0 size-full object-cover" /> */}
-            <UnicornScene projectId="JQufMz8tqz7Bnn9sk23U" className="absolute! left-0 top-0 size-full object-cover" />
+          <div className="relative h-full flex flex-col gap-8 px-6 md:px-8 pt-8">
+            <video src="/hero.mp4" autoPlay loop muted playsInline className="absolute! left-0 top-0 size-full object-cover" />
 
             <Tabs className="relative z-999999999">
               <Tabs.ListContainer className="mx-auto max-w-max">
@@ -184,16 +182,16 @@ function Home() {
         <div className="inner border-x" />
       </div>
 
-      <div className="inner border-x py-24 px-8">
-        <div className="mb-12 flex flex-col gap-4 items-start">
+      <div className="inner border-x py-16 md:py-24 px-6 md:px-8">
+        <div className="mb-10 md:mb-12 flex flex-col gap-4 items-start">
           <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
             <SolarCodeLineDuotone className="size-5" />
             Architecture
           </div>
-          <h2 className="text-5xl">One definition. Three outputs.</h2>
+          <h2 className="text-3xl md:text-5xl">One definition. Three outputs.</h2>
           <p className="text-lg">Write TypeScript once. Get an on-chain program, a typed client, and a database schema.</p>
         </div>
-        <div className="grid grid-cols-4 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
           {features.map((feature) => (
             <div key={feature.title} className="p-2 border rounded-xl" style={{ transform: `rotate(${feature.rotate}deg)` }}>
               <Surface className="p-6 flex flex-col gap-2 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
@@ -212,16 +210,16 @@ function Home() {
         <div className="inner border-x" />
       </div>
 
-      <div className="inner border-x py-24 px-8">
-        <div className="mb-12 flex flex-col gap-4 items-start">
+      <div className="inner border-x py-16 md:py-24 px-6 md:px-8">
+        <div className="mb-10 md:mb-12 flex flex-col gap-4 items-start">
           <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
             <SolarBoxLineDuotone className="size-5" />
             SDK Capabilities
           </div>
-          <h2 className="text-5xl">Everything you need in one package.</h2>
+          <h2 className="text-3xl md:text-5xl">Everything you need in one package.</h2>
           <p className="text-lg">Tokens, wallets, PDAs, events, external programs, and more. All typed, all automatic.</p>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-center gap-4">
           <div className="p-2 border rounded-xl">
             <Surface className="p-6 flex flex-col gap-3 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
               <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
@@ -249,8 +247,8 @@ function Home() {
               <p className="text-muted text-sm leading-relaxed">Import any on-chain program with full autocomplete. Generate from an address or load an IDL at runtime.</p>
             </Surface>
           </div>
-          <div className="col-span-2 p-2 border rounded-xl">
-            <Surface className="p-6 flex gap-8 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+          <div className="sm:col-span-2 lg:col-span-2 p-2 border rounded-xl">
+            <Surface className="p-6 flex flex-col sm:flex-row gap-6 sm:gap-8 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
               <div className="flex flex-col gap-3 flex-1">
                 <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
                   <SolarCodeLineDuotone className="size-5" />
@@ -258,7 +256,8 @@ function Home() {
                 <h3 className="font-serif text-lg font-bold">PDA derivation & account fetching</h3>
                 <p className="text-muted text-sm leading-relaxed">Derive PDAs from your seed definitions. Fetch typed account data in one call. No manual encoding or decoding.</p>
               </div>
-              <div className="flex flex-col gap-3 flex-1 border-l pl-8">
+              <div className="sm:w-[0.5px] sm:h-full h-[0.5px] w-full bg-border"></div>
+              <div className="flex flex-col gap-3 flex-1">
                 <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
                   <SolarCheckCircleLineDuotone className="size-5" />
                 </div>
@@ -283,14 +282,14 @@ function Home() {
         <div className="inner border-x" />
       </div>
 
-      <div className="inner border-x py-24 px-8">
-        <div className="mb-12 flex flex-col items-center gap-6 text-center max-w-xl mx-auto">
+      <div className="inner border-x py-20 md:py-24 px-6 md:px-8">
+        <div className="mb-10 md:mb-12 flex flex-col items-center gap-4 md:gap-6 text-center max-w-xl mx-auto">
           <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
             <SolarBoltLineDuotone className="size-5" />
             Get Started
           </div>
-          <h2 className="text-5xl">Ship in under five minutes.</h2>
-          <p className="text-xl">Initialize a project, create a program, and deploy on-chain. Your typed client is ready immediately.</p>
+          <h2 className="text-3xl md:text-5xl">Ship in under five minutes.</h2>
+          <p className="text-lg md:text-xl">Initialize a project, create a program, and deploy on-chain. Your typed client is ready immediately.</p>
         </div>
         <div className="p-2 border rounded-xl">
           <Surface className="rounded-lg border-[0.5px]">
@@ -328,7 +327,7 @@ function Home() {
           </Surface>
         </div>
 
-        <div className="mt-8 flex justify-center gap-2">
+        <div className="mt-6 md:mt-8 flex flex-col sm:flex-row justify-center items-center gap-2">
           <Link to="/docs/$" params={{ _splat: "your-first-program" }}>
             <Button>
               Read the Guide <SolarArrowRightLineDuotone />
@@ -346,9 +345,9 @@ function Home() {
         <div className="inner border-x" />
       </div>
 
-      <div className="inner border-x py-24 px-8">
-        <div className="grid grid-cols-12 gap-x-8 gap-y-16">
-          <div className="col-span-5 flex flex-col gap-8">
+      <div className="inner border-x py-16 md:py-24 px-6 md:px-8">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-12 gap-x-8 gap-y-10 lg:gap-y-16">
+          <div className="col-span-2 lg:col-span-5 flex flex-col gap-8">
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <svg width="32" height="32" viewBox="0 0 121 121" fill="none">
@@ -368,7 +367,7 @@ function Home() {
             </div>
           </div>
 
-          <div className="col-span-2 flex flex-col gap-4">
+          <div className="col-span-1 lg:col-span-2 flex flex-col gap-4">
             <span className="font-serif text-sm font-bold">Docs</span>
             <Link to="/docs/$" params={{ _splat: "your-first-program" }} className="text-sm text-muted hover:text-foreground transition-colors">Your First Program</Link>
             <Link to="/docs/$" params={{ _splat: "your-first-client" }} className="text-sm text-muted hover:text-foreground transition-colors">Your First Client</Link>
@@ -376,14 +375,14 @@ function Home() {
             <Link to="/docs/$" params={{ _splat: "comparisons" }} className="text-sm text-muted hover:text-foreground transition-colors">Comparisons</Link>
           </div>
 
-          <div className="col-span-2 flex flex-col gap-4">
+          <div className="col-span-1 lg:col-span-2 flex flex-col gap-4">
             <span className="font-serif text-sm font-bold">Resources</span>
             <a href="https://github.com/powxenv/better-sol" target="_blank" rel="noopener noreferrer" className="text-sm text-muted hover:text-foreground transition-colors">GitHub</a>
             <Link to="/blog/$slug" params={{ slug: "alpha-launch" }} className="text-sm text-muted hover:text-foreground transition-colors">Blog</Link>
             <Link to="/docs/$" params={{ _splat: "recipes/counter" }} className="text-sm text-muted hover:text-foreground transition-colors">Examples</Link>
           </div>
 
-          <div className="col-span-3 flex flex-col gap-6 pl-6 border-l">
+          <div className="col-span-2 lg:col-span-3 flex flex-col gap-6 lg:border-l lg:pl-6">
             <span className="font-serif text-sm font-bold">Status</span>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
