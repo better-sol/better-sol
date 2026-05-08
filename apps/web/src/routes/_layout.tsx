@@ -19,9 +19,9 @@ function RouteComponent() {
       networks={[solana, solanaTestnet, solanaDevnet]}
       metadata={{
         name: "Better Sol",
-        description: "Better Sol",
+        description: "The fastest way to go from idea to Solana program.",
         url: "https://better-sol.fun",
-        icons: ["https://avatars.githubusercontent.com/u/179229932"],
+        icons: ["https://better-sol.fun/icon.svg"],
       }}
       features={{
         analytics: true,

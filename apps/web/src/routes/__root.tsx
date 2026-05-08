@@ -26,13 +26,78 @@ export const Route = createRootRouteWithContext<{
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "TanStack Start Starter",
+        title: "Better Sol – TypeScript-first Solana DX",
+      },
+      {
+        name: "description",
+        content:
+          "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+      },
+      {
+        property: "og:title",
+        content: "Better Sol – TypeScript-first Solana DX",
+      },
+      {
+        property: "og:description",
+        content:
+          "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+      },
+      {
+        property: "og:url",
+        content: "https://better-sol.fun",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+      {
+        property: "og:image",
+        content: "https://better-sol.fun/logo512.png",
+      },
+      {
+        name: "twitter:card",
+        content: "summary",
+      },
+      {
+        name: "twitter:title",
+        content: "Better Sol – TypeScript-first Solana DX",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+      },
+      {
+        name: "twitter:image",
+        content: "https://better-sol.fun/logo512.png",
+      },
+      {
+        name: "theme-color",
+        content: "#19FB9B",
       },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: "/icon.svg",
+      },
+      {
+        rel: "icon",
+        type: "image/x-icon",
+        href: "/favicon.ico",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/logo192.png",
+      },
+      {
+        rel: "manifest",
+        href: "/manifest.json",
       },
     ],
   }),

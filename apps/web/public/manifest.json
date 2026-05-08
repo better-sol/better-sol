@@ -1,10 +1,10 @@
 {
-  "short_name": "TanStack App",
-  "name": "Create TanStack App Sample",
+  "short_name": "Better Sol",
+  "name": "Better Sol – TypeScript-first Solana DX",
   "icons": [
     {
       "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
+      "sizes": "48x48 32x32 24x24 16x16",
       "type": "image/x-icon"
     },
     {
@@ -18,8 +18,11 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#19FB9B",
+  "background_color": "#0a0a0a",
+  "description": "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+  "categories": ["developer tools", "web3"],
+  "url": "https://better-sol.fun"
 }
