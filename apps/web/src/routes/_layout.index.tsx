@@ -2,6 +2,15 @@ import { Button, Surface, Tabs } from "@heroui/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import SolarArrowRightLineDuotone from "~icons/solar/arrow-right-line-duotone";
 import SolarConfettiLineDuotone from "~icons/solar/confetti-line-duotone";
+import SolarCodeLineDuotone from "~icons/solar/code-line-duotone";
+import SolarShieldCheckLineDuotone from "~icons/solar/shield-check-line-duotone";
+import SolarBoxLineDuotone from "~icons/solar/box-line-duotone";
+import SolarBoltLineDuotone from "~icons/solar/bolt-line-duotone";
+import SolarWalletMoneyLineDuotone from "~icons/solar/wallet-money-line-duotone";
+import SolarDollarLineDuotone from "~icons/solar/dollar-line-duotone";
+import SolarPlanetLineDuotone from "~icons/solar/planet-line-duotone";
+import SolarDatabaseLineDuotone from "~icons/solar/database-line-duotone";
+import SolarCheckCircleLineDuotone from "~icons/solar/check-circle-line-duotone";
 import { HighlightCode } from "#/components/highlight-code";
 import UnicornScene from "unicornstudio-react";
 
@@ -88,17 +97,24 @@ function ExamplePanel({ title, description, code }: { readonly title: string; re
   );
 }
 
+const features = [
+  { icon: SolarCodeLineDuotone, title: "Write once, get everything", description: "One TypeScript file becomes your on-chain program, your typed client, and your database schema. No sync, no drift.", rotate: "-1.5" },
+  { icon: SolarBoltLineDuotone, title: "One command to deploy", description: "Run deploy. Your program is on-chain. No toolchain to install, no build config to maintain.", rotate: "1" },
+  { icon: SolarShieldCheckLineDuotone, title: "Types that write themselves", description: "Every account field, instruction argument, PDA seed, error, and event is inferred from your definition.", rotate: "0.5" },
+  { icon: SolarBoxLineDuotone, title: "41 KB to the browser", description: "Zero compiler code in your bundle. Tokens, wallets, account decoding, and PDA derivation all included.", rotate: "-0.8" },
+] as const;
+
 function Home() {
   return (
     <>
       <div className="relative min-h-lvh flex items-end">
         <div className="inner relative flex h-full flex-col gap-20 border-x">
-          <div className="grid grid-cols-2 items-end gap-12 px-8 pt-20">
+          <div className="grid grid-cols-2 items-end gap-12 px-8 pt-40">
             <div className="flex flex-col items-start gap-4">
               <Link to="/blog/$slug" params={{ slug: "dx-decisions" }} className="inline-flex h-10 items-center gap-2 rounded-xl border-[0.5px] bg-surface pl-2 pr-4 text-sm font-medium transition-all hover:bg-surface-secondary">
                 <SolarConfettiLineDuotone /> TypeScript-first Solana DX, Read More <SolarArrowRightLineDuotone />
               </Link>
-              <h1 className="text-5xl font-bold">
+              <h1 className="text-5xl">
                 The fastest way to go from idea to Solana program.
               </h1>
             </div>
@@ -114,6 +130,7 @@ function Home() {
 
           <div className="relative h-full flex flex-col gap-8 px-8 pt-8">
             <UnicornScene projectId="JQufMz8tqz7Bnn9sk23U" className="absolute! left-0 top-0 size-full object-cover" />
+            {/* <video src="/hero.mp4" autoPlay loop muted playsInline className="absolute! left-0 top-0 size-full object-cover" /> */}
 
             <Tabs className="relative z-999999999">
               <Tabs.ListContainer className="mx-auto max-w-max">
@@ -148,8 +165,169 @@ function Home() {
       </div>
 
       <div className="border-y h-14">
-        <div className="inner border-x">
+        <div className="inner border-x" />
+      </div>
+
+      <div className="inner border-x py-24 px-8">
+        <div className="mb-12 flex flex-col gap-4 items-start">
+          <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
+            <SolarCodeLineDuotone className="size-5" />
+            Architecture
+          </div>
+          <h2 className="text-5xl">One definition. Three outputs.</h2>
+          <p className="text-lg">Write TypeScript once. Get an on-chain program, a typed client, and a database schema.</p>
         </div>
+        <div className="grid grid-cols-4 gap-4 items-start">
+          {features.map((feature) => (
+            <div key={feature.title} className="p-2 border rounded-xl" style={{ transform: `rotate(${feature.rotate}deg)` }}>
+              <Surface className="p-6 flex flex-col gap-2 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+                <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px]">
+                  <feature.icon className="size-5 text-accent" />
+                </div>
+                <h3 className="font-serif text-lg font-bold">{feature.title}</h3>
+                <p className="text-muted text-sm leading-relaxed">{feature.description}</p>
+              </Surface>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-y h-14">
+        <div className="inner border-x" />
+      </div>
+
+      <div className="inner border-x py-24 px-8">
+        <div className="mb-12 flex flex-col gap-4 items-start">
+          <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
+            <SolarBoxLineDuotone className="size-5" />
+            SDK Capabilities
+          </div>
+          <h2 className="text-5xl">Everything you need in one package.</h2>
+          <p className="text-lg">Tokens, wallets, PDAs, events, external programs, and more. All typed, all automatic.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="p-2 border rounded-xl">
+            <Surface className="p-6 flex flex-col gap-3 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+              <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
+                <SolarDollarLineDuotone className="size-5" />
+              </div>
+              <h3 className="font-serif text-lg font-bold">SPL Token & Token-2022</h3>
+              <p className="text-muted text-sm leading-relaxed">Create mints, mint, transfer, and check balances. Same API for both token programs. ATAs created automatically.</p>
+            </Surface>
+          </div>
+          <div className="p-2 border rounded-xl">
+            <Surface className="p-6 flex flex-col gap-3 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+              <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
+                <SolarWalletMoneyLineDuotone className="size-5" />
+              </div>
+              <h3 className="font-serif text-lg font-bold">Wallet adapters</h3>
+              <p className="text-muted text-sm leading-relaxed">Connect browser wallets with one call. Built-in adapters for Solana wallet adapter, Reown, Privy, and Dynamic.</p>
+            </Surface>
+          </div>
+          <div className="p-2 border rounded-xl">
+            <Surface className="p-6 flex flex-col gap-3 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+              <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
+                <SolarPlanetLineDuotone className="size-5" />
+              </div>
+              <h3 className="font-serif text-lg font-bold">External programs</h3>
+              <p className="text-muted text-sm leading-relaxed">Import any on-chain program with full autocomplete. Generate from an address or load an IDL at runtime.</p>
+            </Surface>
+          </div>
+          <div className="col-span-2 p-2 border rounded-xl">
+            <Surface className="p-6 flex gap-8 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+              <div className="flex flex-col gap-3 flex-1">
+                <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
+                  <SolarCodeLineDuotone className="size-5" />
+                </div>
+                <h3 className="font-serif text-lg font-bold">PDA derivation & account fetching</h3>
+                <p className="text-muted text-sm leading-relaxed">Derive PDAs from your seed definitions. Fetch typed account data in one call. No manual encoding or decoding.</p>
+              </div>
+              <div className="flex flex-col gap-3 flex-1 border-l pl-8">
+                <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
+                  <SolarCheckCircleLineDuotone className="size-5" />
+                </div>
+                <h3 className="font-serif text-lg font-bold">Error & event parsing</h3>
+                <p className="text-muted text-sm leading-relaxed">Parse named errors and structured events from transaction logs. Discriminators cached automatically.</p>
+              </div>
+            </Surface>
+          </div>
+          <div className="p-2 border rounded-xl">
+            <Surface className="p-6 flex flex-col gap-3 shadow-md shadow-background-inverse/6 border-[0.5px] border-border/60 rounded-lg">
+              <div className="flex size-10 items-center justify-center rounded-xl border-[0.5px] text-accent">
+                <SolarDatabaseLineDuotone className="size-5" />
+              </div>
+              <h3 className="font-serif text-lg font-bold">Database schemas</h3>
+              <p className="text-muted text-sm leading-relaxed">Generate Drizzle ORM schemas from your account definitions. Supports Postgres, MySQL, and SQLite.</p>
+            </Surface>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-y h-14">
+        <div className="inner border-x" />
+      </div>
+
+      <div className="inner border-x py-24 px-8">
+        <div className="mb-12 flex flex-col items-center gap-6 text-center max-w-xl mx-auto">
+          <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
+            <SolarBoltLineDuotone className="size-5" />
+            Get Started
+          </div>
+          <h2 className="text-5xl">Ship in under five minutes.</h2>
+          <p className="text-xl">Initialize a project, create a program, and deploy on-chain. Your typed client is ready immediately.</p>
+        </div>
+        <div className="p-2 border rounded-xl">
+          <Surface className="rounded-lg border-[0.5px]">
+            <div className="flex items-center gap-2 border-b px-4 py-3">
+              <span className="size-3 rounded-full bg-danger/60" />
+              <span className="size-3 rounded-full bg-warning/60" />
+              <span className="size-3 rounded-full bg-success/60" />
+              <span className="ml-3 text-xs text-muted font-mono">~/my-project</span>
+            </div>
+            <div className="p-6 font-mono text-sm leading-loose">
+              <div className="flex gap-3">
+                <span className="text-muted select-none">$</span>
+                <span>npx @better-sol/cli@alpha init</span>
+              </div>
+              <div className="text-muted pl-4">✓ Created keypair.json</div>
+              <div className="text-muted pl-4">✓ Created programs/</div>
+              <div className="text-muted pl-4 mb-2">✓ Installed better-sol</div>
+
+              <div className="flex gap-3">
+                <span className="text-muted select-none">$</span>
+                <span>npx @better-sol/cli@alpha create counter</span>
+              </div>
+              <div className="text-muted pl-4">✓ Generated programs/counter.ts</div>
+              <div className="text-muted pl-4 mb-2">✓ Generated .better-sol/counter.json</div>
+
+              <div className="flex gap-3">
+                <span className="text-muted select-none">$</span>
+                <span>npx @better-sol/cli@alpha deploy</span>
+              </div>
+              <div className="text-muted pl-4">Parsing counter.ts...</div>
+              <div className="text-muted pl-4">Compiling...</div>
+              <div className="text-muted pl-4">Deploying to devnet...</div>
+              <div className="text-success pl-4 mb-2">✓ Deployed counter at CoUnTeR1111...1111</div>
+            </div>
+          </Surface>
+        </div>
+
+        <div className="mt-8 flex justify-center gap-2">
+          <Link to="/docs/$" params={{ _splat: "your-first-program" }}>
+            <Button>
+              Read the Guide <SolarArrowRightLineDuotone />
+            </Button>
+          </Link>
+          <a href="https://github.com/powxenv/better-sol" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline">
+              View on GitHub
+            </Button>
+          </a>
+        </div>
+      </div>
+
+      <div className="border-y h-14">
+        <div className="inner border-x" />
       </div>
     </>
   );

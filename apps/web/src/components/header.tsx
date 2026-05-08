@@ -43,8 +43,8 @@ const Header = () => {
   }, [isConnected, address]);
 
   return (
-    <header className="fixed top-0 inset-x-0 border-b z-10 bg-background/60 backdrop-blur-3xl">
-      <Link to="/blog/$slug" params={{ slug: "alpha-launch" }} className="bg-surface block hover:bg-accent/40 transition-all">
+    <header className="fixed top-0 inset-x-0 border-b bg-background/70 z-9999999999 backdrop-blur-3xl">
+      <Link to="/blog/$slug" params={{ slug: "alpha-launch" }} className="bg-surface block hover:bg-accent-soft-hover transition-all">
         <div className="inner py-2 px-8 border-x text-surface-foreground text-center flex items-center justify-center gap-1">
           Better Sol Alpha Release, Read the Blog Here <SolarArrowRightLineDuotone />
         </div>
