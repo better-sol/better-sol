@@ -36,7 +36,7 @@ const Header = () => {
   const { initialized } = useAppKitState();
   const { isConnected, address } = useAppKitAccount();
   const saveAccountFn = useServerFn(saveAccount);
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -73,7 +73,7 @@ const Header = () => {
           >
             <GithubIcon />
           </a>
-          <Button isIconOnly variant="ghost" onPress={toggleTheme}>
+          <Button isIconOnly variant="ghost" onPress={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? (
               <SolarSunLineDuotone />
             ) : (
@@ -99,7 +99,7 @@ const Header = () => {
           )}
         </div>
         <div className="flex md:hidden items-center gap-1">
-          <Button isIconOnly variant="ghost" onPress={toggleTheme}>
+          <Button isIconOnly variant="ghost" onPress={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? (
               <SolarSunLineDuotone />
             ) : (
