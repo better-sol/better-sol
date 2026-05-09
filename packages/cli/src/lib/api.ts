@@ -11,6 +11,7 @@ export type CompileResponse = {
   readonly status: "success" | "failed";
   readonly compileTimeMs: number;
   readonly bytecode: string | null;
+  readonly logs: string;
 };
 
 export async function compileProgram(params: {
