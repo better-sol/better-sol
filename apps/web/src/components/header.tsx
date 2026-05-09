@@ -14,8 +14,8 @@ import SolarCloseCircleLineDuotone from "~icons/solar/close-circle-line-duotone"
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { saveAccount } from "#/functions/account.functions";
-import { useTheme } from "#/hooks/use-theme.tsx";
-import SolarArrowRightLineDuotone from '~icons/solar/arrow-right-line-duotone'
+import { useTheme } from "fumadocs-ui/provider/base";
+import SolarArrowRightLineDuotone from "~icons/solar/arrow-right-line-duotone";
 
 function GithubIcon() {
   return (
@@ -36,7 +36,7 @@ const Header = () => {
   const { initialized } = useAppKitState();
   const { isConnected, address } = useAppKitAccount();
   const saveAccountFn = useServerFn(saveAccount);
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -48,13 +48,21 @@ const Header = () => {
 
   return (
     <header className="fixed top-0 inset-x-0 border-b bg-background/70 z-9999999999 backdrop-blur-3xl">
-      <Link to="/blog/$slug" params={{ slug: "alpha-launch" }} className="bg-surface block hover:bg-accent-soft-hover transition-all">
+      <Link
+        to="/blog/$slug"
+        params={{ slug: "alpha-launch" }}
+        className="bg-surface block hover:bg-accent-soft-hover transition-all"
+      >
         <div className="inner py-2 px-6 md:px-8 border-x text-surface-foreground text-center flex items-center justify-center gap-1">
-          <span>Better Sol Alpha, Read More</span> <SolarArrowRightLineDuotone />
+          <span>Better Sol Alpha, Read More</span>{" "}
+          <SolarArrowRightLineDuotone />
         </div>
       </Link>
       <div className="inner border-x px-6 md:px-8 h-14 flex items-center justify-between">
-        <Link to="/" className="text-lg md:text-xl flex items-center gap-1 font-bold tracking-tighter">
+        <Link
+          to="/"
+          className="text-lg md:text-xl flex items-center gap-1 font-bold tracking-tighter"
+        >
           <img className="size-5" src="/icon.svg" alt="Better Sol" />
           Better Sol
         </Link>
@@ -69,12 +77,18 @@ const Header = () => {
             href="https://github.com/powxenv/better-sol"
             target="_blank"
             rel="noopener noreferrer"
-            className={buttonVariants({ variant: "ghost" })}
+            className={buttonVariants({ variant: "ghost", isIconOnly: true })}
           >
             <GithubIcon />
           </a>
-          <Button isIconOnly variant="ghost" onPress={() => setTheme(theme === "dark" ? "light" : "dark")}>
-            {theme === "dark" ? (
+          <Button
+            isIconOnly
+            variant="ghost"
+            onPress={() =>
+              setTheme(resolvedTheme === "dark" ? "light" : "dark")
+            }
+          >
+            {resolvedTheme === "dark" ? (
               <SolarSunLineDuotone />
             ) : (
               <SolarMoonLineDuotone />
@@ -99,8 +113,14 @@ const Header = () => {
           )}
         </div>
         <div className="flex md:hidden items-center gap-1">
-          <Button isIconOnly variant="ghost" onPress={() => setTheme(theme === "dark" ? "light" : "dark")}>
-            {theme === "dark" ? (
+          <Button
+            isIconOnly
+            variant="ghost"
+            onPress={() =>
+              setTheme(resolvedTheme === "dark" ? "light" : "dark")
+            }
+          >
+            {resolvedTheme === "dark" ? (
               <SolarSunLineDuotone />
             ) : (
               <SolarMoonLineDuotone />
@@ -116,25 +136,50 @@ const Header = () => {
               <span>{address?.slice(0, 4)}...</span>
             </Button>
           )}
-          <Button isIconOnly variant="ghost" onPress={() => setMenuOpen((v) => !v)}>
-            {menuOpen ? <SolarCloseCircleLineDuotone /> : <SolarHamburgerMenuLineDuotone />}
+          <Button
+            isIconOnly
+            variant="ghost"
+            onPress={() => setMenuOpen((v) => !v)}
+          >
+            {menuOpen ? (
+              <SolarCloseCircleLineDuotone />
+            ) : (
+              <SolarHamburgerMenuLineDuotone />
+            )}
           </Button>
         </div>
       </div>
       {menuOpen && (
         <div className="inner border-x border-b bg-background md:hidden">
           <div className="flex flex-col gap-1 px-4 py-3">
-            <Link to="/" className={buttonVariants({ variant: "ghost", className: "justify-start" })} onClick={() => setMenuOpen(false)}>
+            <Link
+              to="/"
+              className={buttonVariants({
+                variant: "ghost",
+                className: "justify-start",
+              })}
+              onClick={() => setMenuOpen(false)}
+            >
               Home
             </Link>
-            <Link to="/docs/$" className={buttonVariants({ variant: "ghost", className: "justify-start" })} onClick={() => setMenuOpen(false)}>
+            <Link
+              to="/docs/$"
+              className={buttonVariants({
+                variant: "ghost",
+                className: "justify-start",
+              })}
+              onClick={() => setMenuOpen(false)}
+            >
               Documentation
             </Link>
             <a
               href="https://github.com/powxenv/better-sol"
               target="_blank"
               rel="noopener noreferrer"
-              className={buttonVariants({ variant: "ghost", className: "justify-start" })}
+              className={buttonVariants({
+                variant: "ghost",
+                className: "justify-start",
+              })}
               onClick={() => setMenuOpen(false)}
             >
               <GithubIcon /> GitHub

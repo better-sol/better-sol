@@ -1,5 +1,5 @@
 import Header from "#/components/header.tsx";
-import { ThemeProvider } from "#/hooks/use-theme.tsx";
+import { AppKitThemeSync } from "#/components/appkit-theme-sync.tsx";
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { AppKitProvider } from "@reown/appkit/react";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
@@ -43,9 +43,9 @@ function RouteComponent() {
       }}
       themeMode="light"
     >
-      <ThemeProvider>
-        <Header />
-        <Outlet />
+      <AppKitThemeSync />
+      <Header />
+      <Outlet />
 
         <div className="border-y h-14">
           <div className="inner border-x" />
@@ -111,7 +111,6 @@ function RouteComponent() {
             </div>
           </div>
         </footer>
-      </ThemeProvider>
     </AppKitProvider>
   );
 }
