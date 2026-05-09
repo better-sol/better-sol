@@ -11,3 +11,5 @@ apps/*/data
 
 # Program keypairs (private, never commit)
 .better-sol/
+
+.internal/
