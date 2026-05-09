@@ -4,6 +4,7 @@
     "address-lookup-tables",
     "durable-nonce",
     "compute-budget",
-    "custom-rpc"
+    "custom-rpc",
+    "testing"
   ]
 }

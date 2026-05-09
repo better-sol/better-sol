@@ -1,0 +1,248 @@
+---
+title: Testing
+description: Test your programs locally with LiteSVM. Millisecond execution, no network required.
+---
+
+Testing Solana programs usually means deploying to devnet, waiting for confirmations, and hoping the airdrop faucet works. Better Sol's test framework runs your programs in an in-process Solana VM. Tests execute in milliseconds. No network. No SOL faucets. No flaky RPCs.
+
+## Install
+
+```npm
+npm install -D @better-sol/test
+```
+
+## The idea
+
+`createTestContext()` gives you a fully typed `betterSol()` client backed by [LiteSVM](https://github.com/LiteSVM/litesvm) instead of a remote RPC. Every program method works identically: `initialize()`, `increment()`, `fetch()`, `derive()`. The difference is that execution happens locally, in-process, with no network calls.
+
+## A test file
+
+```ts
+import { describe, expect, test } from "bun:test"
+import { createTestContext } from "@better-sol/test"
+import { counter } from "../programs/counter"
+
+const t = await createTestContext({ programs: { counter } })
+
+describe("counter", () => {
+  test("initializes and increments", async () => {
+    const addr = await t.counter.accounts.Counter.derive({ authority: t.payer })
+
+    await t.counter.initialize({ counter: addr, initialValue: 0n })
+    await t.counter.increment({ counter: addr, amount: 5n })
+
+    const account = await t.counter.accounts.Counter.fetch(addr)
+    expect(account?.count).toBe(5n)
+  })
+
+  test("rejects unauthorized increment", async () => {
+    const stranger = await t.newSigner()
+    const addr = await t.counter.accounts.Counter.derive({ authority: t.payer })
+
+    await expect(
+      t.as(stranger).counter.increment({ counter: addr, amount: 1n }),
+    ).rejects.toThrow()
+  })
+})
+```
+
+Run it:
+
+```bash
+bun test
+```
+
+No `beforeEach` boilerplate. No cleanup. No network. The test context starts fresh with each `createTestContext()` call.
+
+## How it works
+
+`createTestContext()` does four things:
+
+1. Creates a LiteSVM instance: a complete Solana VM running in your process
+2. Loads your compiled `.so` program binary into the VM
+3. Generates a fresh payer keypair and funds it with 100 SOL
+4. Returns a `betterSol()`-compatible client wired to the VM
+
+You get back a `TestContext` that has everything a `BetterSolClient` has, plus test-specific utilities for creating signers, manipulating time, and controlling state.
+
+## Compiled binaries
+
+The test context needs your compiled `.so` program binary to load into the VM. It searches in two places by default:
+
+1. `.better-sol/output/<name>.so`
+2. `generated/<name>/target/deploy/<name>.so`
+
+Run `npx @better-sol/cli@alpha deploy` before running tests. This compiles your program and writes the binary to disk.
+
+If your binary is somewhere else, pass an explicit path:
+
+```ts
+const t = await createTestContext({
+  programs: { counter },
+  binaries: {
+    counter: "./build/counter.so",
+  },
+})
+```
+
+<Callout>
+If you want to test the context machinery without a binary (for example, testing client-side logic that does not send transactions), set `skipBinaries: true`. The context is created but no programs are loaded into the VM.
+</Callout>
+
+## The payer
+
+`t.payer` is the address of a freshly generated keypair funded with 100 SOL. It is your default signer for all instructions. `bs.signer()` accounts are automatically filled with this address, just like in the production client.
+
+## Creating additional signers
+
+`newSigner()` generates a new keypair and funds it:
+
+```ts
+const alice = await t.newSigner()
+const bob = await t.newSigner(50)
+```
+
+The optional argument is the amount of SOL to fund. Defaults to 100.
+
+Each call generates a distinct keypair. Use these to test multi-user interactions: authority transfers, unauthorized access, escrow flows.
+
+## Scoping to a different signer
+
+`as()` returns a new test context scoped to a different signer. Every instruction call on the returned context uses that signer as the payer:
+
+```ts
+const stranger = await t.newSigner()
+const strangerContext = await t.as(stranger)
+
+await strangerContext.counter.increment({ counter: addr, amount: 1n })
+```
+
+The scoped context shares the same VM state. Any changes made by one signer are immediately visible to all others. This is how you test authorization: the original payer initializes, then a stranger tries to increment and should fail.
+
+The scoped context also has all the same test utilities: `newSigner()`, `as()`, `warp()`, `setClock()`, `setBalance()`, `svm`.
+
+## Controlling time
+
+### warp()
+
+Fast-forward the VM clock by a number of seconds:
+
+```ts
+t.warp(3600)
+```
+
+Use this to test time-dependent logic: vesting schedules, expiration deadlines, staking rewards.
+
+### setClock()
+
+Set the VM clock to an exact Unix timestamp:
+
+```ts
+t.setClock(1700000000n)
+```
+
+`setClock()` takes a `bigint` Unix timestamp in seconds. It modifies the `unixTimestamp` field while preserving the slot, epoch, and other clock fields.
+
+## Manipulating state
+
+### setBalance()
+
+Overwrite any account's SOL balance:
+
+```ts
+t.setBalance(someAddress, 500)
+```
+
+The address can be a string or a Kit `Address`. If the account does not exist, the call is a no-op.
+
+### Direct SVM access
+
+`t.svm` exposes the underlying LiteSVM instance. For anything the helper methods do not cover, you can call LiteSVM's API directly:
+
+```ts
+t.svm.airdrop(address, lamports(1_000_000_000n))
+t.svm.setMinimumBalanceForRentExempt(BigInt(165))
+t.svm.warpToSlot(targetSlot)
+```
+
+See the [LiteSVM documentation](https://github.com/LiteSVM/litesvm) for the full API.
+
+## Token helpers
+
+### createMint()
+
+Create a test SPL token mint:
+
+```ts
+const { mint, mintSigner } = await t.createMint(9)
+```
+
+Returns the mint address and the mint authority signer. The mint authority is automatically funded with 1 SOL.
+
+### mintTokens()
+
+Mint SPL tokens to an account:
+
+```ts
+await t.mintTokens({
+  mint,
+  to: tokenAccount,
+  amount: 1_000_000_000n,
+})
+```
+
+### Using the built-in token client
+
+The test context inherits `t.token` and `t.token2022` from the `betterSol()` client. All standard token operations work:
+
+```ts
+const { mint } = await t.token.createMint({ decimals: 9 })
+const ata = await t.token.getATA({ owner: t.payer, mint })
+await t.token.mintTo({ mint, to: ata, amount: 1_000_000_000n })
+```
+
+## Profiling compute usage
+
+`profile()` measures compute unit consumption of a transaction:
+
+```ts
+const { result, computeUnits, logs } = await t.profile(async () => {
+  return await t.counter.increment({ counter: addr, amount: 1n })
+})
+console.log(`Used ${computeUnits} compute units`)
+```
+
+Returns the result of the function alongside compute unit usage and transaction logs.
+
+## Works with Bun
+
+No custom test runner. The test context works with `bun test` out of the box. It also works with Vitest or any test framework that supports async tests.
+
+## Reference
+
+### `createTestContext(config)`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `programs` | `Record<string, ProgramDefinition>` | required | Program definitions to register |
+| `binaries` | `Record<string, string>` | auto-discovered | Explicit `.so` file paths by program name |
+| `skipBinaries` | `boolean` | `false` | Skip loading binaries into the VM |
+| `commitment` | `string` | `"processed"` | RPC commitment level |
+| `computeUnits` | `{ limit: bigint; price: bigint }` | none | Compute budget for all transactions |
+
+Returns a `TestContext` with all `BetterSolClient` methods plus the test utilities described in this guide.
+
+### Test context methods
+
+| Method | Description |
+|---|---|
+| `t.payer` | Funded test payer address |
+| `t.svm` | Underlying LiteSVM instance |
+| `t.newSigner(fundSol?)` | Create a new funded signer. Defaults to 100 SOL. |
+| `t.as(signer)` | Scope context to a different signer |
+| `t.warp(seconds)` | Fast-forward the VM clock |
+| `t.setClock(timestamp)` | Set exact Unix timestamp |
+| `t.setBalance(address, sol)` | Overwrite an account's SOL balance |
+| `t.createMint(decimals)` | Create a test SPL token mint |
+| `t.mintTokens({ mint, to, amount })` | Mint SPL tokens |
+| `t.profile(fn)` | Measure compute units and logs |
