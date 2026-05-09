@@ -81,15 +81,15 @@ async function runBuild(
       throw ApiError.buildFailed(logs.trim());
     }
 
-    const soPath = await findSoFile(tmpDir, name);
-    if (soPath === null) {
+    const soPath = findProgramSoFile(tmpDir, name);
+    if (!existsSync(soPath)) {
       return {
         bytecode: null,
-        logs: `${logs.trim()}\nNo program .so file found in target/`,
+        logs: `${logs.trim()}\nProgram artifact not found at target/deploy/${name}.so`,
       };
     }
 
-    stripSolanaElf(soPath);
+    normalizeSolanaElf(soPath);
 
     const bytes = await Bun.file(soPath).bytes();
     const bytecode = Buffer.from(bytes).toString("base64");
@@ -103,15 +103,18 @@ async function runBuild(
 function buildCargoConfigToml(): string {
   return `[target.sbpf-solana-solana]
 rustflags = ["-C", "link-arg=--build-id=none"]
-
-[target.sbf-solana-solana]
-rustflags = ["-C", "link-arg=--build-id=none"]
 `;
 }
 
-function stripSolanaElf(soPath: string): void {
-  const objcopy = resolveObjcopy();
-  if (objcopy === null) return;
+function findProgramSoFile(tmpDir: string, programName: string): string {
+  return join(tmpDir, "target", "deploy", `${programName}.so`);
+}
+
+function normalizeSolanaElf(soPath: string): void {
+  const objcopy = resolveSolanaObjcopy();
+  if (objcopy === null) {
+    throw ApiError.buildFailed("Solana platform-tools llvm-objcopy was not found in ~/.cache/solana. Run cargo build-sbf once to install platform tools.");
+  }
 
   const removableSections = [
     ".note.gnu.build-id",
@@ -138,90 +141,21 @@ function stripSolanaElf(soPath: string): void {
         timeout: 30_000,
       },
     );
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw ApiError.buildFailed(`Failed to normalize Solana ELF: ${message}`);
   }
 }
 
-function resolveObjcopy(): string | null {
-  const candidates = [
-    "llvm-objcopy",
-    "rust-objcopy",
-    "objcopy",
-    ...solanaCacheObjcopyCandidates(),
-  ];
-
-  for (const candidate of candidates) {
-    if (canRun(candidate)) return candidate;
-  }
-
-  return null;
-}
-
-function solanaCacheObjcopyCandidates(): readonly string[] {
+function resolveSolanaObjcopy(): string | null {
   const cacheDir = join(homedir(), ".cache", "solana");
-  if (!existsSync(cacheDir)) return [];
+  if (!existsSync(cacheDir)) return null;
 
-  const candidates: string[] = [];
-  for (const versionEntry of readdirSync(cacheDir, { withFileTypes: true })) {
-    if (!versionEntry.isDirectory()) continue;
+  const candidates = readdirSync(cacheDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(cacheDir, entry.name, "platform-tools", "llvm", "bin", "llvm-objcopy"))
+    .filter((candidate) => existsSync(candidate))
+    .toSorted();
 
-    const platformToolsDir = join(cacheDir, versionEntry.name, "platform-tools");
-    candidates.push(join(platformToolsDir, "llvm", "bin", "llvm-objcopy"));
-
-    const rustlibDir = join(platformToolsDir, "rust", "lib", "rustlib");
-    if (!existsSync(rustlibDir)) continue;
-
-    for (const rustlibEntry of readdirSync(rustlibDir, { withFileTypes: true })) {
-      if (!rustlibEntry.isDirectory()) continue;
-      const binDir = join(rustlibDir, rustlibEntry.name, "bin");
-      candidates.push(join(binDir, "llvm-objcopy"));
-      candidates.push(join(binDir, "rust-objcopy"));
-    }
-  }
-
-  return candidates;
-}
-
-function canRun(command: string): boolean {
-  try {
-    execFileSync(command, ["--version"], { stdio: "pipe", timeout: 5000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function findSoFile(tmpDir: string, programName: string): Promise<string | null> {
-  const targetDir = join(tmpDir, "target");
-  try {
-    const dir = Bun.file(targetDir);
-    const stat = await dir.stat();
-    if (stat === undefined || !stat.isDirectory()) return null;
-  } catch {
-    return null;
-  }
-
-  const candidates = [
-    join(targetDir, "deploy", `${programName}.so`),
-    join(targetDir, "sbpf-solana-solana", "release", `${programName}.so`),
-    join(targetDir, "sbf-solana-solana", "release", `${programName}.so`),
-  ];
-
-  const candidateExists = await Promise.all(
-    candidates.map(async (candidate) => ({
-      candidate,
-      exists: await Bun.file(candidate).exists(),
-    })),
-  );
-
-  for (const result of candidateExists) {
-    if (result.exists) return result.candidate;
-  }
-
-  const deployGlob = new Bun.Glob("*.so");
-  for await (const match of deployGlob.scan({ cwd: join(targetDir, "deploy"), absolute: true })) {
-    return match;
-  }
-
-  return null;
+  return candidates.at(-1) ?? null;
 }
