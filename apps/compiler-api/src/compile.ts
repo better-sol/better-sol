@@ -92,8 +92,13 @@ async function runBuild(
 }
 
 async function findSoFile(targetDir: string): Promise<string | null> {
-  const dir = Bun.file(targetDir);
-  if (!(await dir.exists())) return null;
+  try {
+    const dir = Bun.file(targetDir);
+    const stat = await dir.stat();
+    if (stat === undefined || !stat.isDirectory()) return null;
+  } catch {
+    return null;
+  }
 
   const glob = new Bun.Glob("**/*.so");
   for await (const match of glob.scan({ cwd: targetDir, absolute: true })) {
