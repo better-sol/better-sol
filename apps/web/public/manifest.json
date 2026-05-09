@@ -1,6 +1,6 @@
 {
   "short_name": "Better Sol",
-  "name": "Better Sol – TypeScript-first Solana DX",
+  "name": "Better Sol — Write Solana programs in TypeScript",
   "icons": [
     {
       "src": "favicon.ico",
@@ -22,7 +22,7 @@
   "display": "standalone",
   "theme_color": "#19FB9B",
   "background_color": "#0a0a0a",
-  "description": "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+  "description": "Write Solana programs in TypeScript. One file defines your program and your typed client. No Rust needed.",
   "categories": ["developer tools", "web3"],
   "url": "https://better-sol.fun"
 }

@@ -34,7 +34,7 @@ function RouteComponent() {
       networks={[solana, solanaTestnet, solanaDevnet]}
       metadata={{
         name: "Better Sol",
-        description: "The fastest way to go from idea to Solana program.",
+        description: "Write Solana programs in TypeScript.",
         url: "https://better-sol.fun",
         icons: ["https://better-sol.fun/icon.svg"],
       }}
@@ -62,7 +62,7 @@ function RouteComponent() {
                   </svg>
                   <span className="font-serif text-xl font-bold">Better Sol</span>
                 </div>
-                <p className="text-muted text-sm leading-relaxed max-w-xs">TypeScript-first Solana development. Write programs, not boilerplate.</p>
+                <p className="text-muted text-sm leading-relaxed max-w-xs">Write Solana programs in TypeScript. No Rust needed.</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted">
                 <span>&copy; {new Date().getFullYear()}</span>

@@ -26,21 +26,21 @@ export const Route = createRootRouteWithContext<{
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Better Sol – TypeScript-first Solana DX",
+        title: "Better Sol — Write Solana programs in TypeScript",
       },
       {
         name: "description",
         content:
-          "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+          "Write Solana programs in TypeScript. One file defines your program and your typed client. No Rust needed.",
       },
       {
         property: "og:title",
-        content: "Better Sol – TypeScript-first Solana DX",
+        content: "Better Sol — Write Solana programs in TypeScript",
       },
       {
         property: "og:description",
         content:
-          "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+          "Write Solana programs in TypeScript. One file defines your program and your typed client. No Rust needed.",
       },
       {
         property: "og:url",
@@ -60,12 +60,12 @@ export const Route = createRootRouteWithContext<{
       },
       {
         name: "twitter:title",
-        content: "Better Sol – TypeScript-first Solana DX",
+        content: "Better Sol — Write Solana programs in TypeScript",
       },
       {
         name: "twitter:description",
         content:
-          "The fastest way to go from idea to Solana program. One TypeScript definition for program logic, account types, client calls, and SDK autocomplete.",
+          "Write Solana programs in TypeScript. One file defines your program and your typed client. No Rust needed.",
       },
       {
         name: "twitter:image",
