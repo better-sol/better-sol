@@ -112,11 +112,31 @@ function stripSolanaElf(soPath: string): void {
   const objcopy = resolveObjcopy();
   if (objcopy === null) return;
 
+  const removableSections = [
+    ".note.gnu.build-id",
+    ".gcc_except_table",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".gnu.hash",
+    ".comment",
+    ".rustc",
+  ];
+
   try {
-    execFileSync(objcopy, ["--remove-section=.note.gnu.build-id", soPath], {
-      stdio: "pipe",
-      timeout: 30_000,
-    });
+    execFileSync(
+      objcopy,
+      [
+        "--strip-debug",
+        ...removableSections.map((section) => `--remove-section=${section}`),
+        soPath,
+      ],
+      {
+        stdio: "pipe",
+        timeout: 30_000,
+      },
+    );
   } catch {
   }
 }
