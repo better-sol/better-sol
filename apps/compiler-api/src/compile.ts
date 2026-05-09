@@ -27,11 +27,11 @@ export async function compile(input: unknown): Promise<CompileOutput> {
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) throw ApiError.invalid(parsed.error.message);
 
-  const { libRs, cargoToml } = parsed.data;
+  const { name, libRs, cargoToml } = parsed.data;
   const started = performance.now();
 
   const { bytecode, logs } = env.ENABLE_BUILD
-    ? await runBuild(libRs, cargoToml)
+    ? await runBuild(name, libRs, cargoToml)
     : {
         bytecode: null,
         logs:
@@ -48,6 +48,7 @@ export async function compile(input: unknown): Promise<CompileOutput> {
 }
 
 async function runBuild(
+  name: string,
   libRs: string,
   cargoToml: string,
 ): Promise<{ bytecode: string | null; logs: string }> {
@@ -80,11 +81,11 @@ async function runBuild(
       throw ApiError.buildFailed(logs.trim());
     }
 
-    const soPath = await findSoFile(`${tmpDir}/target`);
+    const soPath = await findSoFile(tmpDir, name);
     if (soPath === null) {
       return {
         bytecode: null,
-        logs: `${logs.trim()}\nNo .so file found in target/`,
+        logs: `${logs.trim()}\nNo program .so file found in target/`,
       };
     }
 
@@ -190,7 +191,8 @@ function canRun(command: string): boolean {
   }
 }
 
-async function findSoFile(targetDir: string): Promise<string | null> {
+async function findSoFile(tmpDir: string, programName: string): Promise<string | null> {
+  const targetDir = join(tmpDir, "target");
   try {
     const dir = Bun.file(targetDir);
     const stat = await dir.stat();
@@ -199,8 +201,25 @@ async function findSoFile(targetDir: string): Promise<string | null> {
     return null;
   }
 
-  const glob = new Bun.Glob("**/*.so");
-  for await (const match of glob.scan({ cwd: targetDir, absolute: true })) {
+  const candidates = [
+    join(targetDir, "deploy", `${programName}.so`),
+    join(targetDir, "sbpf-solana-solana", "release", `${programName}.so`),
+    join(targetDir, "sbf-solana-solana", "release", `${programName}.so`),
+  ];
+
+  const candidateExists = await Promise.all(
+    candidates.map(async (candidate) => ({
+      candidate,
+      exists: await Bun.file(candidate).exists(),
+    })),
+  );
+
+  for (const result of candidateExists) {
+    if (result.exists) return result.candidate;
+  }
+
+  const deployGlob = new Bun.Glob("*.so");
+  for await (const match of deployGlob.scan({ cwd: join(targetDir, "deploy"), absolute: true })) {
     return match;
   }
 
