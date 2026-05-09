@@ -18,7 +18,7 @@ const cli = new Command();
 
 cli
   .name("better-sol")
-  .description("TypeScript-first Solana program tooling — run with npx @better-sol/cli")
+  .description("TypeScript-first Solana program tooling — run with npx @better-sol/cli@alpha")
   .version(process.env.BETTER_SOL_CLI_VERSION ?? "0.1.0");
 
 cli
@@ -39,7 +39,8 @@ cli
 cli
   .command("login")
   .description("Save your compiler API key")
-  .action(() => run(() => login()));
+  .argument("[apiKey]", "compiler API key")
+  .action((apiKey: string | undefined) => run(() => login(apiKey)));
 
 cli
   .command("deploy")

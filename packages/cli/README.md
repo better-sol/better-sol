@@ -99,10 +99,10 @@ npx @better-sol/cli@alpha generate db
 Save your compiler API key.
 
 ```bash
-npx @better-sol/cli@alpha login
+npx @better-sol/cli@alpha login <api-key>
 ```
 
-Saves your key to `.better-sol/auth.json`. Without a key you get 5 compiles per hour. With a key, 100 per hour.
+Get an API key at https://better-sol.fun/dash. Saves your key to `.better-sol/auth.json`. Without a key you get 3 compiles per hour. With a key, 50 per hour.
 
 ### `verify`
 

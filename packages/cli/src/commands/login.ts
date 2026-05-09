@@ -1,11 +1,11 @@
 import { intro, log, outro, text, isCancel, cancel } from "@clack/prompts";
 import { storeApiKey } from "#lib/auth";
-import { CLI_COMMAND } from "./shared";
+import { API_KEYS_URL, CLI_COMMAND } from "./shared";
 
-export async function login(): Promise<void> {
+export async function login(apiKeyArg: string | undefined): Promise<void> {
   intro("better-sol login");
 
-  const apiKey = await text({
+  const apiKey = apiKeyArg ?? await text({
     message: "Enter your API key",
     placeholder: "bs_live_...",
     validate: (value: string | undefined) => {
@@ -18,5 +18,5 @@ export async function login(): Promise<void> {
   await storeApiKey(String(apiKey));
 
   log.step("Saved to ~/.better-sol/auth.json");
-  outro(`API key configured.\n  Next: ${CLI_COMMAND} deploy`);
+  outro(`API key configured.\n  Get API keys: ${API_KEYS_URL}\n  Next: ${CLI_COMMAND} deploy`);
 }

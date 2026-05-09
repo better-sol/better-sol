@@ -48,13 +48,11 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
   const programs = await discoverProgramsWithSpinner(src);
 
-  const s = spinner();
   const matched =
     options.program !== undefined
       ? programs.filter((p) => p.name === options.program)
       : programs;
   if (options.program !== undefined && matched.length === 0) {
-    s.stop("Program not found");
     const available = programs.map((p) => `  ${p.name}`).join("\n");
     throw new Error(
       `No program named '${options.program}' found in ${src}.\nAvailable programs:\n${available}`,
@@ -62,9 +60,11 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   const projects = matched.map((program) => generateAnchorProject(program));
+  await Promise.all(projects.map((project) => removeGeneratedSoFile(outDir, project.program.name)));
 
   if (writesRust) {
-    s.message(`Writing generated Anchor projects`);
+    const writeSpinner = spinner();
+    writeSpinner.start("Writing generated Anchor projects");
     await ensureDirectory(outDir);
     await Promise.all(
       projects.map(async (project) => {
@@ -74,10 +74,10 @@ export async function deploy(options: DeployOptions): Promise<void> {
         writeFileSync(join(dir, "src", "lib.rs"), project.libRs);
       }),
     );
+    writeSpinner.stop("Generated Anchor projects written");
   }
 
   if (options.dryRun) {
-    s.stop("Dry run complete");
     for (const project of projects)
       printProgramSummary(project.program, cluster, outDir, true);
     outro(`Dry run complete — Rust written to ${out}/. No compilation or deployment performed.`);
@@ -85,7 +85,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   const compileSpinner = spinner();
-  compileSpinner.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
+  compileSpinner.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"} with Better Sol compiler`);
   let compileResults: readonly CompileResponse[];
   try {
     compileResults = await Promise.all(
@@ -155,6 +155,10 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   outro("Deploy complete.");
+}
+
+async function removeGeneratedSoFile(outDir: string, programName: string): Promise<void> {
+  await rm(join(outDir, programName, "target", "deploy", `${programName}.so`), { force: true });
 }
 
 async function deployCompiledProgram(params: {

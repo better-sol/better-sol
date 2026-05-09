@@ -25,7 +25,7 @@ export async function create(nameArg: string | undefined, options: CreateOptions
   const keypair = await createKeypair(keypairPath, options.force);
   s.message("Writing program template");
   await ensureDirectory(cwdJoin(directory));
-  await writeFile(programPath, template(programName, keypair.publicKey));
+  await writeFile(programPath, template(programName, keypair.publicKey, directory));
   s.stop("Program created");
 
   outro(`Created ${directory}/${programName}.ts\n  Program:  ${keypair.publicKey}\n  Keypair:  ${BETTER_SOL_DIR}/${programName}.json`);
@@ -37,8 +37,13 @@ function validateName(value: string | undefined): string | undefined {
   return undefined;
 }
 
-function template(name: string, address: string): string {
-  return `import { bs, cpi } from "better-sol/program";
+function template(name: string, address: string, directory: string): string {
+  const normalizedDirectory = directory.replace(/\/+$/, "");
+  const importPath = normalizedDirectory.startsWith(".")
+    ? `${normalizedDirectory}/${name}`
+    : `./${normalizedDirectory}/${name}`;
+
+  return `import { bs } from "better-sol/program";
 
 const Counter = bs.account({
   count: bs.u64(),
@@ -85,9 +90,14 @@ export const ${name} = bs.program(
   })
 );
 
-// Usage:
+// Example client usage from another file:
 //   import { betterSol, keypairFile } from "better-sol";
+//   import { ${name} } from "${importPath}";
+//
 //   const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs: { ${name} } });
-//   await sol.${name}.initialize({ counter: addr, authority: sol.payer, initialValue: 0n });
+//   const counterAddress = await sol.${name}.accounts.Counter.derive({ authority: sol.payer });
+//
+//   await sol.${name}.initialize({ counter: counterAddress, initialValue: 0n });
+//   await sol.${name}.increment({ counter: counterAddress, amount: 1n });
 `;
 }

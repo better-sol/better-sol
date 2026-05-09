@@ -1,6 +1,8 @@
 import type { IrProgram } from "#ir";
 
 const DEFAULT_API_URL = "https://better-sol.fun";
+const CLI_COMMAND = "npx @better-sol/cli@alpha";
+const API_KEYS_URL = "https://better-sol.fun/dash";
 
 type CompileErrorResponse = {
   readonly error: string;
@@ -48,8 +50,11 @@ export async function compileProgram(params: {
 
   if (!response.ok) {
     const error = await readJson<CompileErrorResponse>(response);
-    if (response.status === 429 && error.retryAfterSeconds !== undefined) {
-      throw new Error(`Rate limit exceeded. Try again in ${formatDuration(error.retryAfterSeconds)}.`);
+    if (response.status === 429) {
+      throw new Error(formatRateLimitError(error, params.apiKey !== undefined));
+    }
+    if (response.status === 401) {
+      throw new Error(`${error.error}. Get an API key at ${API_KEYS_URL}, then run \`${CLI_COMMAND} login <api-key>\`.`);
     }
     throw new Error(`Compile failed (${response.status}): ${error.error}`);
   }
@@ -59,6 +64,16 @@ export async function compileProgram(params: {
 
 async function readJson<T>(response: Response): Promise<T> {
   return await response.json() as T;
+}
+
+function formatRateLimitError(error: CompileErrorResponse, hasApiKey: boolean): string {
+  const retry = error.retryAfterSeconds !== undefined
+    ? ` Try again in ${formatDuration(error.retryAfterSeconds)}.`
+    : " Try again later.";
+  const account = hasApiKey
+    ? " Your API key has reached its current compile limit."
+    : ` You are using the anonymous compile limit. Get an API key at ${API_KEYS_URL}, then run \`${CLI_COMMAND} login <api-key>\` for a higher limit.`;
+  return `Rate limit exceeded.${retry}${account}`;
 }
 
 function formatDuration(totalSeconds: number): string {

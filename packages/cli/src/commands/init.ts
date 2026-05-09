@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { createKeypair } from "#lib/keypair";
 import { cwdJoin, fileExists } from "#lib/fs";
 import type { InitOptions } from "#lib/types";
+import { CLI_COMMAND } from "./shared";
 
 const PAYER_KEYPAIR_PATH = "keypair.json";
 const GITIGNORE_ENTRIES = [".better-sol/", "generated/**/*.so", "keypair.json", "node_modules/"];
@@ -42,7 +43,7 @@ export async function init(options: InitOptions): Promise<void> {
     await installDependencies();
   }
 
-  outro("Project ready.\n  Next: npx @better-sol/cli create <program-name>\n  Then: npx @better-sol/cli deploy");
+  outro(`Project ready.\n  Next: ${CLI_COMMAND} create <program-name>\n  Then: ${CLI_COMMAND} deploy`);
 }
 
 async function resolvePayerPath(): Promise<string> {

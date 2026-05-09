@@ -2,7 +2,8 @@ import { spinner } from "@clack/prompts";
 import type { IrProgram } from "#ir";
 import { discoverPrograms } from "#parser/discover";
 
-export const CLI_COMMAND = "npx @better-sol/cli";
+export const CLI_COMMAND = "npx @better-sol/cli@alpha";
+export const API_KEYS_URL = "https://better-sol.fun/dash";
 
 export async function discoverProgramsWithSpinner(
   src: string,
