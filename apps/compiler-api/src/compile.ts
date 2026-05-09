@@ -74,11 +74,11 @@ async function runBuild(
       throw ApiError.buildFailed(logs.trim());
     }
 
-    const soPath = await findSoFile(`${tmpDir}/target/deploy`);
+    const soPath = await findSoFile(`${tmpDir}/target`);
     if (soPath === null) {
       return {
         bytecode: null,
-        logs: `${logs.trim()}\nNo .so file found in target/deploy`,
+        logs: `${logs.trim()}\nNo .so file found in target/`,
       };
     }
 
@@ -91,12 +91,12 @@ async function runBuild(
   }
 }
 
-async function findSoFile(deployDir: string): Promise<string | null> {
-  const dir = Bun.file(deployDir);
+async function findSoFile(targetDir: string): Promise<string | null> {
+  const dir = Bun.file(targetDir);
   if (!(await dir.exists())) return null;
 
-  const glob = new Bun.Glob("*.so");
-  for await (const match of glob.scan({ cwd: deployDir, absolute: true })) {
+  const glob = new Bun.Glob("**/*.so");
+  for await (const match of glob.scan({ cwd: targetDir, absolute: true })) {
     return match;
   }
 
