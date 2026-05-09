@@ -274,3 +274,105 @@ describe("new SDK features", () => {
     expect(prog.events.Transfer).toBeDefined();
   });
 });
+
+describe("client factory — direct RPC", () => {
+  const mockRpc = {
+    getLatestBlockhash: () => ({ send: () => Promise.resolve({ value: { blockhash: "GHtXQBPsZMhGNUjDBaEuQ7oPrest2F2H_LA8iGYMPLgS", lastValidBlockHeight: 100n } }) }),
+    getAccountInfo: () => ({ send: () => Promise.resolve({ value: null }) }),
+    getMultipleAccounts: () => ({ send: () => Promise.resolve({ value: [] }) }),
+    sendTransaction: () => ({ send: () => Promise.resolve("fake") }),
+    getBalance: () => ({ send: () => Promise.resolve({ value: 0n }) }),
+    getLatestBlockhashAndContext: () => ({ send: () => Promise.resolve({ value: { blockhash: "GHtXQBPsZMhGNUjDBaEuQ7oPrest2F2H_LA8iGYMPLgS", lastValidBlockHeight: 100n } }) }),
+    getBlock: () => ({ send: () => Promise.resolve(null) }),
+    getBlockHeight: () => ({ send: () => Promise.resolve(0n) }),
+    getBlockProduction: () => ({ send: () => Promise.resolve({ value: {} }) }),
+    getBlocks: () => ({ send: () => Promise.resolve([]) }),
+    getBlocksWithLimit: () => ({ send: () => Promise.resolve([]) }),
+    getBlockCommitment: () => ({ send: () => Promise.resolve({}) }),
+    getBlockTime: () => ({ send: () => Promise.resolve(null) }),
+    getClusterNodes: () => ({ send: () => Promise.resolve([]) }),
+    getEpochInfo: () => ({ send: () => Promise.resolve({}) }),
+    getEpochSchedule: () => ({ send: () => Promise.resolve({}) }),
+    getFirstAvailableBlock: () => ({ send: () => Promise.resolve(0n) }),
+    getGenesisHash: () => ({ send: () => Promise.resolve("") }),
+    getHealth: () => ({ send: () => Promise.resolve("ok") }),
+    getHighestSnapshotSlot: () => ({ send: () => Promise.resolve(null) }),
+    getIdentity: () => ({ send: () => Promise.resolve({}) }),
+    getInflationGovernor: () => ({ send: () => Promise.resolve({}) }),
+    getInflationRate: () => ({ send: () => Promise.resolve({}) }),
+    getLargestAccounts: () => ({ send: () => Promise.resolve({ value: [] }) }),
+    getMaxRetransmitSlot: () => ({ send: () => Promise.resolve(null) }),
+    getMaxShredInsertSlot: () => ({ send: () => Promise.resolve(null) }),
+    getMinimumBalanceForRentExemption: () => ({ send: () => Promise.resolve(0n) }),
+    getProgramAccounts: () => ({ send: () => Promise.resolve([]) }),
+    getRecentPerformanceSamples: () => ({ send: () => Promise.resolve([]) }),
+    getSignaturesForAddress: () => ({ send: () => Promise.resolve([]) }),
+    getSignatureStatuses: () => ({ send: () => Promise.resolve({ value: [] }) }),
+    getSlot: () => ({ send: () => Promise.resolve(0n) }),
+    getSlotLeader: () => ({ send: () => Promise.resolve("") }),
+    getSlotLeaders: () => ({ send: () => Promise.resolve([]) }),
+    getStakeActivation: () => ({ send: () => Promise.resolve({}) }),
+    getStakeMinimumDelegation: () => ({ send: () => Promise.resolve(0n) }),
+    getSupply: () => ({ send: () => Promise.resolve({ value: {} }) }),
+    getTokenAccountBalance: () => ({ send: () => Promise.resolve({ value: {} }) }),
+    getTokenAccountsByDelegate: () => ({ send: () => Promise.resolve({ value: [] }) }),
+    getTokenAccountsByOwner: () => ({ send: () => Promise.resolve({ value: [] }) }),
+    getTokenLargestAccounts: () => ({ send: () => Promise.resolve({ value: [] }) }),
+    getTokenSupply: () => ({ send: () => Promise.resolve({ value: {} }) }),
+    getTransaction: () => ({ send: () => Promise.resolve(null) }),
+    getTransactionCount: () => ({ send: () => Promise.resolve(0n) }),
+    getVersion: () => ({ send: () => Promise.resolve({}) }),
+    getVoteAccounts: () => ({ send: () => Promise.resolve({}) }),
+    isBlockhashValid: () => ({ send: () => Promise.resolve({ value: false }) }),
+    minimumLedgerSlot: () => ({ send: () => Promise.resolve(0n) }),
+    requestAirdrop: () => ({ send: () => Promise.resolve("") }),
+    simulateTransaction: () => ({ send: () => Promise.resolve({ value: { err: null, logs: [], unitsConsumed: 0 } }) }),
+  } as never;
+
+  test("accepts direct rpc in config", async () => {
+    const client = await betterSol({ rpc: mockRpc, payer: signer, programs: {} });
+    expect(client.rpc).toBe(mockRpc);
+  });
+
+  test("accepts direct rpc without rpcSubscriptions", async () => {
+    const client = await betterSol({ rpc: mockRpc, payer: signer, programs: {} });
+    expect(client.rpcSubscriptions).toBeUndefined();
+  });
+
+  test("rpcSubscriptions is undefined when only rpc is provided", async () => {
+    const client = await betterSol({ rpc: mockRpc, payer: signer, programs: {} });
+    expect(client.rpcSubscriptions).toBeUndefined();
+  });
+
+  test("cluster-based client still has rpcSubscriptions", async () => {
+    const client = await betterSol({ cluster: "devnet" });
+    expect(client.rpcSubscriptions).toBeDefined();
+  });
+});
+
+describe("withSigner", () => {
+  test("returns client scoped to new signer", async () => {
+    const secondSigner = {
+      address: address("Bi43bsYfqreLYcuHuBm7rmFinztHDDk4gDpTRNdtgqTm"),
+      signTransactions: async <T extends readonly unknown[]>(txs: T): Promise<T> => txs,
+    };
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: {} });
+    const scoped = await client.withSigner(secondSigner);
+    expect(scoped.payer).toBe(secondSigner.address);
+  });
+
+  test("scoped client preserves program namespace", async () => {
+    const prog = bs.program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      (ix) => ({ ping: ix({ run: () => {} }) }),
+    );
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { prog } });
+    const secondSigner = {
+      address: address("Bi43bsYfqreLYcuHuBm7rmFinztHDDk4gDpTRNdtgqTm"),
+      signTransactions: async <T extends readonly unknown[]>(txs: T): Promise<T> => txs,
+    };
+    const scoped = await client.withSigner(secondSigner);
+    expect(scoped.prog).toBeDefined();
+    expect(typeof scoped.prog.ping).toBe("function");
+  });
+});

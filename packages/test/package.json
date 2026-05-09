@@ -1,0 +1,57 @@
+{
+  "name": "@better-sol/test",
+  "version": "0.1.0-alpha.1",
+  "description": "Blazing-fast local testing for Better Sol programs, powered by LiteSVM.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix ."
+  },
+  "keywords": [
+    "solana",
+    "solana-test",
+    "litesvm",
+    "testing",
+    "better-sol"
+  ],
+  "author": "powxenv",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/powxenv/better-sol.git",
+    "directory": "packages/test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/powxenv/better-sol/tree/main/packages/test",
+  "dependencies": {
+    "@solana/kit": "^6.8.0",
+    "@solana/kit-plugin-litesvm": "^0.10.0",
+    "better-sol": "workspace:*",
+    "litesvm": "^1.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  }
+}

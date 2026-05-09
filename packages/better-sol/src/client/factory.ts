@@ -58,7 +58,7 @@ export { secretKey, keypairFile } from "./signer.ts";
 interface ClientCore<TPrograms extends ProgramInputs, THasSigner extends boolean> {
   readonly payer: THasSigner extends true ? KitAddress : KitAddress | null;
   readonly rpc: KitRpc;
-  readonly rpcSubscriptions: KitRpcSubscriptions;
+  readonly rpcSubscriptions: KitRpcSubscriptions | undefined;
   readonly token: TokenClient;
   readonly token2022: TokenClient;
   withSigner(signer: SignerInput): Promise<BetterSolClient<TPrograms, true>>;
@@ -86,13 +86,17 @@ export async function betterSol<const TPrograms extends ProgramInputs = Record<s
   config: BetterSolConfig<TPrograms>,
 ): Promise<BetterSolClient<TPrograms, boolean>> {
   const cluster = config.cluster ?? "devnet";
-  const rpcUrl = config.rpcUrl ?? CLUSTER_URLS[cluster];
-  const rpcSubscriptionsUrl = config.rpcSubscriptionsUrl ?? (config.rpcUrl === undefined ? CLUSTER_WS_URLS[cluster] : undefined);
-  if (rpcSubscriptionsUrl === undefined) throw new Error("Custom RPC URL requires explicit rpcSubscriptionsUrl in betterSol config.");
+  const rpc = config.rpc ?? createSolanaRpc(config.rpcUrl ?? CLUSTER_URLS[cluster]);
+  const rpcSubscriptions = config.rpcSubscriptions ?? (
+    config.rpcSubscriptionsUrl !== undefined
+      ? createSolanaRpcSubscriptions(config.rpcSubscriptionsUrl)
+      : config.rpcUrl === undefined && config.rpc === undefined
+        ? createSolanaRpcSubscriptions(CLUSTER_WS_URLS[cluster])
+        : undefined
+  );
+  if (rpcSubscriptions === undefined && config.rpc === undefined) throw new Error("Custom RPC URL requires explicit rpcSubscriptionsUrl in betterSol config.");
   const commitment = config.commitment ?? "confirmed";
   const computeUnits = config.computeUnits;
-  const rpc = createSolanaRpc(rpcUrl);
-  const rpcSubscriptions = createSolanaRpcSubscriptions(rpcSubscriptionsUrl);
   const signer = config.payer === undefined ? undefined : await resolveSigner(config.payer);
   const programs = config.programs ?? {} as TPrograms;
 
@@ -116,7 +120,7 @@ function toSnake(name: string): string {
 interface ClientParams<TPrograms extends ProgramInputs> {
   readonly programs: TPrograms;
   readonly rpc: KitRpc;
-  readonly rpcSubscriptions: KitRpcSubscriptions;
+  readonly rpcSubscriptions: KitRpcSubscriptions | undefined;
   readonly signer: TransactionSigner | undefined;
   readonly commitment: "processed" | "confirmed" | "finalized";
   readonly computeUnits?: ComputeUnitConfig;

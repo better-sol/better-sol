@@ -76,6 +76,8 @@ export type BetterSolConfig<TPrograms extends ProgramInputs = Record<string, nev
   readonly cluster?: Cluster;
   readonly rpcUrl?: string;
   readonly rpcSubscriptionsUrl?: string;
+  readonly rpc?: KitRpc;
+  readonly rpcSubscriptions?: KitRpcSubscriptions;
   readonly payer?: SignerInput;
   readonly programs?: TPrograms;
   readonly commitment?: "processed" | "confirmed" | "finalized";
@@ -237,7 +239,7 @@ export type EventCallback<TEvent extends Record<string, unknown> = Record<string
 export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, never>, THasSigner extends boolean = boolean> = {
   readonly payer: THasSigner extends true ? KitAddress : KitAddress | null;
   readonly rpc: KitRpc;
-  readonly rpcSubscriptions: KitRpcSubscriptions;
+  readonly rpcSubscriptions: KitRpcSubscriptions | undefined;
   readonly token: TokenClient;
   readonly token2022: TokenClient;
   withSigner(signer: SignerInput): Promise<BetterSolClient<TPrograms, true>>;
