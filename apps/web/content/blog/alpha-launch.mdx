@@ -129,7 +129,7 @@ APIs may change. We are still learning what works and what does not, and we will
 
 The `run()` body language is intentionally conservative. It covers the most common on-chain patterns: arithmetic, conditionals, bounded loops, validation, events, and CPI calls. If you write something outside that subset, you get a specific error with a suggestion for what to use instead. We will expand it over time based on what people actually need.
 
-Compilation happens in the cloud. Without an API key you get 3 compiles per hour. With a free key from the dashboard, you get 50. The generated Rust follows Anchor conventions, so you can inspect it, modify it, or use it for verified builds.
+Compilation happens in the cloud. Because Better Sol is still experimental, compiler usage is rate limited: without an API key you get 20 compiles per hour, and with a free key from the dashboard you get 100. The generated Rust follows Anchor conventions, so you can inspect it, modify it, or use it for verified builds.
 
 The test suite covers over 170 tests across the SDK and CLI.
 

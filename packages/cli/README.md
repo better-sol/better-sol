@@ -102,7 +102,7 @@ Save your compiler API key.
 npx @better-sol/cli@alpha login <api-key>
 ```
 
-Get an API key at https://better-sol.fun/dash. Saves your key to `.better-sol/auth.json`. Without a key you get 3 compiles per hour. With a key, 50 per hour.
+Get an API key at https://better-sol.fun/dash. Saves your key to `.better-sol/auth.json`. Because Better Sol is still experimental, compiler usage is rate limited: without a key you get 20 compiles per hour, and with a key you get 100 per hour.
 
 ### `verify`
 

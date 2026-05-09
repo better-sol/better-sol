@@ -71,8 +71,8 @@ function formatRateLimitError(error: CompileErrorResponse, hasApiKey: boolean): 
     ? ` Try again in ${formatDuration(error.retryAfterSeconds)}.`
     : " Try again later.";
   const account = hasApiKey
-    ? " Your API key has reached its current compile limit."
-    : ` You are using the anonymous compile limit. Get an API key at ${API_KEYS_URL}, then run \`${CLI_COMMAND} login <api-key>\` for a higher limit.`;
+    ? " Your API key has reached the experimental compiler limit of 100 compiles per hour."
+    : ` You are using the anonymous experimental compiler limit of 20 compiles per hour. Get an API key at ${API_KEYS_URL}, then run \`${CLI_COMMAND} login <api-key>\` for 100 compiles per hour.`;
   return `Rate limit exceeded.${retry}${account}`;
 }
 

@@ -268,8 +268,9 @@ function Dashboard() {
             </div>
 
             <p className="text-muted">
-              API keys authenticate your CLI deploys. Use them to get higher
-              rate limits (50 compiles per hour instead of 3).
+              API keys authenticate your CLI deploys. Because Better Sol is
+              still experimental, compiler usage is rate limited. Use an API
+              key to get 100 compiles per hour instead of 20.
             </p>
 
             <Table>

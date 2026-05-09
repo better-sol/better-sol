@@ -25,8 +25,8 @@ const COMPILER_URL =
 
 const COMPILER_API_KEY = process.env.COMPILER_API_KEY;
 
-const ANONYMOUS_LIMIT_PER_HOUR = 3;
-const AUTHENTICATED_LIMIT_PER_HOUR = 50;
+const ANONYMOUS_LIMIT_PER_HOUR = 20;
+const AUTHENTICATED_LIMIT_PER_HOUR = 100;
 
 type CompilerResponse = {
   readonly status: "success" | "failed";

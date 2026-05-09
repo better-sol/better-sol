@@ -62,12 +62,12 @@ The CLI runs via `npx`. No install needed. Add `@alpha` to get the latest prerel
 
 ## API key (optional)
 
-Deploying compiles your program. Without an API key you get 3 compiles per hour. With one, 50 per hour.
+Deploying compiles your program in the Better Sol cloud compiler. Because Better Sol is still experimental, compiler usage is rate limited: without an API key you get 20 compiles per hour, and with one you get 100 per hour.
 
 Get a key from the [dashboard](/dash), then save it:
 
 ```bash
-npx @better-sol/cli@alpha login
+npx @better-sol/cli@alpha login <api-key>
 ```
 
 It gets stored at `.better-sol/auth.json`.
