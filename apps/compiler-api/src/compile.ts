@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { z } from "zod";
 import { env } from "./env";
 import { ApiError } from "./errors";
@@ -51,8 +55,10 @@ async function runBuild(
 
   try {
     await mkdir(`${tmpDir}/src`, { recursive: true });
+    await mkdir(`${tmpDir}/.cargo`, { recursive: true });
     await Bun.write(`${tmpDir}/Cargo.toml`, cargoToml);
     await Bun.write(`${tmpDir}/src/lib.rs`, libRs);
+    await Bun.write(`${tmpDir}/.cargo/config.toml`, buildCargoConfigToml());
 
     const proc = Bun.spawn(
       ["cargo", "build-sbf", "--manifest-path", `${tmpDir}/Cargo.toml`],
@@ -82,12 +88,85 @@ async function runBuild(
       };
     }
 
+    stripSolanaElf(soPath);
+
     const bytes = await Bun.file(soPath).bytes();
     const bytecode = Buffer.from(bytes).toString("base64");
 
     return { bytecode, logs: logs.trim() };
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function buildCargoConfigToml(): string {
+  return `[target.sbpf-solana-solana]
+rustflags = ["-C", "link-arg=--build-id=none"]
+
+[target.sbf-solana-solana]
+rustflags = ["-C", "link-arg=--build-id=none"]
+`;
+}
+
+function stripSolanaElf(soPath: string): void {
+  const objcopy = resolveObjcopy();
+  if (objcopy === null) return;
+
+  try {
+    execFileSync(objcopy, ["--remove-section=.note.gnu.build-id", soPath], {
+      stdio: "pipe",
+      timeout: 30_000,
+    });
+  } catch {
+  }
+}
+
+function resolveObjcopy(): string | null {
+  const candidates = [
+    "llvm-objcopy",
+    "rust-objcopy",
+    "objcopy",
+    ...solanaCacheObjcopyCandidates(),
+  ];
+
+  for (const candidate of candidates) {
+    if (canRun(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function solanaCacheObjcopyCandidates(): readonly string[] {
+  const cacheDir = join(homedir(), ".cache", "solana");
+  if (!existsSync(cacheDir)) return [];
+
+  const candidates: string[] = [];
+  for (const versionEntry of readdirSync(cacheDir, { withFileTypes: true })) {
+    if (!versionEntry.isDirectory()) continue;
+
+    const platformToolsDir = join(cacheDir, versionEntry.name, "platform-tools");
+    candidates.push(join(platformToolsDir, "llvm", "bin", "llvm-objcopy"));
+
+    const rustlibDir = join(platformToolsDir, "rust", "lib", "rustlib");
+    if (!existsSync(rustlibDir)) continue;
+
+    for (const rustlibEntry of readdirSync(rustlibDir, { withFileTypes: true })) {
+      if (!rustlibEntry.isDirectory()) continue;
+      const binDir = join(rustlibDir, rustlibEntry.name, "bin");
+      candidates.push(join(binDir, "llvm-objcopy"));
+      candidates.push(join(binDir, "rust-objcopy"));
+    }
+  }
+
+  return candidates;
+}
+
+function canRun(command: string): boolean {
+  try {
+    execFileSync(command, ["--version"], { stdio: "pipe", timeout: 5000 });
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -7,6 +7,20 @@ function requireApiKey(req: Request): void {
   if (key !== env.COMPILER_API_KEY) throw ApiError.unauthorized();
 }
 
+async function handleCompileRequest(req: Request): Promise<Response> {
+  requireApiKey(req);
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    throw ApiError.invalid("request body must be valid JSON");
+  }
+
+  const result: CompileOutput = await compile(body);
+  return Response.json(result);
+}
+
 const server = Bun.serve({
   port: env.PORT,
   maxRequestBodySize: env.MAX_BODY_BYTES,
@@ -16,19 +30,7 @@ const server = Bun.serve({
     "/health": () => Response.json({ status: "ok" }),
 
     "/compile": {
-      POST: async (req): Promise<Response> => {
-        requireApiKey(req);
-
-        let body: unknown;
-        try {
-          body = await req.json();
-        } catch {
-          throw ApiError.invalid("request body must be valid JSON");
-        }
-
-        const result: CompileOutput = await compile(body);
-        return Response.json(result);
-      },
+      POST: handleCompileRequest,
     },
   },
 
