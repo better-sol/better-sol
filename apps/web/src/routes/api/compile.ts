@@ -36,10 +36,14 @@ type CompilerResponse = {
   readonly logs: string;
 };
 
+type RateLimitResult =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly retryAfterSeconds: number; readonly resetAt: string };
+
 async function checkAndIncrementRateLimit(
   identifier: string,
   limit: number,
-): Promise<boolean> {
+): Promise<RateLimitResult> {
   const [row] = await db
     .select({
       count: rateLimitsTable.count,
@@ -50,7 +54,7 @@ async function checkAndIncrementRateLimit(
 
   if (row === undefined) {
     await db.insert(rateLimitsTable).values({ identifier });
-    return true;
+    return { allowed: true };
   }
 
   const oneHourAgo = new Date(Date.now() - 3_600_000);
@@ -60,11 +64,16 @@ async function checkAndIncrementRateLimit(
       .update(rateLimitsTable)
       .set({ count: 1, windowStart: sql`now()` })
       .where(eq(rateLimitsTable.identifier, identifier));
-    return true;
+    return { allowed: true };
   }
 
   if (row.count >= limit) {
-    return false;
+    const resetAtDate = new Date(row.windowStart.getTime() + 3_600_000);
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(0, Math.ceil((resetAtDate.getTime() - Date.now()) / 1000)),
+      resetAt: resetAtDate.toISOString(),
+    };
   }
 
   await db
@@ -72,7 +81,7 @@ async function checkAndIncrementRateLimit(
     .set({ count: sql`${rateLimitsTable.count} + 1` })
     .where(eq(rateLimitsTable.identifier, identifier));
 
-  return true;
+  return { allowed: true };
 }
 
 async function authenticate(
@@ -151,15 +160,25 @@ export const Route = createFileRoute("/api/compile")({
           rateLimit = ANONYMOUS_LIMIT_PER_HOUR;
         }
 
-        const withinLimit = await checkAndIncrementRateLimit(
+        const rateLimitResult = await checkAndIncrementRateLimit(
           rateLimitId,
           rateLimit,
         );
 
-        if (!withinLimit) {
+        if (!rateLimitResult.allowed) {
           return Response.json(
-            { error: "Rate limit exceeded" },
-            { status: 429 },
+            {
+              error: "Rate limit exceeded",
+              retryAfterSeconds: rateLimitResult.retryAfterSeconds,
+              resetAt: rateLimitResult.resetAt,
+            },
+            {
+              status: 429,
+              headers: {
+                "retry-after": String(rateLimitResult.retryAfterSeconds),
+                "x-ratelimit-reset": rateLimitResult.resetAt,
+              },
+            },
           );
         }
 
@@ -234,6 +253,7 @@ export const Route = createFileRoute("/api/compile")({
             status: result.status,
             compileTimeMs: result.compileTimeMs,
             bytecode: result.bytecode,
+            logs: result.status === "failed" ? result.logs : undefined,
           },
           { status: 201 },
         );

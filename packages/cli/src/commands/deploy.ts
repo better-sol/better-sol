@@ -1,17 +1,22 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { promisify } from "node:util";
 import { intro, log, outro, spinner } from "@clack/prompts";
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { getStoredApiKey } from "#lib/auth";
 import { loadConfig, parseCluster } from "#lib/config";
 import { readKeypair } from "#lib/keypair";
 import { BETTER_SOL_DIR, cwdJoin, cwdPath, ensureDirectory, fileExists } from "#lib/fs";
-import { compileProgram } from "#lib/api";
+import { compileProgram, type CompileResponse } from "#lib/api";
 import { clusterUrl, getBalance, requestAirdrop, confirmSignature } from "#lib/solana-rpc";
 import { ensureSolanaCli } from "#lib/solana-cli";
 import type { Cluster, DeployOptions } from "#lib/types";
 import { generateAnchorProject } from "#generator/rust";
 import { discoverProgramsWithSpinner, CLI_COMMAND } from "./shared";
+
+const execFileAsync = promisify(execFile);
 
 const DEFAULT_PAYER_PATH = "keypair.json";
 const AIRDROP_LAMPORTS = 2_000_000_000n;
@@ -33,9 +38,11 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const payer = await readKeypair(payerPath);
   const rpcUrl = clusterUrl(cluster);
 
+  const writesRust = options.verify || options.dryRun || options.output !== undefined;
+
   log.step(`Cluster: ${cluster}`);
   log.step(`Source:  ${src}`);
-  log.step(`Output:  ${out}`);
+  if (writesRust) log.step(`Output:  ${out}`);
 
   await ensureFunded(payer.publicKey, cluster, rpcUrl);
 
@@ -56,7 +63,7 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
   const projects = matched.map((program) => generateAnchorProject(program));
 
-  if (options.verify || options.dryRun || options.output !== undefined) {
+  if (writesRust) {
     s.message(`Writing generated Anchor projects`);
     await ensureDirectory(outDir);
     await Promise.all(
@@ -77,63 +84,63 @@ export async function deploy(options: DeployOptions): Promise<void> {
     return;
   }
 
-  s.message(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
-  const compileResults = await Promise.all(
-    projects.map((project) =>
-      compileProgram({
-        apiKey,
-        program: project.program,
-        libRs: project.libRs,
-        cargoToml: project.cargoToml,
-        idl: project.idl,
-      }),
-    ),
-  );
-  s.stop("Compilation completed");
+  const compileSpinner = spinner();
+  compileSpinner.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
+  let compileResults: readonly CompileResponse[];
+  try {
+    compileResults = await Promise.all(
+      projects.map((project) =>
+        compileProgram({
+          apiKey,
+          program: project.program,
+          libRs: project.libRs,
+          cargoToml: project.cargoToml,
+          idl: project.idl,
+        }),
+      ),
+    );
+    compileSpinner.stop("Compilation completed");
+  } catch (error) {
+    compileSpinner.stop("Compilation failed");
+    throw error;
+  }
 
   for (const [i, project] of projects.entries()) {
     const result = compileResults[i]!;
-
-    printProgramSummary(project.program, cluster, outDir, options.verify);
-
-    const statusLabel =
-      result.status === "success" ? "✓ Success" : `✗ ${result.status}`;
     const compileTime = `${(result.compileTimeMs / 1000).toFixed(1)}s`;
 
-    log.info(`${statusLabel} compiled in ${compileTime}`);
-    if (result.status === "failed" && result.logs) {
-      log.info(`Compile logs:\n${result.logs}`);
+    log.info(`Program: ${project.program.name}`);
+    log.step(`Address:  ${project.program.address}`);
+
+    if (result.status === "failed" || result.bytecode === null) {
+      const logs = result.logs !== undefined && result.logs.length > 0 ? `\n${result.logs}` : "";
+      throw new Error(`Compilation failed for ${project.program.name}.${logs}`);
     }
-    log.step(
-      `Explorer:   https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
-    );
 
-    if (result.status === "success" && result.bytecode !== null) {
-      const soDir = join(outDir, project.program.name, "target", "deploy");
-      const soPath = join(soDir, `${project.program.name}.so`);
-      const programKeypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
+    log.step(`Compiled: ${compileTime}`);
 
-      mkdirSync(soDir, { recursive: true });
-      writeFileSync(soPath, Buffer.from(result.bytecode, "base64"));
+    const programKeypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
+    const solanaPath = ensureSolanaCli();
+    const deploySpinner = spinner();
+    deploySpinner.start(`Deploying ${project.program.name} to ${cluster}`);
 
-      s.message(`Deploying ${project.program.name} to ${cluster}`);
-      const solanaPath = ensureSolanaCli();
-
-      try {
-        execSync(
-          `"${solanaPath}" program deploy "${soPath}" --program-id "${programKeypairPath}" --keypair "${payerPath}" --url ${cluster}`,
-          { encoding: "utf8", timeout: 120_000, stdio: "pipe" },
-        );
-        s.stop(`Deployed to ${cluster}`);
-        log.step(`Deployed:   ${project.program.address}`);
-      } catch (error) {
-        s.stop("Deployment failed");
-        const message =
-          error instanceof Error && "stderr" in error
-            ? (error as { readonly stderr: string }).stderr.trim()
-            : String(error);
-        throw new Error(`Deployment failed: ${message}`, { cause: error });
-      }
+    try {
+      const signature = await deployCompiledProgram({
+        bytecode: result.bytecode,
+        programName: project.program.name,
+        programKeypairPath,
+        payerPath,
+        cluster,
+        solanaPath,
+      });
+      deploySpinner.stop("Deployment completed");
+      log.step(`Signature: ${signature}`);
+      log.step(
+        `Explorer:  https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
+      );
+    } catch (error) {
+      deploySpinner.stop("Deployment failed");
+      throw new Error(`Deployment failed: ${extractProcessErrorMessage(error)}`, { cause: error });
     }
   }
 
@@ -148,6 +155,57 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   outro("Deploy complete.");
+}
+
+async function deployCompiledProgram(params: {
+  readonly bytecode: string;
+  readonly programName: string;
+  readonly programKeypairPath: string;
+  readonly payerPath: string;
+  readonly cluster: Cluster;
+  readonly solanaPath: string;
+}): Promise<string> {
+  const deployDir = await mkdtemp(join(tmpdir(), "better-sol-deploy-"));
+  const soPath = join(deployDir, `${params.programName}.so`);
+
+  try {
+    writeFileSync(soPath, Buffer.from(params.bytecode, "base64"));
+    const { stdout } = await execFileAsync(
+      params.solanaPath,
+      [
+        "program",
+        "deploy",
+        soPath,
+        "--program-id",
+        params.programKeypairPath,
+        "--keypair",
+        params.payerPath,
+        "--url",
+        params.cluster,
+      ],
+      { encoding: "utf8", timeout: 120_000 },
+    );
+    return extractDeploymentSignature(stdout);
+  } finally {
+    await rm(deployDir, { recursive: true, force: true });
+  }
+}
+
+function extractDeploymentSignature(stdout: string): string {
+  const signatureLine = stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("Signature:"));
+  return signatureLine?.replace("Signature:", "").trim() ?? "submitted";
+}
+
+function extractProcessErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const record = error as Record<string, unknown>;
+    if (typeof record.stderr === "string" && record.stderr.trim().length > 0) return record.stderr.trim();
+    if (typeof record.stdout === "string" && record.stdout.trim().length > 0) return record.stdout.trim();
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 function resolvePayerPath(payerFlag: string | undefined, configPayer: string | undefined): string {
