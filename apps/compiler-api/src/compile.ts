@@ -57,6 +57,7 @@ async function runBuild(
     const proc = Bun.spawn(
       ["cargo", "build-sbf", "--manifest-path", `${tmpDir}/Cargo.toml`],
       {
+        cwd: tmpDir,
         timeout: env.BUILD_TIMEOUT_SECS * 1000,
         stdout: "pipe",
         stderr: "pipe",

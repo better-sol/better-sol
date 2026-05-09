@@ -3,7 +3,7 @@
   "imports": {
     "#*": "./src/*"
   },
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.5",
   "description": "TypeScript-first Solana program tooling — transpile, compile, and deploy to Solana",
   "license": "MIT",
   "type": "module",

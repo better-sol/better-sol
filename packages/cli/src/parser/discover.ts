@@ -6,14 +6,23 @@ import { parseProgramsFromFile } from "./ast";
 
 function globToRegex(pattern: string): RegExp {
   const parts = pattern.split("/");
-  const regexParts = parts.map((part) => {
-    if (part === "**") return ".*";
-    return part
-      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*/g, "[^/]*")
-      .replace(/\?/g, "[^/]");
-  });
-  return new RegExp(`^${regexParts.join("/")}$`);
+  const regexParts: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]!;
+    const isLast = i === parts.length - 1;
+    if (part === "**") {
+      regexParts.push("(.*\\/)?");
+    } else {
+      regexParts.push(
+        part
+          .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+          .replace(/\*/g, "[^/]*")
+          .replace(/\?/g, "[^/]"),
+      );
+      if (!isLast) regexParts.push("/");
+    }
+  }
+  return new RegExp(`^${regexParts.join("")}$`);
 }
 
 async function findFiles(pattern: string): Promise<string[]> {

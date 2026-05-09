@@ -15,6 +15,7 @@ import { discoverProgramsWithSpinner, CLI_COMMAND } from "./shared";
 
 const DEFAULT_PAYER_PATH = "keypair.json";
 const AIRDROP_LAMPORTS = 2_000_000_000n;
+const AIRDROP_RETRIES = 3;
 const MIN_DEPLOY_BALANCE = 1_500_000_000n;
 
 export async function deploy(options: DeployOptions): Promise<void> {
@@ -100,6 +101,9 @@ export async function deploy(options: DeployOptions): Promise<void> {
     const compileTime = `${(result.compileTimeMs / 1000).toFixed(1)}s`;
 
     log.info(`${statusLabel} compiled in ${compileTime}`);
+    if (result.status === "failed" && result.logs) {
+      log.info(`Compile logs:\n${result.logs}`);
+    }
     log.step(
       `Explorer:   https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
     );
@@ -178,15 +182,23 @@ async function ensureFunded(address: string, cluster: Cluster, rpcUrl: string): 
 
   s.message(`Low balance (${(Number(balance) / 1e9).toFixed(4)} SOL). Requesting airdrop on ${cluster}...`);
 
-  try {
-    const signature = await requestAirdrop(address, rpcUrl, AIRDROP_LAMPORTS);
-    await confirmSignature(signature, rpcUrl);
-    const newBalance = await getBalance(address, rpcUrl);
-    s.stop(`Funded. Balance: ${(Number(newBalance) / 1e9).toFixed(2)} SOL`);
-  } catch {
-    s.stop("Airdrop failed");
-    throw new Error(`Failed to airdrop SOL on ${cluster}. Fund ${address} manually or try again.`);
+  for (let attempt = 1; attempt <= AIRDROP_RETRIES; attempt++) {
+    try {
+      const signature = await requestAirdrop(address, rpcUrl, AIRDROP_LAMPORTS);
+      await confirmSignature(signature, rpcUrl);
+      const newBalance = await getBalance(address, rpcUrl);
+      s.stop(`Funded. Balance: ${(Number(newBalance) / 1e9).toFixed(2)} SOL`);
+      return;
+    } catch {
+      if (attempt < AIRDROP_RETRIES) {
+        s.message(`Airdrop attempt ${attempt} failed, retrying...`);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
   }
+
+  s.stop("Airdrop failed");
+  throw new Error(`Failed to airdrop SOL on ${cluster}. Fund ${address} manually or try again.`);
 }
 
 function printProgramSummary(

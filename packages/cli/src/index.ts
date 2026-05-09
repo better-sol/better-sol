@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { cancel, log } from "@clack/prompts";
 import { Command } from "commander";
-import { fileURLToPath } from "node:url";
 import { init } from "./commands/init";
 import { create } from "./commands/create";
 import { deploy } from "./commands/deploy";
@@ -82,10 +81,7 @@ cli
   .option("--mount-path <path>", "subdirectory in repo where Cargo.toml lives (defaults to generated/<name>)")
   .action((program: string | undefined, options: VerifyOptions) => run(() => verify(program, options)));
 
-
-if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {
-  cli.parse(process.argv);
-}
+cli.parse(process.argv);
 
 async function run(task: () => Promise<void>): Promise<void> {
   try {
