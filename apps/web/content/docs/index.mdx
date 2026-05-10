@@ -7,6 +7,8 @@ description: What Better Sol is and how to get it running.
 Better Sol is in **alpha**. APIs may change, rough edges exist, and things can break. Your feedback shapes what comes next. Thank you for being an early adopter.
 </Callout>
 
+Better Sol is a pure TypeScript library with no framework opinions. It works with Next.js, TanStack Start, Remix, Astro, Express, Hono, React Native, Bun, Deno, or any other JavaScript runtime. The program definition is a plain TypeScript file. Import it, pass it to `betterSol()`, and you get a fully typed client. No code generation, no build plugins, no framework coupling.
+
 Better Sol lets you write Solana programs in TypeScript. One file defines your accounts and instructions. From that same file you deploy on-chain and get a typed client.
 
 ```tsx ts2js
@@ -71,3 +73,15 @@ npx @better-sol/cli@alpha login <api-key>
 ```
 
 It gets stored at `.better-sol/auth.json`.
+
+## Agent Skill
+
+Better Sol ships an [Agent Skill](https://agentskills.io): a single self-contained folder your AI agent can load to understand the full Better Sol SDK, Solana architecture, security patterns, and more. Works with Claude Code, Cursor, GitHub Copilot, Windsurf, Cline, and 40+ other clients.
+
+```bash
+npx skills add powxenv/better-sol@better-sol --yes
+```
+
+The skill includes 50 reference files covering programs, clients, testing, deployment, DeFi, NFTs, DAOs, security, frontend patterns, and web3 fundamentals. Your agent loads only what it needs for the task at hand.
+
+See the [Superskill page](/superskill) for the full breakdown of what's included.

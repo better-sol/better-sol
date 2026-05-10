@@ -16,6 +16,7 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout.index'
 import { Route as DocsSplatRouteImport } from './routes/docs.$'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiCompileRouteImport } from './routes/api/compile'
+import { Route as LayoutSuperskillRouteImport } from './routes/_layout.superskill'
 import { Route as LayoutDashIndexRouteImport } from './routes/_layout.dash.index'
 import { Route as LlmsDotmdxDocsSplatRouteImport } from './routes/llms[.]mdx.docs.$'
 import { Route as LayoutBlogSlugRouteImport } from './routes/_layout.blog.$slug'
@@ -54,6 +55,11 @@ const ApiCompileRoute = ApiCompileRouteImport.update({
   path: '/api/compile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LayoutSuperskillRoute = LayoutSuperskillRouteImport.update({
+  id: '/superskill',
+  path: '/superskill',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutDashIndexRoute = LayoutDashIndexRouteImport.update({
   id: '/dash/',
   path: '/dash/',
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/superskill': typeof LayoutSuperskillRoute
   '/api/compile': typeof ApiCompileRoute
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
@@ -84,6 +91,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/superskill': typeof LayoutSuperskillRoute
   '/api/compile': typeof ApiCompileRoute
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
@@ -97,6 +105,7 @@ export interface FileRoutesById {
   '/_layout': typeof LayoutRouteWithChildren
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/_layout/superskill': typeof LayoutSuperskillRoute
   '/api/compile': typeof ApiCompileRoute
   '/api/search': typeof ApiSearchRoute
   '/docs/$': typeof DocsSplatRoute
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | '/'
     | '/llms-full.txt'
     | '/llms.txt'
+    | '/superskill'
     | '/api/compile'
     | '/api/search'
     | '/docs/$'
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
   to:
     | '/llms-full.txt'
     | '/llms.txt'
+    | '/superskill'
     | '/api/compile'
     | '/api/search'
     | '/docs/$'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/_layout'
     | '/llms-full.txt'
     | '/llms.txt'
+    | '/_layout/superskill'
     | '/api/compile'
     | '/api/search'
     | '/docs/$'
@@ -203,6 +215,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_layout/superskill': {
+      id: '/_layout/superskill'
+      path: '/superskill'
+      fullPath: '/superskill'
+      preLoaderRoute: typeof LayoutSuperskillRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/dash/': {
       id: '/_layout/dash/'
       path: '/dash'
@@ -228,12 +247,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface LayoutRouteChildren {
+  LayoutSuperskillRoute: typeof LayoutSuperskillRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
   LayoutBlogSlugRoute: typeof LayoutBlogSlugRoute
   LayoutDashIndexRoute: typeof LayoutDashIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutSuperskillRoute: LayoutSuperskillRoute,
   LayoutIndexRoute: LayoutIndexRoute,
   LayoutBlogSlugRoute: LayoutBlogSlugRoute,
   LayoutDashIndexRoute: LayoutDashIndexRoute,

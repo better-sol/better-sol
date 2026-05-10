@@ -13,6 +13,38 @@ import SolarDatabaseLineDuotone from "~icons/solar/database-line-duotone";
 import SolarCheckCircleLineDuotone from "~icons/solar/check-circle-line-duotone";
 
 import { HighlightCode } from "#/components/highlight-code";
+import { useState } from "react";
+import SolarCheckReadLineDuotone from "~icons/solar/check-read-line-duotone";
+
+import SolarStarBoldDuotone from "~icons/solar/star-bold-duotone";
+
+const superskillInstall = "npx skills add powxenv/better-sol@better-sol --yes";
+
+function InstallCopyButton() {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard.writeText(superskillInstall).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      }}
+      className="flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors"
+    >
+      {copied ? (
+        <>
+          <SolarCheckReadLineDuotone className="size-3.5 text-success" />
+          Copied
+        </>
+      ) : (
+        "Copy"
+      )}
+    </button>
+  );
+}
 
 export const Route = createFileRoute("/_layout/")({
   component: Home,
@@ -355,6 +387,51 @@ function Home() {
               </p>
             </Surface>
           </div>
+        </div>
+      </div>
+
+      <div className="border-y h-14">
+        <div className="inner border-x" />
+      </div>
+
+      <div className="inner border-x py-16 md:py-24 px-6 md:px-8">
+        <div className="mb-10 md:mb-12 flex flex-col gap-4 items-start">
+          <div className="flex items-center gap-1 border pl-2 pr-4 py-2 rounded-xl">
+            <SolarStarBoldDuotone className="size-5" />
+            Superskill
+          </div>
+          <h2 className="text-3xl md:text-5xl">
+            One skill for your entire agent.
+          </h2>
+          <p className="text-lg max-w-2xl">
+            A single Agent Skill with 50 references covering programs, security,
+            DeFi, NFTs, oracles, cross-chain, frontend, tokenomics, and web3
+            fundamentals. Install it once and your agent can build anything on
+            Solana.
+          </p>
+        </div>
+
+        <div className="p-2 border rounded-xl max-w-2xl">
+          <Surface className="rounded-lg border-[0.5px]">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <span className="text-xs text-muted font-mono">
+                Install the skill
+              </span>
+              <InstallCopyButton />
+            </div>
+            <div className="p-4 font-mono text-sm leading-loose">
+              <span className="text-muted select-none">$ </span>
+              <span>npx skills add powxenv/better-sol@better-sol --yes</span>
+            </div>
+          </Surface>
+        </div>
+
+        <div className="mt-6 md:mt-8 flex flex-col sm:flex-row justify-start items-center gap-2">
+          <Link to="/superskill">
+            <Button>
+              See what's included <SolarArrowRightLineDuotone />
+            </Button>
+          </Link>
         </div>
       </div>
 

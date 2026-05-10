@@ -70,6 +70,9 @@ const Header = () => {
           <Link to="/" className={buttonVariants({ variant: "ghost" })}>
             Home
           </Link>
+          <Link to="/superskill" className={buttonVariants({ variant: "ghost" })}>
+            Superskill
+          </Link>
           <Link to="/docs/$" className={buttonVariants({ variant: "ghost" })}>
             Documentation
           </Link>
@@ -161,6 +164,16 @@ const Header = () => {
               onClick={() => setMenuOpen(false)}
             >
               Home
+            </Link>
+            <Link
+              to="/superskill"
+              className={buttonVariants({
+                variant: "ghost",
+                className: "justify-start",
+              })}
+              onClick={() => setMenuOpen(false)}
+            >
+              Superskill
             </Link>
             <Link
               to="/docs/$"
