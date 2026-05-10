@@ -1,6 +1,6 @@
 export { betterSol, secretKey, keypairFile } from "#client/factory";
 export type { BetterSolClient, BetterSolConfig, BoundAccount, TokenClient, DeriveInput, AddressInput, StepChain, Cluster, ProgramInputs, SignerInput } from "#client/types";
-export { ProgramError } from "#client/events";
+export { ProgramError, TransactionFailedError } from "#client/events";
 export type { ParsedEvent, ProgramErrorMap } from "#client/events";
 
 export { bs, cpi } from "#program";

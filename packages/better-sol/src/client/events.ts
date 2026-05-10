@@ -19,6 +19,18 @@ export class ProgramError extends Error {
   }
 }
 
+export class TransactionFailedError extends Error {
+  public override readonly name = "TransactionFailedError";
+  public constructor(
+    message: string,
+    public readonly logs: readonly string[],
+    public readonly programError: ProgramError | undefined,
+    public override readonly cause: unknown,
+  ) {
+    super(programError !== undefined ? `${programError.programName}.${programError.errorName}: ${programError.originalMessage}` : message);
+  }
+}
+
 export function buildErrorIndex(
   errors: Readonly<Record<string, string>>,
 ): ProgramErrorMap {

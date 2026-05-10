@@ -51,7 +51,7 @@ import { buildAndSignTransaction, buildAccountMetas, sendAndConfirm, runSimulati
 import { buildLookupTableIndex, type LookupTableIndex } from "./lookup-tables.ts";
 import { BoundAccountImpl } from "./bound-account.ts";
 import { buildTokenClient } from "./token-client.ts";
-import { ProgramError, type ProgramErrorMap, buildErrorIndex, type ParsedEvent, buildEventDiscriminatorIndex, extractEventLogs, parseEventLog, decodeEventData } from "./events.ts";
+import { ProgramError, TransactionFailedError, type ProgramErrorMap, buildErrorIndex, type ParsedEvent, buildEventDiscriminatorIndex, extractEventLogs, parseEventLog, decodeEventData } from "./events.ts";
 
 export { secretKey, keypairFile } from "./signer.ts";
 
@@ -218,6 +218,7 @@ function createProgramClient(
   const programAddress = kitAddress(program.address);
   const programName = program.name;
   const errorIndex = buildErrorIndex(program.errors as Record<string, string>);
+
   const accounts: Record<string, unknown> = {};
   for (const [accountName, accountDef] of Object.entries(program.accounts)) {
     accounts[accountName] = new BoundAccountImpl(
@@ -235,6 +236,17 @@ function createProgramClient(
       if (parsed !== undefined) return parsed;
     }
     return undefined;
+  };
+
+  const parseLogsForError = (error: unknown): never => {
+    const logs = extractLogsFromError(error);
+    const programError = logs !== undefined ? parseErrors(logs) : undefined;
+    throw new TransactionFailedError(
+      error instanceof Error ? error.message : String(error),
+      logs ?? [],
+      programError,
+      error,
+    );
   };
 
   let eventDiscriminatorCache: Map<string, { readonly name: string; readonly fields: FieldSchema }> | undefined;
@@ -267,7 +279,7 @@ function createProgramClient(
       const ixDef = program.instructions[property];
       if (ixDef === undefined) return undefined;
 
-      return createInstructionProxy(ixDef, property, program.address, rpc, rpcSubscriptions, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed);
+      return createInstructionProxy(ixDef, property, program.address, rpc, rpcSubscriptions, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed, parseLogsForError);
     },
     ownKeys(): (string | symbol)[] {
       return ["address", "accounts", "parseErrors", "parseEvents", ...Object.keys(program.instructions)];
@@ -311,6 +323,7 @@ function createInstructionProxy(
   nonceConfig: NonceConfig | undefined,
   lookupTableIndex: LookupTableIndex | undefined,
   onConfirmed: TransactionCallback,
+  parseLogsForError: (error: unknown) => never,
 ): InstructionFn {
   const cached = instructionCache.get(ixDef);
   if (cached !== undefined) return cached;
@@ -322,7 +335,11 @@ function createInstructionProxy(
     const params = inputParams ?? {};
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
     const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-    return await sendAndConfirm(signedTx, rpc, rpcSubscriptions, onConfirmed, commitment);
+    try {
+      return await sendAndConfirm(signedTx, rpc, rpcSubscriptions, onConfirmed, commitment);
+    } catch (error) {
+      parseLogsForError(error);
+    }
   };
 
   const instructionFn = async (inputParams?: Record<string, unknown>): Promise<Instruction> => {
@@ -342,7 +359,11 @@ function createInstructionProxy(
     const activeSigner = requireSigner(signer);
     const ix = await buildInstruction(ixDef, params, programId, snakeName, activeSigner, "signed", lookupTableIndex);
     const signedTx = await buildAndSignTransaction([ix], rpc, activeSigner, commitment, nonceConfig);
-    return await runSimulation(signedTx, rpc, commitment);
+    try {
+      return await runSimulation(signedTx, rpc, commitment);
+    } catch (error) {
+      parseLogsForError(error);
+    }
   };
 
   const prepareFn = async (inputParams?: Record<string, unknown>): Promise<PrepareResult> => {
@@ -484,4 +505,15 @@ function tryParseAnchorError(logLine: string, errorIndex: ProgramErrorMap, progr
   const entry = errorIndex.find((e: { readonly name: string }) => e.name === errorName);
   if (entry === undefined) return undefined;
   return new ProgramError(programName, entry.name, entry.index, entry.message);
+}
+
+function extractLogsFromError(error: unknown): readonly string[] | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const record = error as Record<string, unknown>;
+  const context = record.context;
+  if (typeof context === "object" && context !== null) {
+    const logs = (context as Record<string, unknown>).logs;
+    if (Array.isArray(logs)) return logs as readonly string[];
+  }
+  return undefined;
 }
