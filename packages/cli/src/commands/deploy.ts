@@ -22,6 +22,7 @@ const DEFAULT_PAYER_PATH = "keypair.json";
 const AIRDROP_LAMPORTS = 2_000_000_000n;
 const AIRDROP_RETRIES = 3;
 const MIN_DEPLOY_BALANCE = 1_500_000_000n;
+const CACHE_DIR = `${BETTER_SOL_DIR}/cache`;
 
 export async function deploy(options: DeployOptions): Promise<void> {
   intro("better-sol deploy");
@@ -31,18 +32,13 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const config = await loadConfig();
   const cluster = parseCluster(options.cluster, config.cluster);
   const src = options.src ?? config.programs;
-  const out = options.output ?? config.out;
-  const outDir = cwdPath(out);
 
   const payerPath = resolvePayerPath(options.payer, config.payer);
   const payer = await readKeypair(payerPath);
   const rpcUrl = clusterUrl(cluster);
 
-  const writesRust = options.verify || options.dryRun || options.output !== undefined;
-
   log.step(`Cluster: ${cluster}`);
   log.step(`Source:  ${src}`);
-  if (writesRust) log.step(`Output:  ${out}`);
 
   await ensureFunded(payer.publicKey, cluster, rpcUrl);
 
@@ -60,32 +56,14 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   const projects = matched.map((program) => generateAnchorProject(program));
-  await Promise.all(projects.map((project) => removeGeneratedSoFile(outDir, project.program.name)));
-
-  if (writesRust) {
-    const writeSpinner = spinner();
-    writeSpinner.start("Writing generated Anchor projects");
-    await ensureDirectory(outDir);
-    await Promise.all(
-      projects.map(async (project) => {
-        const dir = join(outDir, project.program.name);
-        await ensureDirectory(join(dir, "src"));
-        writeFileSync(join(dir, "Cargo.toml"), project.cargoToml);
-        writeFileSync(join(dir, "src", "lib.rs"), project.libRs);
-      }),
-    );
-    writeSpinner.stop("Generated Anchor projects written");
-  }
 
   if (options.dryRun) {
-    for (const project of projects)
-      printProgramSummary(project.program, cluster, outDir, true);
-    outro(`Dry run complete — Rust written to ${out}/. No compilation or deployment performed.`);
+    outro("Dry run complete. No compilation or deployment performed.");
     return;
   }
 
   const compileSpinner = spinner();
-  compileSpinner.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"} with Better Sol compiler`);
+  compileSpinner.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
   let compileResults: readonly CompileResponse[];
   try {
     compileResults = await Promise.all(
@@ -119,6 +97,12 @@ export async function deploy(options: DeployOptions): Promise<void> {
 
     log.step(`Compiled: ${compileTime}`);
 
+    if (result.bytecodeSha256) {
+      log.step(`Binary:   sha256:${result.bytecodeSha256.slice(0, 16)}...`);
+    }
+
+    writeBytecode(project.program.name, result.bytecode);
+
     const programKeypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
     const solanaPath = ensureSolanaCli();
     const deploySpinner = spinner();
@@ -145,9 +129,11 @@ export async function deploy(options: DeployOptions): Promise<void> {
   }
 
   if (options.verify) {
+    const verifyDir = cwdPath(options.output ?? config.out);
+    await writeRustForVerify(projects, verifyDir);
     log.info("To verify this build on-chain:");
     log.step(
-      `1. Commit and push the ${out}/ directory to a public repository`,
+      `1. Commit and push the ${verifyDir}/ directory to a public repository`,
     );
     log.step(
       `2. Run \`${CLI_COMMAND} verify ${matched[0]?.address ?? "<program-id>"}\``,
@@ -157,8 +143,25 @@ export async function deploy(options: DeployOptions): Promise<void> {
   outro("Deploy complete.");
 }
 
-async function removeGeneratedSoFile(outDir: string, programName: string): Promise<void> {
-  await rm(join(outDir, programName, "target", "deploy", `${programName}.so`), { force: true });
+function writeBytecode(programName: string, bytecode: string): void {
+  const cachePath = cwdPath(CACHE_DIR);
+  ensureDirectory(cachePath);
+  writeFileSync(join(cachePath, `${programName}.so`), Buffer.from(bytecode, "base64"));
+}
+
+async function writeRustForVerify(
+  projects: readonly ReturnType<typeof generateAnchorProject>[],
+  outDir: string,
+): Promise<void> {
+  await ensureDirectory(outDir);
+  await Promise.all(
+    projects.map(async (project) => {
+      const dir = join(outDir, project.program.name);
+      await ensureDirectory(join(dir, "src"));
+      writeFileSync(join(dir, "Cargo.toml"), project.cargoToml);
+      writeFileSync(join(dir, "src", "lib.rs"), project.libRs);
+    }),
+  );
 }
 
 async function deployCompiledProgram(params: {
@@ -261,16 +264,4 @@ async function ensureFunded(address: string, cluster: Cluster, rpcUrl: string): 
 
   s.stop("Airdrop failed");
   throw new Error(`Failed to airdrop SOL on ${cluster}. Fund ${address} manually or try again.`);
-}
-
-function printProgramSummary(
-  program: { readonly name: string; readonly address: string },
-  cluster: string,
-  out: string,
-  wroteRust: boolean,
-): void {
-  log.info(`Program: ${program.name}`);
-  log.step(`Address:  ${program.address}`);
-  log.step(`Cluster:  ${cluster}`);
-  if (wroteRust) log.step(`Rust:     ${out}/${program.name}/`);
 }

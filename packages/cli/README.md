@@ -48,7 +48,7 @@ Compile and deploy to Solana.
 npx @better-sol/cli@alpha deploy
 ```
 
-Parses your TypeScript, generates Anchor Rust, compiles it via the cloud API, and deploys the binary. On devnet and testnet, automatically funds your payer if the balance is low.
+Parses your TypeScript, compiles it via the cloud API, and deploys the binary. On devnet and testnet, automatically funds your payer if the balance is low. Compiled binaries are cached locally in `.better-sol/cache/` for testing.
 
 | Flag | Default | Description |
 |---|---|---|
@@ -56,9 +56,9 @@ Parses your TypeScript, generates Anchor Rust, compiles it via the cloud API, an
 | `--program <name>` | all programs | Target a specific program |
 | `--payer <path>` | `keypair.json` | Payer keypair path |
 | `--cluster <cluster>` | `devnet` | `devnet`, `testnet`, `mainnet`, `localnet` |
-| `--dry-run` | `false` | Generate Rust without compiling or deploying |
-| `--verify` | `false` | Write Rust for verified builds |
-| `--output <dir>` | `generated` | Output directory for Rust files |
+| `--dry-run` | `false` | Validate without compiling or deploying |
+| `--verify` | `false` | Write Rust for OtterSec verified builds |
+| `--output <dir>` | `generated` | Rust output directory (only used with `--verify`) |
 
 ### `generate idl`
 

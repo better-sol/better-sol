@@ -44,14 +44,14 @@ cli
 
 cli
   .command("deploy")
-  .description("Generate Rust, compile, and deploy programs")
+  .description("Compile and deploy programs")
   .option("--src <glob>", "program source glob")
   .option("--program <name>", "target a specific program by name")
   .option("--payer <path>", "payer keypair path")
   .option("--cluster <cluster>", "devnet, testnet, mainnet, or localnet")
   .option("--verify", "write generated Rust for verified builds", false)
   .option("--dry-run", "generate and validate without compiling or deploying", false)
-  .option("--output <dir>", "generated Rust output directory")
+  .option("--output <dir>", "output directory for verified build Rust", "generated")
   .action((options: DeployOptions) => run(() => deploy(options)));
 
 const generate = cli.command("generate").description("Generate derived artifacts");

@@ -32,6 +32,8 @@ type CompilerResponse = {
   readonly status: "success" | "failed";
   readonly compileTimeMs: number;
   readonly bytecode: string | null;
+  readonly bytecodeSha256: string | null;
+  readonly sourceSha256: string;
   readonly cargoToml: string;
   readonly logs: string;
 };
@@ -253,6 +255,8 @@ export const Route = createFileRoute("/api/compile")({
             status: result.status,
             compileTimeMs: result.compileTimeMs,
             bytecode: result.bytecode,
+            bytecodeSha256: result.bytecodeSha256,
+            sourceSha256: result.sourceSha256,
             logs: result.status === "failed" ? result.logs : undefined,
           },
           { status: 201 },

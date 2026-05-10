@@ -67,12 +67,11 @@ You get back a `TestContext` that has everything a `BetterSolClient` has, plus t
 
 ## Compiled binaries
 
-The test context needs your compiled `.so` program binary to load into the VM. It searches in two places by default:
+The test context needs your compiled `.so` program binary to load into the VM. It looks for it at:
 
-1. `.better-sol/output/<name>.so`
-2. `generated/<name>/target/deploy/<name>.so`
+`.better-sol/cache/<name>.so`
 
-Run `npx @better-sol/cli@alpha deploy` before running tests. This compiles your program and writes the binary to disk.
+Run `npx @better-sol/cli@alpha deploy` before running tests. This compiles your program and caches the binary locally.
 
 If your binary is somewhere else, pass an explicit path:
 

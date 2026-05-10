@@ -30,15 +30,13 @@ export type TestContextConfig<TPrograms extends ProgramInputs> = {
 export type TestSigner = TransactionSigner;
 
 const DEFAULT_FUND_SOL = 100;
-const DEFAULT_BINARY_DIR = ".better-sol/output";
-const FALLBACK_BINARY_DIR = "generated";
+const DEFAULT_BINARY_DIR = ".better-sol/cache";
 
 function resolveBinaryPath(programName: string, binaries: BinaryInputs | undefined): string {
   if (binaries?.[programName] !== undefined) return resolve(binaries[programName]);
 
   const candidates = [
     join(DEFAULT_BINARY_DIR, `${programName}.so`),
-    join(FALLBACK_BINARY_DIR, programName, "target", "deploy", `${programName}.so`),
   ];
 
   for (const candidate of candidates) {

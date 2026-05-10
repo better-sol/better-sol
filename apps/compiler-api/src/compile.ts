@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { env } from "./env";
 import { ApiError } from "./errors";
@@ -19,6 +20,8 @@ export type CompileOutput = {
   readonly status: "success" | "failed";
   readonly compileTimeMs: number;
   readonly bytecode: string | null;
+  readonly bytecodeSha256: string | null;
+  readonly sourceSha256: string;
   readonly cargoToml: string;
   readonly logs: string;
 };
@@ -29,6 +32,8 @@ export async function compile(input: unknown): Promise<CompileOutput> {
 
   const { name, libRs, cargoToml } = parsed.data;
   const started = performance.now();
+
+  const sourceSha256 = sha256Hex(libRs + cargoToml);
 
   const { bytecode, logs } = env.ENABLE_BUILD
     ? await runBuild(name, libRs, cargoToml)
@@ -42,6 +47,8 @@ export async function compile(input: unknown): Promise<CompileOutput> {
     status: bytecode !== null ? "success" : "failed",
     compileTimeMs: Math.round(performance.now() - started),
     bytecode,
+    bytecodeSha256: bytecode !== null ? sha256Hex(bytecode) : null,
+    sourceSha256,
     cargoToml,
     logs,
   };
@@ -158,4 +165,8 @@ function resolveSolanaObjcopy(): string | null {
     .toSorted();
 
   return candidates.at(-1) ?? null;
+}
+
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
 }

@@ -9,7 +9,7 @@ import type { InitOptions } from "#lib/types";
 import { CLI_COMMAND } from "./shared";
 
 const PAYER_KEYPAIR_PATH = "keypair.json";
-const GITIGNORE_ENTRIES = [".better-sol/", "generated/**/*.so", "keypair.json", "node_modules/"];
+const GITIGNORE_ENTRIES = [".better-sol/", "generated/", "keypair.json", "node_modules/"];
 const SOLANA_DEFAULT_KEYPAIR_PATH = join(homedir(), ".config", "solana", "id.json");
 
 type PackageManager = "npm" | "bun" | "pnpm" | "yarn";

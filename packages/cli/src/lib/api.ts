@@ -18,6 +18,8 @@ export type CompileResponse = {
   readonly status: "success" | "failed";
   readonly compileTimeMs: number;
   readonly bytecode: string | null;
+  readonly bytecodeSha256: string | null;
+  readonly sourceSha256: string;
   readonly logs?: string;
 };
 

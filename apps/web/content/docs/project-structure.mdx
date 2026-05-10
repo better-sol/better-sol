@@ -25,14 +25,11 @@ Then `create` scaffolds a program template inside `programs/` and generates a pr
   <Folder name=".better-sol" defaultOpen>
     <File name="counter.json" />
     <File name="auth.json" />
+    <Folder name="cache" disabled>
+      <File name="counter.so" />
+    </Folder>
   </Folder>
   <Folder name="generated" disabled>
-    <Folder name="counter" disabled>
-      <Folder name="src" disabled>
-        <File name="lib.rs" />
-      </Folder>
-      <File name="Cargo.toml" />
-    </Folder>
     <File name="staking.ts" disabled />
   </Folder>
   <File name="better-sol.config.ts" />
@@ -55,12 +52,18 @@ This file contains a private key. **Never commit it to version control.** The `i
 
 Your API key. Created when you run `npx @better-sol/cli@alpha login <api-key>`. This file is optional. Because Better Sol is still experimental, compiler usage is rate limited: without a key you can deploy with 20 compiles per hour, and with a key you get 100 per hour.
 
+### `.better-sol/cache/`
+
+Cached compiled binaries from `deploy`. Each time you deploy, the `.so` bytecode is saved here. The `@better-sol/test` package loads binaries from this directory for local testing.
+
+This directory is gitignored along with the rest of `.better-sol/`.
+
 ### `generated/`
 
 Two things live here:
 
-- **`generated/<name>/`**: Rust output from `deploy` (or `deploy --dry-run`). Contains `lib.rs` and `Cargo.toml`. For reference and verified builds. Deleted and regenerated on each deploy.
-- **`generated/<name>.ts`**: typed program definitions from `generate idl`. Produced when you import an external program by address or IDL file. These are for the client only, not deployment.
+- **`generated/<name>/`**: Rust output from `deploy --verify`. Written only when you explicitly request verified builds for OtterSec. Commit this to a public repository for on-chain verification.
+- **`generated/<name>.ts`**: Typed program definitions from `generate idl`. Produced when you import an external program by address or IDL file. These are for the client only, not deployment.
 
 ### `better-sol.config.ts`
 
@@ -72,7 +75,6 @@ import { defineConfig } from "@better-sol/cli"
 export default defineConfig({
   programs: "programs/**/*.ts",   // glob for program discovery
   cluster: "devnet",               // default cluster for deploy
-  out: "generated",                // output directory
   payer: "./keypair.json",         // path to payer keypair
 })
 ```
@@ -101,9 +103,9 @@ The same file drives both deployment and the client. There is no separate IDL, n
 
 ```
 .better-sol/
-generated/**/*.so
+generated/
 keypair.json
 node_modules/
 ```
 
-Keep `programs/` and `better-sol.config.ts` in version control. Everything else is either sensitive (keypairs, auth) or generated.
+Keep `programs/` and `better-sol.config.ts` in version control. Everything else is either sensitive (`.better-sol/`) or generated on demand (`generated/`).
