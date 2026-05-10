@@ -1,5 +1,6 @@
 import { CodeWriter } from "#generator/code-writer";
-import type { Idl, IdlField, IdlInstructionAccount, IdlInstructionAccountItem, IdlType, IdlTypeDef, IdlTypeDefTyStruct } from "@coral-xyz/anchor/dist/esm/idl";
+import { toCamel, toPascal } from "#lib/naming";
+import type { Idl, IdlField, IdlInstructionAccount, IdlInstructionAccountItem, IdlTypeDef, IdlTypeDefTyStruct } from "@coral-xyz/anchor/dist/esm/idl";
 
 function flattenAccountItems(items: readonly IdlInstructionAccountItem[] | undefined): readonly IdlInstructionAccount[] {
   if (items === undefined) return [];
@@ -11,15 +12,27 @@ function flattenAccountItems(items: readonly IdlInstructionAccountItem[] | undef
   return result;
 }
 
-function idlTypeToCode(type: IdlType): string {
+function idlTypeToCode(type: unknown): string {
   if (typeof type === "string") {
+    if (type === "publicKey") return "bs.pubkey()";
     return `bs.${type}()`;
   }
-  if ("option" in type && type.option !== undefined) return `bs.optional(${idlTypeToCode(type.option)})`;
-  if ("coption" in type && type.coption !== undefined) return `bs.optional(${idlTypeToCode(type.coption)})`;
-  if ("vec" in type && type.vec !== undefined) return `bs.vector(${idlTypeToCode(type.vec)})`;
-  if ("array" in type && type.array !== undefined) return `bs.array(${idlTypeToCode(type.array[0])}, ${type.array[1]})`;
-  if ("defined" in type) return "bs.pubkey()";
+  if (typeof type !== "object" || type === null) return "bs.pubkey()";
+
+  const record = type as Record<string, unknown>;
+  const option = record.option;
+  if (option !== undefined) return `bs.optional(${idlTypeToCode(option)})`;
+
+  const coption = record.coption;
+  if (coption !== undefined) return `bs.optional(${idlTypeToCode(coption)})`;
+
+  const vec = record.vec;
+  if (vec !== undefined) return `bs.vector(${idlTypeToCode(vec)})`;
+
+  const array = record.array;
+  if (Array.isArray(array) && array.length === 2) return `bs.array(${idlTypeToCode(array[0])}, ${array[1]})`;
+
+  if (record.defined !== undefined) return "bs.pubkey()";
   return "bs.pubkey()";
 }
 
@@ -44,19 +57,38 @@ function getStructFields(typeDef: IdlTypeDef | undefined): readonly IdlField[] {
   return fields as readonly IdlField[];
 }
 
+function getStructFieldsFromAccount(account: unknown): readonly IdlField[] {
+  if (typeof account !== "object" || account === null) return [];
+  const accountRecord = account as Record<string, unknown>;
+  const accountType = accountRecord.type;
+  if (typeof accountType !== "object" || accountType === null) return [];
+  const typeRecord = accountType as Record<string, unknown>;
+  if (typeRecord.kind !== "struct") return [];
+  const fields = typeRecord.fields;
+  if (!Array.isArray(fields)) return [];
+  return fields as readonly IdlField[];
+}
+
+function getIdlName(idl: Idl): string | undefined {
+  if (typeof idl.metadata?.name === "string") return idl.metadata.name;
+  const record = idl as Record<string, unknown>;
+  return typeof record.name === "string" ? record.name : undefined;
+}
+
 export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
   const w = new CodeWriter();
-  const programName = idl.metadata?.name ?? "unknown";
+  const programName = toCamel(getIdlName(idl) ?? "unknown");
   const programAddress = idl.address ?? "";
-
   const typesByName = new Map<string, IdlTypeDef>();
   for (const t of idl.types ?? []) typesByName.set(t.name, t);
 
   const accountDefs = idl.accounts ?? [];
-  const resolvedAccounts = new Map<string, { name: string; fields: readonly IdlField[] }>();
+  const resolvedAccounts = new Map<string, { readonly exportName: string; readonly fields: readonly IdlField[] }>();
   for (const acc of accountDefs) {
-    const fields = getStructFields(typesByName.get(acc.name));
-    resolvedAccounts.set(acc.name, { name: acc.name, fields });
+    const fromTypes = getStructFields(typesByName.get(acc.name));
+    const fromAccount = getStructFieldsFromAccount(acc);
+    const fields = fromTypes.length > 0 ? fromTypes : fromAccount;
+    resolvedAccounts.set(acc.name, { exportName: toPascal(acc.name), fields });
   }
 
   const eventTypes = new Set<string>();
@@ -69,12 +101,12 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
   w.line(`import { bs } from "better-sol/program"`);
   w.blank();
 
-  for (const [name, { fields }] of resolvedAccounts) {
+  for (const [, { exportName, fields }] of resolvedAccounts) {
     if (fields.length === 0) continue;
-    w.line(`const ${name} = bs.account({`);
+    w.line(`const ${exportName} = bs.account({`);
     w.indent(1);
     for (const field of fields) {
-      w.line(`${field.name}: ${idlTypeToCode(field.type)},`);
+      w.line(`${toCamel(field.name)}: ${idlTypeToCode(field.type)},`);
     }
     w.indent(0);
     w.line("})");
@@ -91,10 +123,9 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
 
   if (resolvedAccounts.size > 0) {
     w.line(`accounts: {`);
-    for (const name of resolvedAccounts.keys()) {
-      const resolved = resolvedAccounts.get(name);
-      if (resolved === undefined || resolved.fields.length === 0) continue;
-      w.line(`  ${name},`);
+    for (const [, { exportName, fields }] of resolvedAccounts) {
+      if (fields.length === 0) continue;
+      w.line(`  ${exportName},`);
     }
     w.line(`},`);
   }
@@ -103,7 +134,7 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
     w.line(`errors: {`);
     for (const err of errorEntries) {
       const msg = err.msg ?? err.name;
-      w.line(`  ${err.name}: "${escapeString(msg)}",`);
+      w.line(`  ${toPascal(err.name)}: "${escapeString(msg)}",`);
     }
     w.line(`},`);
   }
@@ -112,9 +143,9 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
     w.line(`events: {`);
     for (const ev of eventEntries) {
       const fields = getStructFields(typesByName.get(ev.name));
-      w.line(`  ${ev.name}: {`);
+      w.line(`  ${toPascal(ev.name)}: {`);
       for (const f of fields) {
-        w.line(`    ${f.name}: ${idlTypeToCode(f.type)},`);
+        w.line(`    ${toCamel(f.name)}: ${idlTypeToCode(f.type)},`);
       }
       w.line(`  },`);
     }
@@ -126,16 +157,17 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
 
   for (const instr of idl.instructions) {
     const flatAccounts = flattenAccountItems(instr.accounts);
+    const ixName = toCamel(instr.name);
 
     w.blank();
-    w.line(`${instr.name}: ix({`);
+    w.line(`${ixName}: ix({`);
 
     if (flatAccounts.length > 0) {
       w.line(`  accounts: {`);
       for (const acc of flatAccounts) {
         if (acc.optional === true) continue;
         const constraint = accountToConstraint(acc, resolvedAccounts);
-        w.line(`    ${acc.name}: ${constraint},`);
+        w.line(`    ${toCamel(acc.name)}: ${constraint},`);
       }
       w.line(`  },`);
     }
@@ -144,7 +176,7 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
     if (args.length > 0) {
       w.line(`  args: {`);
       for (const arg of args) {
-        w.line(`    ${arg.name}: ${idlTypeToCode(arg.type)},`);
+        w.line(`    ${toCamel(arg.name)}: ${idlTypeToCode(arg.type)},`);
       }
       w.line(`  },`);
     }
@@ -166,21 +198,36 @@ export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
   return w.lines.join("\n");
 }
 
-function accountToConstraint(acc: IdlInstructionAccount, resolvedAccounts: Map<string, { name: string; fields: readonly IdlField[] }>): string {
+function accountToConstraint(acc: IdlInstructionAccount, resolvedAccounts: Map<string, { readonly exportName: string; readonly fields: readonly IdlField[] }>): string {
   if (acc.signer === true) return "bs.signer()";
 
-  const hasFields = resolvedAccounts.has(acc.name);
-  const accountRef = hasFields ? acc.name : "bs.account({})";
+  const resolved = resolveAccountDefinition(acc.name, resolvedAccounts);
+  const accountRef = resolved !== undefined && resolved.fields.length > 0 ? resolved.exportName : "bs.account({})";
 
   if (acc.writable === true) return `bs.mut(${accountRef})`;
   return accountRef;
 }
 
+function resolveAccountDefinition(
+  accountName: string,
+  resolvedAccounts: Map<string, { readonly exportName: string; readonly fields: readonly IdlField[] }>,
+): { readonly exportName: string; readonly fields: readonly IdlField[] } | undefined {
+  const exact = resolvedAccounts.get(accountName);
+  if (exact !== undefined) return exact;
+
+  const pascalName = toPascal(accountName);
+  for (const [idlName, account] of resolvedAccounts) {
+    if (idlName === pascalName || account.exportName === pascalName) return account;
+  }
+
+  return undefined;
+}
+
 function runParams(accounts: readonly IdlInstructionAccount[], args: readonly IdlField[]): string {
   const parts: string[] = [];
-  const accountNames = accounts.filter(a => a.optional !== true).map(a => a.name);
+  const accountNames = accounts.filter(a => a.optional !== true).map(a => toCamel(a.name));
   if (accountNames.length > 0) parts.push(`{ ${accountNames.join(", ")} }`);
-  const argNames = args.map(a => a.name);
+  const argNames = args.map(a => toCamel(a.name));
   if (argNames.length > 0) parts.push(`{ ${argNames.join(", ")} }`);
   parts.push("ctx");
   return parts.join(", ");

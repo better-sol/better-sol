@@ -68,16 +68,16 @@ The generated file is a normal Better Sol program definition. Here is a simplifi
 import { bs } from "better-sol/program"
 
 const StakePool = bs.account({
-  total_staked: bs.u64(),
-  rewards_per_token_stored: bs.u128(),
-  pending_rewards: bs.u64(),
+  totalStaked: bs.u64(),
+  rewardsPerTokenStored: bs.u128(),
+  pendingRewards: bs.u64(),
   initialized: bs.bool(),
   bump: bs.u8(),
 })
 
 const UserStake = bs.account({
   owner: bs.pubkey(),
-  staked_balance: bs.u64(),
+  stakedBalance: bs.u64(),
   bump: bs.u8(),
 })
 
@@ -93,26 +93,26 @@ export const staking = bs.program({
     Staked: {
       user: bs.pubkey(),
       amount: bs.u64(),
-      new_balance: bs.u64(),
+      newBalance: bs.u64(),
     },
   },
 }, ix => ({
   claim: ix({
     accounts: {
       user: bs.signer(),
-      stake_pool: bs.mut(bs.account({})),
-      user_stake: bs.mut(bs.account({})),
+      stakePool: bs.mut(StakePool),
+      userStake: bs.mut(UserStake),
     },
-    run: ({ user, stake_pool, user_stake }, ctx) => {},
+    run: ({ user, stakePool, userStake }, ctx) => {},
   }),
   stake: ix({
     accounts: {
       user: bs.signer(),
-      stake_pool: bs.mut(bs.account({})),
-      user_stake: bs.mut(bs.account({})),
+      stakePool: bs.mut(StakePool),
+      userStake: bs.mut(UserStake),
     },
     args: { amount: bs.u64() },
-    run: ({ user, stake_pool, user_stake }, { amount }, ctx) => {},
+    run: ({ user, stakePool, userStake }, { amount }, ctx) => {},
   }),
 }))
 ```
@@ -258,8 +258,8 @@ The most flexible option. You construct the program definition yourself using th
 import { bs } from "better-sol/program"
 
 const StakePool = bs.account({
-  total_staked: bs.u64(),
-  rewards_per_token_stored: bs.u128(),
+  totalStaked: bs.u64(),
+  rewardsPerTokenStored: bs.u128(),
   initialized: bs.bool(),
   bump: bs.u8(),
 })
@@ -276,10 +276,10 @@ export const staking = bs.program({
   stake: ix({
     accounts: {
       user: bs.signer(),
-      stake_pool: bs.mut(StakePool),
+      stakePool: bs.mut(StakePool),
     },
     args: { amount: bs.u64() },
-    run: ({ user, stake_pool }, { amount }, ctx) => {},
+    run: ({ user, stakePool }, { amount }, ctx) => {},
   }),
 }))
 ```
