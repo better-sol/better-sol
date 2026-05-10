@@ -21,12 +21,17 @@ import {
   calleeIsIdentifier,
   calleeMethod,
   getPropertyName,
+  getMemberPropertyName,
   getObjectProperty,
   getObjectPropertyString,
   getCallArgIdentifier,
   getCallArgStringLiteral,
   getCallArgText,
   nodeTextOf,
+  isMemberExpression,
+  isArrayExpression,
+  isSpreadElement,
+  isTemplateLiteral,
 } from "./node-helpers";
 
 import { paddingFor } from "#generator/layout";
@@ -123,13 +128,14 @@ function collectAccounts(source: string, program: Program, rawStructZCs: readonl
       if (firstArg === undefined || !isObjectExpression(firstArg)) continue;
 
       const fields = parseFields(source, firstArg);
-      const chainText = nodeTextOf(source, decl.init);
-      if (chainText.includes(".pda(")) throw new Error(".pda() was renamed to .derive(). Use .derive((seed) => ['literal', seed.fieldName]).");
-      if (chainText.includes(".seeds(")) throw new Error(".seeds() was removed. Use .derive((seed) => ['literal', seed.fieldName]).");
-      const zeroCopy = chainText.includes(".zeroCopy");
+
+      const zeroCopy = hasChainMethod(source, decl.init, "zeroCopy");
       if (zeroCopy) validateZeroCopyFields(name, fields, rawStructZCs);
-      const seeds = parseSeeds(chainText);
-      const hasOneFields = parseHasOneFields(chainText);
+
+      const deriveCall = findChainCall(source, decl.init, "derive");
+      const seeds = deriveCall !== undefined ? parseSeedsFromAst(source, deriveCall) : [];
+
+      const hasOneFields = parseHasOneFieldsFromAst(source, decl.init);
 
       accounts.push({ name, fields, zeroCopy, seeds, hasOneFields });
     }
@@ -295,6 +301,11 @@ function resolveConstraint(source: string, prop: Node, accountName: string, rawA
       return { kind: "realloc", accountName: getCallArgIdentifier(init, 0) ?? accountName, space: isNaN(reallocSpace) ? 0 : reallocSpace };
     }
     case "remaining": {
+      const argNode = init.arguments[0];
+      if (argNode !== undefined && isIdentifier(argNode)) {
+        if (argNode.name === "tokenAccount" || argNode.name.includes("TokenAccount") || argNode.name.includes("tokenAccount")) return { kind: "remaining", itemType: "tokenAccount" };
+        if (argNode.name === "signer" || argNode.name.includes("Signer")) return { kind: "remaining", itemType: "signer" };
+      }
       const argText = getCallArgText(source, init, 0) ?? "";
       if (argText.includes("tokenAccount")) return { kind: "remaining", itemType: "tokenAccount" };
       if (argText.includes("signer")) return { kind: "remaining", itemType: "signer" };
@@ -386,50 +397,81 @@ function tryResolvePrimitive(name: string): PrimitiveType | undefined {
   return valid.includes(name) ? name as PrimitiveType : undefined;
 }
 
-function parseSeeds(chainText: string): readonly IrSeed[] {
-  const args = extractPdaArgs(chainText);
-  if (args === undefined) return [];
+function hasChainMethod(source: string, node: Node, methodName: string): boolean {
+  return findChainCall(source, node, methodName) !== undefined;
+}
+
+function findChainCall(source: string, node: Node, methodName: string): CallExpression | undefined {
+  let current: Node | undefined = node;
+  while (current !== undefined) {
+    if (!isCallExpression(current)) break;
+    if (isMemberExpression(current.callee)) {
+      const name = getMemberPropertyName(source, current.callee);
+      if (name === methodName) return current;
+      current = current.callee.object;
+    } else {
+      break;
+    }
+  }
+  return undefined;
+}
+
+function parseSeedsFromAst(source: string, deriveCall: CallExpression): readonly IrSeed[] {
+  const firstArg = deriveCall.arguments[0];
+  if (firstArg === undefined || !isArrowFunctionExpression(firstArg)) return [];
+
+  const body = unwrapParenthesized(firstArg.body);
+  if (!isArrayExpression(body)) return [];
+
   const seeds: IrSeed[] = [];
-  const regex = /\b[A-Za-z_$][\w$]*\.([A-Za-z_$][\w$]*)|'([^']*)'|"([^"]*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(args)) !== null) {
-    const field = match[1];
-    const singleQuotedLiteral = match[2];
-    const doubleQuotedLiteral = match[3];
-    if (field !== undefined) seeds.push({ kind: "field", fieldName: field });
-    else if (singleQuotedLiteral !== undefined && singleQuotedLiteral !== "") seeds.push(parseLiteralSeed(singleQuotedLiteral));
-    else if (doubleQuotedLiteral !== undefined && doubleQuotedLiteral !== "") seeds.push(parseLiteralSeed(doubleQuotedLiteral));
+  for (const element of body.elements) {
+    if (element === undefined || element === null || isSpreadElement(element)) continue;
+    const seed = parseSingleSeed(source, element);
+    if (seed !== undefined) seeds.push(seed);
   }
   return seeds;
 }
 
+function parseSingleSeed(source: string, node: Node): IrSeed | undefined {
+  if (isStringLiteral(node)) {
+    return parseLiteralSeed(node.value);
+  }
+  if (isTemplateLiteral(node) && node.quasis.length === 1) {
+    const quasi = node.quasis[0];
+    if (quasi !== undefined) return parseLiteralSeed(quasi.value.cooked ?? quasi.value.raw);
+  }
+  if (isMemberExpression(node)) {
+    const property = getMemberPropertyName(source, node);
+    if (property !== undefined) return { kind: "field", fieldName: property };
+  }
+  if (isCallExpression(node) && isMemberExpression(node.callee)) {
+    const property = getMemberPropertyName(source, node.callee);
+    if (property !== undefined) return { kind: "field", fieldName: property };
+  }
+  return undefined;
+}
+
 function parseLiteralSeed(value: string): IrSeed {
-  if (/^\{[A-Za-z_$][\w$]*\}$/.test(value)) throw new Error(`Dynamic PDA seed template '${value}' is not supported. Store the value as an account field and reference it with seed.${value.slice(1, -1)}.`);
   return { kind: "literal", value };
 }
 
-function parseHasOneFields(chainText: string): readonly string[] {
+function parseHasOneFieldsFromAst(source: string, node: Node): readonly string[] {
   const fields: string[] = [];
-  const regex = /\.hasOne\(["']([^"']+)["']\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(chainText)) !== null) {
-    fields.push(match[1]!);
+  let current: Node | undefined = node;
+  while (current !== undefined) {
+    if (!isCallExpression(current)) break;
+    if (isMemberExpression(current.callee)) {
+      const methodName = getMemberPropertyName(source, current.callee);
+      if (methodName === "hasOne") {
+        const arg = current.arguments[0];
+        if (isStringLiteral(arg)) fields.push(arg.value);
+      }
+      current = current.callee.object;
+    } else {
+      break;
+    }
   }
   return fields;
-}
-
-function extractPdaArgs(chainText: string): string | undefined {
-  const start = chainText.indexOf(".derive(");
-  if (start === -1) return undefined;
-  const argsStart = start + ".derive(".length;
-  let depth = 1;
-  for (let index = argsStart; index < chainText.length; index += 1) {
-    const char = chainText[index];
-    if (char === "(") depth += 1;
-    else if (char === ")") depth -= 1;
-    if (depth === 0) return chainText.slice(argsStart, index);
-  }
-  return undefined;
 }
 
 function validateZeroCopyFields(accountName: string, fields: readonly IrAccountField[], structs: readonly IrStructZC[]): void {

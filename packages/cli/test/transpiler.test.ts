@@ -87,9 +87,12 @@ describe("AST parser", () => {
     expect(closeIx.accounts[0]!.constraint.kind).toBe("close");
   });
 
-  test("rejects dynamic string PDA seed templates", () => {
+  test("parses curly-brace string as literal seed", () => {
     const source = counterSource.replace('"counter", seed.authority', '"counter", "{authority}"');
-    expect(() => parseProgramsFromFile(source, "counter.ts")).toThrow("Dynamic PDA seed template");
+    const program = parseProgramsFromFile(source, "counter.ts")[0]!;
+    const seeds = program.accounts[0]!.seeds;
+    expect(seeds[0]).toEqual({ kind: "literal", value: "counter" });
+    expect(seeds[1]).toEqual({ kind: "literal", value: "{authority}" });
   });
 
   test("rejects account and arg name collisions", () => {

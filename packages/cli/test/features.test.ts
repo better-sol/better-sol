@@ -373,3 +373,163 @@ export const prog = bs.program({ name: 'prog', address: '11111111111111111111111
     expect(program.accounts[0]!.fields[0]!.type).toMatchObject({ kind: "array", inner: "u64", size: 4 });
   });
 });
+
+describe("parser robustness", () => {
+  test("parses .derive() with comments inside the seed array", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((seed) => [
+  // this is a comment
+  "counter",
+  seed.authority,
+])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    const seeds = program.accounts[0]!.seeds;
+    expect(seeds).toHaveLength(2);
+    expect(seeds[0]).toEqual({ kind: "literal", value: "counter" });
+    expect(seeds[1]).toEqual({ kind: "field", fieldName: "authority" });
+  });
+
+  test("parses .derive() with trailing comma after last seed", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((seed) => [
+  "counter",
+  seed.authority,
+])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    const seeds = program.accounts[0]!.seeds;
+    expect(seeds).toHaveLength(2);
+  });
+
+  test("parses .derive() with multi-line chain and prettier formatting", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs
+  .account({
+    count: bs.u64(),
+    authority: bs.pubkey(),
+  })
+  .derive((seed) => ["counter", seed.authority])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    const seeds = program.accounts[0]!.seeds;
+    expect(seeds).toHaveLength(2);
+    expect(seeds[0]).toEqual({ kind: "literal", value: "counter" });
+    expect(seeds[1]).toEqual({ kind: "field", fieldName: "authority" });
+  });
+
+  test("parses .derive() with double-quoted string seeds", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64() }).derive((seed) => ["counter"])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds).toEqual([{ kind: "literal", value: "counter" }]);
+  });
+
+  test("parses .derive() with single-quoted string seeds", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64() }).derive((seed) => ['counter'])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds).toEqual([{ kind: "literal", value: "counter" }]);
+  });
+
+  test("parses .zeroCopy() on account without string matching", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Inner = bs.struct({ value: bs.u64() })
+const Data = bs.account({ inner: Inner }).zeroCopy()
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.zeroCopy).toBe(true);
+  });
+
+  test("parses account with .derive() and .zeroCopy() chained in any order", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Inner = bs.struct({ value: bs.u64() })
+const Data = bs.account({ inner: Inner, owner: bs.pubkey() }).derive((s) => ["data", s.owner]).zeroCopy()
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.zeroCopy).toBe(true);
+    expect(program.accounts[0]!.seeds).toEqual([{ kind: "literal", value: "data" }, { kind: "field", fieldName: "owner" }]);
+  });
+
+  test("parses account with no .derive() as having no seeds", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64() })
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds).toEqual([]);
+  });
+
+  test("parses .derive() with field accessed via seed parameter alias", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((s) => ["counter", s.authority])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds[1]).toEqual({ kind: "field", fieldName: "authority" });
+  });
+
+  test("parses .derive() with multiple field and literal seeds", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Record = bs.account({ owner: bs.pubkey(), realm: bs.pubkey() }).derive((s) => ["record", s.realm, s.owner])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds).toEqual([
+      { kind: "literal", value: "record" },
+      { kind: "field", fieldName: "realm" },
+      { kind: "field", fieldName: "owner" },
+    ]);
+  });
+
+  test("parses .derive() with template literal seed (no interpolation)", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64() }).derive(() => [\`counter\`])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds).toEqual([{ kind: "literal", value: "counter" }]);
+  });
+
+  test("parses .derive() with seed.field called as method (e.g. seed.authority())", () => {
+    const source = `
+import { bs } from 'better-sol/program'
+const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() }).derive((s) => ["counter", s.authority()])
+export const prog = bs.program({ name: 'prog', address: '11111111111111111111111111111111' }, ix => ({
+  ping: ix({ accounts: { authority: bs.signer() }, run: () => {} })
+}))`;
+    const program = parseProgramsFromFile(source, "prog.ts")[0]!;
+    expect(program.accounts[0]!.seeds[1]).toEqual({ kind: "field", fieldName: "authority" });
+  });
+});
