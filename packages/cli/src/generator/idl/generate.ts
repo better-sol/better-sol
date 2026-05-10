@@ -1,6 +1,6 @@
 import { CodeWriter } from "#generator/code-writer";
 import { toCamel, toPascal } from "#lib/naming";
-import type { Idl, IdlField, IdlInstructionAccount, IdlInstructionAccountItem, IdlTypeDef, IdlTypeDefTyStruct } from "@coral-xyz/anchor/dist/esm/idl";
+import type { Idl, IdlField, IdlInstructionAccount, IdlInstructionAccountItem, IdlType, IdlTypeDef, IdlTypeDefTyStruct } from "@coral-xyz/anchor/dist/esm/idl";
 
 function flattenAccountItems(items: readonly IdlInstructionAccountItem[] | undefined): readonly IdlInstructionAccount[] {
   if (items === undefined) return [];
@@ -12,27 +12,13 @@ function flattenAccountItems(items: readonly IdlInstructionAccountItem[] | undef
   return result;
 }
 
-function idlTypeToCode(type: unknown): string {
-  if (typeof type === "string") {
-    if (type === "publicKey") return "bs.pubkey()";
-    return `bs.${type}()`;
-  }
-  if (typeof type !== "object" || type === null) return "bs.pubkey()";
-
-  const record = type as Record<string, unknown>;
-  const option = record.option;
-  if (option !== undefined) return `bs.optional(${idlTypeToCode(option)})`;
-
-  const coption = record.coption;
-  if (coption !== undefined) return `bs.optional(${idlTypeToCode(coption)})`;
-
-  const vec = record.vec;
-  if (vec !== undefined) return `bs.vector(${idlTypeToCode(vec)})`;
-
-  const array = record.array;
-  if (Array.isArray(array) && array.length === 2) return `bs.array(${idlTypeToCode(array[0])}, ${array[1]})`;
-
-  if (record.defined !== undefined) return "bs.pubkey()";
+function idlTypeToCode(type: IdlType): string {
+  if (typeof type === "string") return `bs.${type}()`;
+  if ("option" in type && type.option !== undefined) return `bs.optional(${idlTypeToCode(type.option)})`;
+  if ("coption" in type && type.coption !== undefined) return `bs.optional(${idlTypeToCode(type.coption)})`;
+  if ("vec" in type && type.vec !== undefined) return `bs.vector(${idlTypeToCode(type.vec)})`;
+  if ("array" in type && type.array !== undefined) return `bs.array(${idlTypeToCode(type.array[0])}, ${type.array[1]})`;
+  if ("defined" in type) return "bs.pubkey()";
   return "bs.pubkey()";
 }
 
@@ -57,37 +43,17 @@ function getStructFields(typeDef: IdlTypeDef | undefined): readonly IdlField[] {
   return fields as readonly IdlField[];
 }
 
-function getStructFieldsFromAccount(account: unknown): readonly IdlField[] {
-  if (typeof account !== "object" || account === null) return [];
-  const accountRecord = account as Record<string, unknown>;
-  const accountType = accountRecord.type;
-  if (typeof accountType !== "object" || accountType === null) return [];
-  const typeRecord = accountType as Record<string, unknown>;
-  if (typeRecord.kind !== "struct") return [];
-  const fields = typeRecord.fields;
-  if (!Array.isArray(fields)) return [];
-  return fields as readonly IdlField[];
-}
-
-function getIdlName(idl: Idl): string | undefined {
-  if (typeof idl.metadata?.name === "string") return idl.metadata.name;
-  const record = idl as Record<string, unknown>;
-  return typeof record.name === "string" ? record.name : undefined;
-}
-
 export function generateIdlProgram(idl: Idl, sourceLabel: string): string {
   const w = new CodeWriter();
-  const programName = toCamel(getIdlName(idl) ?? "unknown");
-  const programAddress = idl.address ?? "";
+  const programName = toCamel(idl.metadata.name);
+  const programAddress = idl.address;
   const typesByName = new Map<string, IdlTypeDef>();
   for (const t of idl.types ?? []) typesByName.set(t.name, t);
 
   const accountDefs = idl.accounts ?? [];
   const resolvedAccounts = new Map<string, { readonly exportName: string; readonly fields: readonly IdlField[] }>();
   for (const acc of accountDefs) {
-    const fromTypes = getStructFields(typesByName.get(acc.name));
-    const fromAccount = getStructFieldsFromAccount(acc);
-    const fields = fromTypes.length > 0 ? fromTypes : fromAccount;
+    const fields = getStructFields(typesByName.get(acc.name));
     resolvedAccounts.set(acc.name, { exportName: toPascal(acc.name), fields });
   }
 
