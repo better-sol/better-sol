@@ -59,11 +59,27 @@ npx @better-sol/cli@alpha deploy                   # compile and deploy to devne
 
 Your program is on-chain. Read the [full guide](https://better-sol.fun/docs).
 
+## Testing
+
+```ts
+import { createTestContext } from "@better-sol/test"
+import { counter } from "../programs/counter"
+
+const ctx = createTestContext({ programs: { counter } })
+const sol = ctx.client()
+
+await sol.counter.increment({ counter: addr, amount: 5n })
+const { count } = await sol.counter.accounts.Counter.fetch(addr)
+```
+
+No local validator. No CLI. Pure TypeScript tests that run in milliseconds.
+
 ## Packages
 
 | Package | What it does | Install |
 |---|---|---|
 | [better-sol](packages/better-sol) | Program definition DSL, typed client, token helpers, `fromIdl()` | `npm install better-sol@alpha` |
+| [@better-sol/test](packages/test) | Local test runner backed by LiteSVM | `npm install @better-sol/test@alpha` |
 | [@better-sol/cli](packages/cli) | Create, deploy, generate schemas, import external programs | runs via `npx`, no install needed |
 
 The runtime SDK contains no compiler or code generation logic. Nothing from the CLI ships to browser bundles.
@@ -74,7 +90,7 @@ The runtime SDK contains no compiler or code generation logic. Nothing from the 
 bun install
 bun run check        # type-check all packages
 bun run build        # build all packages
-bun run test         # run all tests (192 total: 105 SDK + 87 CLI)
+bun run test         # run all tests (134 total: 111 SDK + 23 test)
 bun run lint         # lint with oxlint
 ```
 
@@ -88,7 +104,12 @@ packages/
       client/        # betterSol(), typed client, transactions, tokens
       idl.ts         # fromIdl(), AnchorIdl type
       codec.ts       # Borsh encoder/decoder and discriminators
-    test/            # 105 tests (7 files)
+    test/            # 111 tests (7 files)
+
+  test/              # Testing SDK
+    src/
+      context.ts     # createTestContext, LiteSVM-backed VM
+    test/            # 23 tests (1 file)
 
   cli/               # CLI tool
     src/
@@ -96,7 +117,6 @@ packages/
       generator/     # Rust code generator + IDL code generator
       commands/      # init, create, deploy, generate, verify, login
       lib/           # shared config, auth, keypair, RPC helpers
-    test/            # 87 tests (5 files)
 
 apps/
   web/               # Documentation site (Fumadocs)
