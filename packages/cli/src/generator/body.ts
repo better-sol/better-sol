@@ -663,7 +663,7 @@ class BodyContext {
 
     if (property === "key" && baseType?.kind === "account") return this.renderAccountKey(baseType.symbol);
 
-    if (isCpiSol(base) && property === "timestamp") return "Clock::get()?.unix_timestamp";
+    if (isCpiSol(base) && property === "timestamp") return "(Clock::get()?.unix_timestamp as u64)";
 
     if (baseType?.kind === "account" && baseType.symbol.account.constraint.kind === "clock") {
       return `ctx.accounts.${baseType.symbol.rustName}.${toSnake(property)}`;
@@ -745,7 +745,7 @@ class BodyContext {
     if (isMemberExpression(expression)) {
       const method = memberPropertyName(expression);
       if (isCpiSol(expression.object) && method === "timestamp") {
-        return expectedType === "u64" ? "Clock::get()?.unix_timestamp as u64" : "Clock::get()?.unix_timestamp";
+        return "(Clock::get()?.unix_timestamp as u64)";
       }
       if (method === "abs") return this.coerceRendered(`${this.renderExpression(expression.object, "value")}.abs()`, this.inferExpressionType(expression.object), expectedType);
     }
@@ -1089,7 +1089,7 @@ class BodyContext {
     if (isCallExpression(node)) {
       const callee = node.callee;
       if (isMemberExpression(callee) && isCpiSol(callee.object) && isIdentifier(callee.property) && callee.property.name === "timestamp") {
-        return { kind: "value", type: "i64", zeroCopyBool: false };
+        return { kind: "value", type: "u64", zeroCopyBool: false };
       }
     }
     return undefined;
@@ -1211,7 +1211,7 @@ class BodyContext {
 
   private resolveAccountDef(account: IrInstructionAccount): IrAccount | undefined {
     const constraint = account.constraint;
-    const accountName = constraint.kind === "init" || constraint.kind === "mut" || constraint.kind === "close" || constraint.kind === "bare"
+    const accountName = constraint.kind === "init" || constraint.kind === "initIfNeeded" || constraint.kind === "mut" || constraint.kind === "close" || constraint.kind === "realloc" || constraint.kind === "bare"
       ? constraint.accountName
       : account.name;
     const normalized = accountName.toLowerCase();
