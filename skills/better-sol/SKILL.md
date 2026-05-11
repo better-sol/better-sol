@@ -36,6 +36,16 @@ Write programs, clients, tests, and deploy.
 Defaults:
 
 - Before making code changes, verify dependencies are installed. If `node_modules` is missing or dependencies are unavailable, run `bun install` first.
+- Always install the latest published versions of all Better Sol packages. Before running `bun add`, check the latest versions:
+  ```bash
+  npm view better-sol version && npm view @better-sol/test version && npm view @better-sol/cli version
+  ```
+  Then install with the exact latest versions:
+  ```bash
+  bun add better-sol@<version>
+  bun add -d @better-sol/test@<version>
+  ```
+  All three packages (`better-sol`, `@better-sol/test`, `@better-sol/cli`) must be the latest published versions. Version mismatches between `better-sol` and `@better-sol/test` cause TypeScript type resolution failures where every program namespace resolves to `never`. Never hardcode or assume a version number. Always check first.
 - After every code change to a Better Sol program, client, or test file, run the typechecker (`bunx tsc --noEmit` or the project's `check` script). Better Sol is fully type-safe and most mistakes surface as type errors. Catching them early prevents deploy-time transpiler failures that are harder to diagnose.
 - When starting a new project from an empty directory, load `references/project-scaffolding.md` and scaffold based on what the user is building: web dApp (Vite + React + Tailwind + `@anza-xyz/wallet-adapter`), mobile dApp (Expo), or backend-only (Better Sol init only). Do not skip the scaffolding step.
 - For wallet connection in web dApps, default to `@anza-xyz/wallet-adapter` (the official Solana Wallet Adapter). It auto-detects Phantom, Solflare, Backpack, and any wallet supporting the Solana Wallet Standard. Only use Reown, Privy, or Dynamic when the user explicitly asks for them.

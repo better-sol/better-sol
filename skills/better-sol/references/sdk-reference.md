@@ -445,6 +445,23 @@ export default defineConfig({
 | `npx @better-sol/cli@alpha generate idl <source>` | Generate typed Better Sol program from IDL file or on-chain program address | `--out <path>`, `--name <name>`, `--cluster <cluster>`, `--json` |
 | `npx @better-sol/cli@alpha verify [program]` | Submit a deployed program for OtterSec verified builds | `--program-id <id>`, `--lib-name <name>`, `--mount-path <path>`, `--json` |
 
+### Installing and updating
+
+All Better Sol packages must be the latest published versions. Check before installing:
+
+```bash
+npm view better-sol version && npm view @better-sol/test version && npm view @better-sol/cli version
+```
+
+Then install with the exact versions:
+
+```bash
+bun add better-sol@<version>
+bun add -d @better-sol/test@<version>
+```
+
+Never hardcode a version. Always check first. Mismatches between `better-sol` and `@better-sol/test` cause TypeScript errors where program namespaces resolve to `never`.
+
 ### Agent-friendly CLI flow
 
 Use the non-interactive flags in automation:

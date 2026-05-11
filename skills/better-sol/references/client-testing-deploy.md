@@ -190,6 +190,16 @@ sol.onTransaction((signature, status) => { /* listen for confirmed transactions 
 
 ### Setup
 
+Install the latest versions of `better-sol` and `@better-sol/test`. Both must be the latest published version to avoid type mismatches:
+
+```bash
+npm view better-sol version && npm view @better-sol/test version
+bun add better-sol@<version>
+bun add -d @better-sol/test@<version>
+```
+
+Then create a test context:
+
 ```ts
 import { createTestContext } from "@better-sol/test"
 import { counter } from "../programs/counter"
