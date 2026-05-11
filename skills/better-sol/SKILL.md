@@ -73,6 +73,7 @@ Gotchas:
 - `@better-sol/test` expects compiled binaries under `.better-sol/cache/<program>.so`.
 - Anchor clients depend on IDLs; Better Sol-native programs should not introduce an IDL as extra source of truth.
 - Browser code that imports `keypairFile` or `secretKey` is a security bug.
+- If the devnet airdrop fails during `deploy`, do not retry or loop. Direct the user to https://faucet.solana.com/ immediately with their wallet address and tell them to re-run the command after funding.
 
 Examples: `examples/counter.ts`, `examples/counter-client.ts`, `examples/counter.test.ts`, `examples/token-rewards.ts`, `examples/airdrop-claim.ts`, `examples/wallet-adapter-counter.tsx`, `examples/reown-counter.tsx`, `examples/privy-counter.tsx`, `examples/dynamic-counter.tsx`.
 
