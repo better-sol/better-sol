@@ -1,15 +1,11 @@
-const typeValue = Symbol("better-sol.typeValue");
-const typeKind = Symbol("better-sol.typeKind");
-const constraintValue = Symbol("better-sol.constraintValue");
-
 export type Address = string;
 export type PrimitiveKind = "u8" | "u16" | "u32" | "u64" | "u128" | "i8" | "i16" | "i32" | "i64" | "i128" | "f32" | "f64" | "bool" | "pubkey" | "string" | "bytes";
 export type TypeKind = PrimitiveKind | "option" | "vec" | "array" | "struct_zc_ref";
 
 export interface TypeToken<TValue, TKind extends TypeKind = TypeKind> {
   readonly kind: TKind;
-  readonly [typeValue]: TValue;
-  readonly [typeKind]: TKind;
+  readonly __typeValue__: TValue;
+  readonly __typeKind__: TKind;
 }
 
 export type InferType<TToken> = TToken extends TypeToken<infer TValue, TypeKind> ? TValue : never;
@@ -19,29 +15,31 @@ export type InferFields<TFields extends FieldSchema> = {
 };
 
 class PrimitiveToken<TValue, TKind extends PrimitiveKind> implements TypeToken<TValue, TKind> {
-  public declare readonly [typeValue]: TValue;
-  public declare readonly [typeKind]: TKind;
-  public constructor(public readonly kind: TKind) {}
+  public readonly __typeValue__: TValue = undefined as unknown as TValue;
+  public readonly __typeKind__: TKind;
+  public constructor(public readonly kind: TKind) {
+    this.__typeKind__ = kind;
+  }
 }
 
 class OptionToken<TInner extends TypeToken<unknown, TypeKind>> implements TypeToken<InferType<TInner> | null, "option"> {
   public readonly kind = "option";
-  public declare readonly [typeValue]: InferType<TInner> | null;
-  public declare readonly [typeKind]: "option";
+  public readonly __typeValue__: InferType<TInner> | null = null;
+  public readonly __typeKind__: "option" = "option";
   public constructor(public readonly inner: TInner) {}
 }
 
 class VecToken<TInner extends TypeToken<unknown, TypeKind>, TMax extends number> implements TypeToken<BoundedArray<InferType<TInner>>, "vec"> {
   public readonly kind = "vec";
-  public declare readonly [typeValue]: BoundedArray<InferType<TInner>>;
-  public declare readonly [typeKind]: "vec";
+  public readonly __typeValue__: BoundedArray<InferType<TInner>> = undefined as unknown as BoundedArray<InferType<TInner>>;
+  public readonly __typeKind__: "vec" = "vec";
   public constructor(public readonly inner: TInner, public readonly maxEntries: TMax) {}
 }
 
 class ArrayToken<TInner extends TypeToken<unknown, TypeKind>, TSize extends number> implements TypeToken<FixedArray<InferType<TInner>, TSize>, "array"> {
   public readonly kind = "array";
-  public declare readonly [typeValue]: FixedArray<InferType<TInner>, TSize>;
-  public declare readonly [typeKind]: "array";
+  public readonly __typeValue__: FixedArray<InferType<TInner>, TSize> = undefined as unknown as FixedArray<InferType<TInner>, TSize>;
+  public readonly __typeKind__: "array" = "array";
   public constructor(public readonly inner: TInner, public readonly size: TSize) {}
 }
 
@@ -122,8 +120,8 @@ type NormalizeSeeds<T extends readonly unknown[]> = { [I in keyof T]: NormalizeS
 
 export class StructZCDefinition<TFields extends FieldSchema> implements TypeToken<InferFields<TFields>, "struct_zc_ref"> {
   public readonly kind = "struct_zc_ref";
-  public declare readonly [typeValue]: InferFields<TFields>;
-  public declare readonly [typeKind]: "struct_zc_ref";
+  public readonly __typeValue__: InferFields<TFields> = undefined as unknown as InferFields<TFields>;
+  public readonly __typeKind__: "struct_zc_ref" = "struct_zc_ref";
   public constructor(public readonly fields: TFields) {}
 }
 
@@ -158,7 +156,7 @@ export type EventSchema = Readonly<Record<string, FieldSchema>>;
 type AccountConstraintKind = "init" | "initIfNeeded" | "mut" | "close" | "realloc" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";
 
 export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMutable extends boolean = false> {
-  public declare readonly [constraintValue]: TValue;
+  public readonly __constraintValue__: TValue = undefined as unknown as TValue;
   public constructor(
     public readonly constraintKind: TKind,
     public readonly mutable: TMutable,

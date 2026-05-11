@@ -1,6 +1,6 @@
 {
   "name": "@better-sol/test",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "description": "Blazing-fast local testing for Better Sol programs, powered by LiteSVM.",
   "license": "MIT",
   "type": "module",
@@ -43,10 +43,10 @@
   "dependencies": {
     "@solana/kit": "^6.8.0",
     "@solana/kit-plugin-litesvm": "^0.10.0",
-    "better-sol": "workspace:*",
     "litesvm": "^1.0.0"
   },
   "peerDependencies": {
+    "better-sol": ">=0.1.0-alpha.1",
     "typescript": ">=5.0.0"
   },
   "peerDependenciesMeta": {
