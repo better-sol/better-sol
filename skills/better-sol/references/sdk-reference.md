@@ -182,6 +182,7 @@ ix({
 
 1. **accounts**: destructured object. Each key matches an `accounts` entry. Value type depends on the constraint:
    - `bs.init(Counter)` → `Counter & { key: Address }` (includes `.key`)
+   - `bs.initIfNeeded(Counter)` → `Counter & { key: Address }`
    - `bs.mut(Counter)` → `Counter & { key: Address }`
    - `bs.signer()` → `Address` (just the public key string)
    - `bs.mint()` → `{ key: Address, supply: bigint, decimals: number, mintAuthority: Address | null, freezeAuthority: Address | null }`
@@ -190,7 +191,9 @@ ix({
    - `bs.systemProgram()` → `{ key: Address }`
    - `bs.clock()` → `{ unixTimestamp: bigint, slot: bigint, epoch: bigint }`
 
-2. **args**: destructured object matching the `args` schema, or `{}` if no args.
+   You can also use an undeclared parameter object and access accounts by name: `accounts.counter.count`. The transpiler recognizes `accounts`/`accs` by convention and resolves property access through the instruction's declared accounts.
+
+2. **args**: destructured object matching the `args` schema, or `{}` if no args. Like accounts, you can use an undeclared parameter object: `args.amount`.
 
 3. **ctx**: `InstructionContext` with:
    - `ctx.require(condition: boolean, errorName: string): void` - assert a condition, fail with named error

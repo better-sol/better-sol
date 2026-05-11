@@ -22,9 +22,15 @@ export function isCpiSol(node: Node): boolean {
   return isIdentifier(node.object) && node.object.name === "cpi" && isIdentifier(node.property) && node.property.name === "sol";
 }
 
-export function parseBodyStatements(body: string): { readonly statements: readonly Node[]; readonly source: string } {
+export type ParsedBody = {
+  readonly statements: readonly Node[];
+  readonly params: readonly Node[];
+  readonly source: string;
+};
+
+export function parseBodyStatements(body: string): ParsedBody {
   const trimmed = body.trim();
-  if (trimmed.length === 0) return { statements: [], source: "" };
+  if (trimmed.length === 0) return { statements: [], params: [], source: "" };
   const wrappedSource = `const __run = ${trimmed};`;
   const result = parseSync("body.ts", wrappedSource, {
     lang: "ts",
@@ -39,11 +45,11 @@ export function parseBodyStatements(body: string): { readonly statements: readon
   }
 
   const stmt = result.program.body[0];
-  if (stmt === undefined || stmt.type !== "VariableDeclaration") return { statements: [], source: wrappedSource };
+  if (stmt === undefined || stmt.type !== "VariableDeclaration") return { statements: [], params: [], source: wrappedSource };
   const declarator = stmt.declarations[0];
-  if (declarator === undefined || declarator.init === null || declarator.init === undefined) return { statements: [], source: wrappedSource };
-  if (declarator.init.type !== "ArrowFunctionExpression") return { statements: [], source: wrappedSource };
+  if (declarator === undefined || declarator.init === null || declarator.init === undefined) return { statements: [], params: [], source: wrappedSource };
+  if (declarator.init.type !== "ArrowFunctionExpression") return { statements: [], params: [], source: wrappedSource };
   const arrowBody = declarator.init.body;
-  if (arrowBody.type === "BlockStatement") return { statements: arrowBody.body, source: wrappedSource };
-  return { statements: [], source: wrappedSource };
+  const statements = arrowBody.type === "BlockStatement" ? arrowBody.body : [];
+  return { statements, params: declarator.init.params, source: wrappedSource };
 }

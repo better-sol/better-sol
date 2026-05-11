@@ -59,6 +59,28 @@ await sol.counter.increment({
 })
 ```
 
+### Undeclared run parameters
+
+You can also write the `run` callback without destructuring. Use the same parameter names as the program declaration and access fields through dot notation:
+
+```ts
+run: (accounts, args, ctx) => {
+  ctx.require(args.amount > 0n, "InvalidAmount")
+  accounts.counter.count += args.amount
+}
+```
+
+Or mix destructured and undeclared parameters:
+
+```ts
+run: ({ counter, authority }, args, ctx) => {
+  ctx.require(authority === counter.authority, "Unauthorized")
+  counter.count += args.amount
+}
+```
+
+The transpiler recognizes common naming conventions: `accounts`/`accs` for the first object, `args`/`arguments` for the second, and `ctx`/`context` for the third. Any parameter name works.
+
 ### Accounts only
 
 When the instruction operates on accounts but needs no user-supplied arguments:

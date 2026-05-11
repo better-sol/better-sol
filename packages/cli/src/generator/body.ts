@@ -105,6 +105,10 @@ type InferredType = {
   readonly symbol: SymbolInfo & { readonly kind: "account" };
 } | {
   readonly kind: "remaining";
+} | {
+  readonly kind: "accountObject";
+} | {
+  readonly kind: "argsObject";
 };
 
 type ExpressionMode = "value" | "condition" | "pubkey";
@@ -118,7 +122,7 @@ type CpiCall = {
   readonly accounts: readonly CpiAccountField[];
   readonly amount: Node;
   readonly decimals: Node | undefined;
-  readonly authority: string;
+  readonly authority: Node;
 };
 
 type CpiAccountField = {
@@ -127,8 +131,8 @@ type CpiAccountField = {
 };
 
 export function transpileBody(ix: IrInstruction, program: IrProgram): string {
-  const { statements, source } = parseBodyStatements(ix.body);
-  const context = new BodyContext(ix, program, statements, source);
+  const { statements, params, source } = parseBodyStatements(ix.body);
+  const context = new BodyContext(ix, program, statements, params, source);
   return context.transpile();
 }
 
@@ -145,14 +149,22 @@ class BodyContext {
   private cpiIndex = 0;
   private remainingWriteIndex = 0;
 
+  private readonly accountObjectAlias: string | undefined;
+  private readonly argsObjectAlias: string | undefined;
+  private readonly contextObjectAlias: string | undefined;
   private readonly source: string;
 
   constructor(
     private readonly ix: IrInstruction,
     private readonly program: IrProgram,
     private readonly statements: readonly Node[],
+    params: readonly Node[],
     source: string,
   ) {
+    const aliases = resolveRunParamAliases(ix, params);
+    this.accountObjectAlias = aliases.accountObjectAlias;
+    this.argsObjectAlias = aliases.argsObjectAlias;
+    this.contextObjectAlias = aliases.contextObjectAlias;
     this.source = source;
     for (const account of ix.accounts) {
       this.symbols.set(account.name, {
@@ -214,6 +226,11 @@ class BodyContext {
         }
       }
 
+      if (isMemberExpression(node) && isIdentifier(node.object) && node.object.name === this.accountObjectAlias) {
+        const accountName = memberPropertyName(node);
+        if (this.ix.accounts.some((account) => account.name === accountName)) this.referencedAccounts.add(accountName);
+      }
+
       if (isIdentifier(node)) {
         const symbol = this.symbols.get(node.name);
         if (symbol?.kind === "account" && !this.isPropertyName(node)) {
@@ -242,6 +259,10 @@ class BodyContext {
     if (isIdentifier(node) && !this.isPropertyName(node)) {
       const symbol = this.symbols.get(node.name);
       if (symbol?.kind === "account") this.mutatedAccounts.add(symbol.sourceName);
+    }
+    if (isMemberExpression(node) && isIdentifier(node.object) && node.object.name === this.accountObjectAlias) {
+      const accountName = memberPropertyName(node);
+      if (this.ix.accounts.some((a) => a.name === accountName)) this.mutatedAccounts.add(accountName);
     }
     for (const child of childrenOf(node)) this.collectMutatedAccounts(child);
   }
@@ -534,7 +555,7 @@ class BodyContext {
   private tryRenderRequire(expression: CallExpression): string | undefined {
     const callee = expression.callee;
     if (!isMemberExpression(callee)) return undefined;
-    if (!isIdentifier(callee.object) || callee.object.name !== "ctx") return undefined;
+    if (!isIdentifier(callee.object) || !this.isContextAlias(callee.object.name)) return undefined;
     if (!isIdentifier(callee.property) || callee.property.name !== "require") return undefined;
     const args = expression.arguments;
     const condition = args[0];
@@ -549,7 +570,7 @@ class BodyContext {
     const callee = expression.callee;
     const args = expression.arguments;
 
-    if (isMemberExpression(callee) && isIdentifier(callee.object) && callee.object.name === "ctx" && isIdentifier(callee.property) && callee.property.name === "emit") {
+    if (isMemberExpression(callee) && isIdentifier(callee.object) && this.isContextAlias(callee.object.name) && isIdentifier(callee.property) && callee.property.name === "emit") {
       const eventName = args[0];
       const payload = args[1];
       if (eventName === undefined || payload === undefined || !isStringLiteral(eventName) || !isObjectExpression(payload)) return undefined;
@@ -565,7 +586,7 @@ class BodyContext {
   private tryRenderLog(expression: CallExpression): string | undefined {
     const callee = expression.callee;
     if (!isMemberExpression(callee)) return undefined;
-    if (!isIdentifier(callee.object) || callee.object.name !== "ctx") return undefined;
+    if (!isIdentifier(callee.object) || !this.isContextAlias(callee.object.name)) return undefined;
     if (!isIdentifier(callee.property) || callee.property.name !== "log") return undefined;
     const args = expression.arguments;
     const message = args[0];
@@ -635,6 +656,9 @@ class BodyContext {
     const property = memberPropertyName(node);
     const baseType = this.inferExpressionType(base);
 
+    if (baseType?.kind === "accountObject") return this.renderObjectAliasProperty("accounts", property, mode, expectedType, node);
+    if (baseType?.kind === "argsObject") return this.renderObjectAliasProperty("args", property, mode, expectedType, node);
+
     if (property === "length" && baseType?.kind === "remaining") return "ctx.remaining_accounts.len() as u64";
 
     if (property === "key" && baseType?.kind === "account") return this.renderAccountKey(baseType.symbol);
@@ -654,6 +678,24 @@ class BodyContext {
     if (mode === "condition" && this.isZeroCopyBoolField(baseType, property)) return `${value} != 0`;
     if (expectedType === "pubkey" && inferred?.kind === "account") return `${value}.key()`;
     return this.coerceRendered(value, inferred, expectedType);
+  }
+
+  private isContextAlias(name: string): boolean {
+    return name === "ctx" || name === this.contextObjectAlias;
+  }
+
+  private renderObjectAliasProperty(kind: "accounts" | "args", property: string, mode: ExpressionMode, expectedType: IrType | undefined, node: Node): string {
+    if (kind === "accounts") {
+      if (!this.ix.accounts.some((account) => account.name === property)) {
+        this.unsupported(`unknown account alias property '${property}'`, node, `Use one of: ${this.ix.accounts.map((account) => account.name).join(", ") || "none"}.`);
+      }
+      return this.renderIdentifier(property, mode, expectedType);
+    }
+
+    if (!this.ix.args.some((arg) => arg.name === property)) {
+      this.unsupported(`unknown args alias property '${property}'`, node, `Use one of: ${this.ix.args.map((arg) => arg.name).join(", ") || "none"}.`);
+    }
+    return this.renderIdentifier(property, mode, expectedType);
   }
 
   private renderBinaryExpression(node: BinaryExpression | LogicalExpression, mode: ExpressionMode, expectedType?: IrType): string {
@@ -797,7 +839,7 @@ class BodyContext {
         accounts: [{ name: "from", expression: from }, { name: "to", expression: to }, { name: "authority", expression: authority }],
         amount,
         decimals: undefined,
-        authority: nodeTextOf(this.source, authority),
+        authority,
       };
     }
 
@@ -815,7 +857,7 @@ class BodyContext {
         accounts: [{ name: "from", expression: from }, { name: "mint", expression: mint }, { name: "to", expression: to }, { name: "authority", expression: authority }],
         amount,
         decimals,
-        authority: nodeTextOf(this.source, authority),
+        authority,
       };
     }
 
@@ -831,7 +873,7 @@ class BodyContext {
         accounts: [{ name: "mint", expression: mint }, { name: "to", expression: to }, { name: "authority", expression: authority }],
         amount,
         decimals: undefined,
-        authority: nodeTextOf(this.source, authority),
+        authority,
       };
     }
 
@@ -847,7 +889,7 @@ class BodyContext {
         accounts: [{ name: "mint", expression: mint }, { name: "from", expression: from }, { name: "authority", expression: authority }],
         amount,
         decimals: undefined,
-        authority: nodeTextOf(this.source, authority),
+        authority,
       };
     }
 
@@ -855,9 +897,9 @@ class BodyContext {
   }
 
   private renderCpiCall(cpi: CpiCall): readonly string[] {
-    const authority = this.symbols.get(cpi.authority);
-    const signerSeedAccount = authority?.kind === "account" && authority.account.constraint.kind !== "signer"
-      ? authority
+    const authority = this.inferExpressionType(cpi.authority);
+    const signerSeedAccount = authority?.kind === "account" && authority.symbol.account.constraint.kind !== "signer"
+      ? authority.symbol
       : undefined;
     const index = this.cpiIndex++;
     const programAccount = cpi.moduleName === "token_interface" ? "token2022Program" : "tokenProgram";
@@ -869,7 +911,7 @@ class BodyContext {
       signerSeedAccount === undefined
         ? `${callIndent}    CpiContext::new(`
         : `${callIndent}    CpiContext::new_with_signer(`,
-      `${callIndent}        ctx.accounts.${programRustName}.key(),`,
+      `${callIndent}        ctx.accounts.${programRustName}.to_account_info(),`,
       `${callIndent}        ${cpi.accountsType} {`,
       ...accountFields,
       `${callIndent}        },`,
@@ -922,6 +964,12 @@ class BodyContext {
       const symbol = this.symbols.get(expression.name);
       if (symbol?.kind === "account" && symbol.accountDef?.zeroCopy === true) return `ctx.accounts.${symbol.rustName}.to_account_info()`;
       if (symbol !== undefined) return `${symbol.rustName}.to_account_info()`;
+    }
+    const baseType = this.inferExpressionType(expression);
+    if (baseType?.kind === "account") {
+      const symbol = baseType.symbol;
+      if (symbol.accountDef?.zeroCopy === true) return `ctx.accounts.${symbol.rustName}.to_account_info()`;
+      return `${symbol.rustName}.to_account_info()`;
     }
     return `${this.renderExpression(expression, "value")}.to_account_info()`;
   }
@@ -1012,6 +1060,8 @@ class BodyContext {
     if (isParenthesizedExpression(node)) return this.inferExpressionType(node.expression);
     if (isTSNonNullExpression(node)) return this.inferExpressionType(node.expression);
     if (isIdentifier(node)) {
+      if (this.accountObjectAlias !== undefined && node.name === this.accountObjectAlias) return { kind: "accountObject" };
+      if (this.argsObjectAlias !== undefined && node.name === this.argsObjectAlias) return { kind: "argsObject" };
       const symbol = this.symbols.get(node.name);
       if (symbol?.kind === "account" && symbol.account.constraint.kind === "remaining") return { kind: "remaining" };
       if (symbol?.kind === "account") return { kind: "account", symbol };
@@ -1046,6 +1096,17 @@ class BodyContext {
   }
 
   private inferPropertyType(baseType: InferredType | undefined, property: string): InferredType | undefined {
+    if (baseType?.kind === "accountObject") {
+      const accountName = property;
+      const symbol = this.symbols.get(accountName);
+      if (symbol?.kind === "account") return { kind: "account", symbol };
+      return undefined;
+    }
+    if (baseType?.kind === "argsObject") {
+      const arg = this.ix.args.find((candidate) => candidate.name === property);
+      if (arg !== undefined) return { kind: "value", type: arg.type, zeroCopyBool: false };
+      return undefined;
+    }
     if (baseType?.kind === "remaining" && property === "length") return { kind: "value", type: "u64", zeroCopyBool: false };
     if (baseType?.kind === "account") {
       if (property === "key") return { kind: "value", type: "pubkey", zeroCopyBool: false };
@@ -1074,6 +1135,8 @@ class BodyContext {
   private inferMintProperty(property: string): InferredType | undefined {
     if (property === "key") return { kind: "value", type: "pubkey", zeroCopyBool: false };
     if (property === "decimals") return { kind: "value", type: "u8", zeroCopyBool: false };
+    if (property === "supply") return { kind: "value", type: "u64", zeroCopyBool: false };
+    if (property === "mintAuthority" || property === "freezeAuthority") return { kind: "value", type: "pubkey", zeroCopyBool: false };
     return undefined;
   }
 
@@ -1167,6 +1230,7 @@ class BodyContext {
   }
 
   private assertKnownProperty(baseType: InferredType | undefined, property: string, node: Node): void {
+    if (baseType?.kind === "accountObject" || baseType?.kind === "argsObject") return;
     if (baseType?.kind !== "account") return;
     const constraint = baseType.symbol.account.constraint.kind;
     if (constraint === "tokenAccount" || constraint === "mint" || constraint === "clock") return;
@@ -1235,4 +1299,75 @@ function childrenOf(node: Node): readonly Node[] {
 
 function isNodeLike(value: unknown): value is Node {
   return typeof value === "object" && value !== null && "type" in value && "start" in value && "end" in value;
+}
+
+type ResolvedAliases = {
+  readonly accountObjectAlias: string | undefined;
+  readonly argsObjectAlias: string | undefined;
+  readonly contextObjectAlias: string | undefined;
+};
+
+function resolveRunParamAliases(ix: IrInstruction, params: readonly Node[]): ResolvedAliases {
+  if (params.length === 0) return { accountObjectAlias: undefined, argsObjectAlias: undefined, contextObjectAlias: undefined };
+
+  const accountNames = new Set(ix.accounts.map((a) => a.name));
+  const argNames = new Set(ix.args.map((a) => a.name));
+
+  let hasAccountDestructuring = false;
+  let hasArgsDestructuring = false;
+
+  for (const param of params) {
+    if (param.type !== "ObjectPattern") continue;
+    const keys = param.properties
+      .filter((p): p is Extract<typeof p, { readonly type: "Property" }> => p.type === "Property" && isIdentifier(p.value))
+      .map((p) => (p.value as { readonly name: string }).name);
+    if (keys.length === 0) continue;
+    if (keys.every((k) => accountNames.has(k))) hasAccountDestructuring = true;
+    if (keys.every((k) => argNames.has(k))) hasArgsDestructuring = true;
+  }
+
+  const identifiers = params
+    .filter((p): p is Extract<typeof p, { readonly type: "Identifier" }> => p.type === "Identifier")
+    .map((p) => p.name);
+
+  let accountObjectAlias: string | undefined;
+  let argsObjectAlias: string | undefined;
+  let contextObjectAlias: string | undefined;
+
+  for (const name of identifiers) {
+    const isContextLike = name === "ctx" || name === "context" || name === "_";
+    const isArgsLike = name === "args" || name === "arguments";
+    const isAccountsLike = name === "accounts" || name === "accs";
+
+    if (isContextLike) {
+      contextObjectAlias = name;
+      continue;
+    }
+
+    if (isArgsLike && !hasArgsDestructuring) {
+      argsObjectAlias = name;
+      continue;
+    }
+
+    if (isAccountsLike && !hasAccountDestructuring) {
+      accountObjectAlias = name;
+      continue;
+    }
+
+    if (!hasArgsDestructuring && argsObjectAlias === undefined && !isAccountsLike) {
+      argsObjectAlias = name;
+      continue;
+    }
+
+    if (!hasAccountDestructuring && accountObjectAlias === undefined && !isArgsLike) {
+      accountObjectAlias = name;
+      continue;
+    }
+
+    if (contextObjectAlias === undefined) {
+      contextObjectAlias = name;
+    }
+  }
+
+  return { accountObjectAlias, argsObjectAlias, contextObjectAlias };
 }

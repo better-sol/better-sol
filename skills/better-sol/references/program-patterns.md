@@ -130,6 +130,30 @@ run: ({ counter, authority }, { amount }, ctx) => {
 
 The error name must match a key in the program's `errors` map. If the condition is false, the transaction fails with that named error.
 
+### Undeclared run parameters
+
+The `run` callback can also receive undeclared parameter objects instead of destructured fields. This is useful in longer instructions where destructuring every account and argument at the top adds noise:
+
+```ts
+run: (accounts, args, ctx) => {
+  const now = cpi.sol.timestamp()
+  ctx.require(args.amount > 0n, "InvalidAmount")
+  ctx.require(accounts.vault.authority === accounts.authority, "Unauthorized")
+  accounts.vault.totalDeposited += args.amount
+}
+```
+
+Or mix destructured and undeclared parameters:
+
+```ts
+run: ({ vault, authority }, args, ctx) => {
+  ctx.require(vault.authority === authority, "Unauthorized")
+  vault.totalDeposited += args.amount
+}
+```
+
+The transpiler recognizes `accounts`/`accs`, `args`/`arguments`, and `ctx`/`context` by convention. Object destructuring patterns for the accounts and args positions are also recognized.
+
 ### Events with ctx.emit
 
 ```ts
