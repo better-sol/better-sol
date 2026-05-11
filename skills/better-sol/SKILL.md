@@ -29,11 +29,13 @@ Write programs, clients, tests, and deploy.
 | dApp layers, wallet/RPC patterns, transaction construction | `references/web3-dapp-architecture.md` |
 | Wallet options: Solana Wallet Adapter, Reown, Privy, Dynamic | `references/wallet-connection.md` |
 | Compute budget, ALTs, compression, Token-2022 internals | `references/advanced-solana.md` |
+| Official low-level Solana SDK fallback when Better Sol does not expose a primitive | `references/solana-kit-reference.md` |
 
 Defaults:
 
 - Before making code changes, verify dependencies are installed. If `node_modules` is missing or dependencies are unavailable, run `bun install` first.
 - Use Better Sol for new custom Solana program work unless the user explicitly asks for Anchor/Rust.
+- When Better Sol does not expose a required low-level primitive, compose with `@solana/kit` rather than inventing unsupported Better Sol APIs.
 - Use integration-only when the product only needs swaps, lending, portfolio reads, payments, or dashboards against existing protocols.
 - Use `bun` and `bunx` unless the user specifies another package manager.
 - Keep keypair files and raw secret keys out of browser/mobile code; use wallet signer scoping.
@@ -50,6 +52,7 @@ When creating a program:
 
 Gotchas:
 
+- Do not guess Better Sol APIs. If an operation is not in `sdk-reference.md`, check `solana-kit-reference.md` and compose with official `@solana/kit` primitives.
 - `ctx.require()` error names must exist in the program `errors` map.
 - PDA seed logic belongs in `.derive(...)`; app code should call typed `.derive(...)` helpers.
 - `@better-sol/test` expects compiled binaries under `.better-sol/cache/<program>.so`.
