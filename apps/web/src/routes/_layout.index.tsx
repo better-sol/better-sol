@@ -427,7 +427,7 @@ function Home() {
         </div>
 
         <div className="mt-6 md:mt-8 flex flex-col sm:flex-row justify-start items-center gap-2">
-          <Link to="/superskill">
+          <Link to="/docs/$" params={{ _splat: "agent-skill" }}>
             <Button>
               See what's included <SolarArrowRightLineDuotone />
             </Button>

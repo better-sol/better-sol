@@ -1,0 +1,201 @@
+---
+title: Agent Skill
+description: Give your AI agent deep knowledge of the Better Sol SDK, Solana architecture, security, DeFi, and more.
+---
+
+Better Sol ships an [Agent Skill](https://agentskills.io): a self-contained folder your AI agent loads to understand the full SDK, Solana architecture, security patterns, DeFi, tokens, NFTs, DAOs, cross-chain design, frontend craft, tokenomics, and product strategy.
+
+It works with Claude Code, Cursor, GitHub Copilot, Windsurf, Cline, and 40+ other Agent Skills-compatible clients. Once installed, your agent can write programs, build clients, write tests, review security, design frontends, and help with product strategy without you pasting documentation into the chat.
+
+## Install
+
+```bash
+npx skills add powxenv/better-sol@better-sol --yes
+```
+
+This drops a `better-sol/` folder into your project's skill directory. No build step, no dependencies, no config. The agent reads the files directly.
+
+## What happens after install
+
+Your agent now has access to 51 reference files and 10 code examples covering the full lifecycle of building on Solana. The skill's `SKILL.md` file acts as a router: it reads your prompt, decides what kind of task you are doing, and loads only the relevant references into the agent's context window.
+
+The routing is based on six modes: Build, Learn, Domain, Secure, Design, and Launch. Most conversations activate one or two modes. Complex projects can span all of them.
+
+## The six modes
+
+### Build
+
+For writing programs, clients, tests, and deploying. This is the default mode when you ask the agent to write, modify, or debug Better Sol code.
+
+References cover the program DSL (`bs.account`, `bs.program`, `ix()`), typed client methods (`betterSol()`, `.derive()`, `.fetch()`), LiteSVM testing with `@better-sol/test`, IDL import for external Anchor programs, transaction construction, wallet connection, and advanced Solana topics like compute budgets and address lookup tables.
+
+Try asking:
+
+```
+Write a program where users can stake tokens and earn rewards over time
+```
+
+```
+My deploy fails with "account already in use". Help me debug it.
+```
+
+```
+Write LiteSVM tests for my airdrop claim program
+```
+
+### Learn
+
+For understanding Solana, web3, or the Better Sol SDK itself. Activates when you ask "how does X work" or "teach me about Y".
+
+References include structured learning tracks adapted to your background (frontend dev, EVM dev, Rust dev, or complete beginner), Solana fundamentals like accounts, programs, PDAs, and CPIs, and web3 fundamentals like consensus mechanisms and execution environments.
+
+Try asking:
+
+```
+I'm coming from Ethereum. How do Solana accounts differ from contract storage?
+```
+
+```
+Explain PDA derivation with a concrete example
+```
+
+```
+What is the difference between SPL Token and Token-2022?
+```
+
+### Domain
+
+For choosing architecture before writing code in a specific area like DeFi, tokens, NFTs, or DAOs. Activates when you describe a product idea or ask "how should I build X".
+
+This is the largest mode with 11 references. It covers DeFi patterns (AMMs, lending, vaults, staking, perps), token operations (SPL Token, Token-2022, airdrops), NFTs with Metaplex and compressed NFTs, DAO governance, oracle integration, cross-chain bridge patterns, stablecoins, data pipelines, mobile dApps, and sybil resistance.
+
+Each reference starts with a decision framework: whether to build a custom program, integrate an existing protocol, or use a hybrid approach. The goal is to help you and the agent make good architecture choices before writing code.
+
+Try asking:
+
+```
+I want to build a vault where users deposit SOL and earn yield from lending protocols
+```
+
+```
+Compare Pyth and Switchboard for a perps protocol price feed
+```
+
+```
+How should I handle cross-chain swaps between Solana and Ethereum?
+```
+
+### Secure
+
+For reviewing code with evidence-backed findings. Activates when you ask the agent to audit, review, or threat-model your program.
+
+References cover a security checklist, a catalog of known Solana attack classes, cross-chain attack patterns, economic security and game theory, STRIDE threat modeling, severity calibration, and exploit regression test design. Every finding is expected to include the file, the vulnerable condition, the impact, the exact fix, and a validation test.
+
+Try asking:
+
+```
+Review my token rewards program for security issues
+```
+
+```
+What attack vectors should I worry about for my escrow program?
+```
+
+```
+Write regression tests for the reinitialization attack on my claim contract
+```
+
+### Design
+
+For building crypto frontends that make risk, state, and value legible. Activates when you ask about UI, UX, wallet connection, or visual design.
+
+References cover brand systems, transaction UX (signing states, previews, error copy), multi-chain UI patterns, dApp state management with caching and optimistic updates, number formatting for token amounts and prices, accessibility checks, motion and animation, and video craft for pitch decks.
+
+Try asking:
+
+```
+Design a transaction preview card that shows the user exactly what will happen before they sign
+```
+
+```
+Set up wallet connection with Solana Wallet Adapter in my Next.js app
+```
+
+```
+How should I format token amounts in the UI without hiding tiny non-zero values?
+```
+
+### Launch
+
+For product strategy, tokenomics, pitch decks, and go-to-market. Activates when you ask about validating an idea, designing a token, preparing a pitch, or planning a launch.
+
+References cover strategy and validation, idea generation, tokenomics (utility types, supply mechanics, fee models, unlock schedules), evaluation frameworks, DeFi market research with DefiLlama, product review, pitch deck structure, grant applications, marketing, and go-to-market planning.
+
+Try asking:
+
+```
+Help me design a token that coordinates staking behavior without being a security risk
+```
+
+```
+Review my pitch deck structure for a DAO treasury management tool
+```
+
+```
+Research which DeFi protocols are growing fast and where the gaps are
+```
+
+## How it works under the hood
+
+The skill is one folder with this structure:
+
+```
+better-sol/
+  SKILL.md           (routing file, 181 lines)
+  references/        (51 files, one topic each)
+  examples/          (10 files, working code)
+```
+
+`SKILL.md` is the entry point. It contains a table for each mode that maps common tasks to reference files. Your agent reads this file first, then loads the specific references your task requires. This keeps the context window focused instead of loading all 63,000 words at once.
+
+Every reference file follows the same structure: a description of when to use it, concrete tools and libraries with package names, analysis and decision frameworks, code examples, and a "Related" section linking to other references for deeper dives.
+
+## The code examples
+
+The skill ships 10 working examples that the agent can reference directly:
+
+- `counter.ts` and `counter-client.ts`: basic program definition and client usage
+- `counter.test.ts`: LiteSVM test setup with authority checks and exploit regression
+- `token-rewards.ts`: token CPI patterns for reward distribution
+- `wallet-adapter-counter.tsx`, `reown-counter.tsx`, `privy-counter.tsx`, `dynamic-counter.tsx`: wallet connection patterns for four different wallet providers
+- `airdrop-claim.ts`: claim and distribution flow with duplicate-claim prevention
+
+These are not toy examples. They demonstrate real patterns: `ctx.require()` for authorization, `ctx.as(attacker)` for security tests, `.derive()` for PDA derivation, and wallet signer scoping for different provider types.
+
+## Using multiple modes
+
+Most real tasks span more than one mode. A typical project flows through them in order:
+
+1. **Learn** to understand the domain.
+2. **Domain** to choose architecture and define invariants.
+3. **Build** to implement programs, clients, and tests.
+4. **Design** to build the frontend.
+5. **Secure** to review before deploying.
+6. **Launch** to validate, pitch, and ship.
+
+Not every project needs every mode. A quick bug fix might only activate Build. A new DeFi protocol might activate Domain, Build, Secure, and Launch in sequence. The agent loads references on demand based on what you ask.
+
+## Updating
+
+To get the latest version of the skill:
+
+```bash
+npx skills add powxenv/better-sol@better-sol --yes
+```
+
+Run the same install command again. It overwrites the existing files with the latest from the repository.
+
+## Source and contribution
+
+The skill source lives in the [better-sol repository](https://github.com/powxenv/better-sol/tree/main/skills/better-sol). If you find an error in a code snippet, a missing topic, or a reference that could be clearer, open an issue or pull request.
+
