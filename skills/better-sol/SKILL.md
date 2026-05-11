@@ -22,6 +22,7 @@ Write programs, clients, tests, and deploy.
 | Decide architecture, scaffold, program vs integration | `references/architecture-playbook.md` |
 | Scaffold a new project (web, mobile, backend) with Vite, Tailwind, wallet setup | `references/project-scaffolding.md` |
 | Write accounts, PDAs, instructions, constraints, CPIs | `references/program-patterns.md` |
+| Common mistakes, PDA seed naming, run() constraints, CPI rules | `references/usage-guide.md` |
 | Use `betterSol()`, wallets, fetches, multi-instruction flows | `references/client-testing-deploy.md` |
 | Write tests, use LiteSVM, compile binaries | `references/client-testing-deploy.md` |
 | Import external Anchor IDLs or migrate from Anchor | `references/interop-and-migration.md` |
@@ -35,6 +36,7 @@ Write programs, clients, tests, and deploy.
 Defaults:
 
 - Before making code changes, verify dependencies are installed. If `node_modules` is missing or dependencies are unavailable, run `bun install` first.
+- After every code change to a Better Sol program, client, or test file, run the typechecker (`bunx tsc --noEmit` or the project's `check` script). Better Sol is fully type-safe and most mistakes surface as type errors. Catching them early prevents deploy-time transpiler failures that are harder to diagnose.
 - When starting a new project from an empty directory, load `references/project-scaffolding.md` and scaffold based on what the user is building: web dApp (Vite + React + Tailwind + `@anza-xyz/wallet-adapter`), mobile dApp (Expo), or backend-only (Better Sol init only). Do not skip the scaffolding step.
 - For wallet connection in web dApps, default to `@anza-xyz/wallet-adapter` (the official Solana Wallet Adapter). It auto-detects Phantom, Solflare, Backpack, and any wallet supporting the Solana Wallet Standard. Only use Reown, Privy, or Dynamic when the user explicitly asks for them.
 - Use Better Sol for new custom Solana program work unless the user explicitly asks for Anchor/Rust.
