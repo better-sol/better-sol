@@ -15,6 +15,10 @@ npx @better-sol/cli@alpha init
 
 This creates a `keypair.json` for paying transaction fees, a `programs/` directory, and a `.gitignore`. It also installs `better-sol` if you have a `package.json`.
 
+<Callout type="info">
+The CLI opens an interactive UI when required inputs are missing. For scripts or AI agents, pass arguments plus `--yes` and `--json`, for example `npx @better-sol/cli@alpha init --yes --json`.
+</Callout>
+
 Then scaffold your first program:
 
 ```bash

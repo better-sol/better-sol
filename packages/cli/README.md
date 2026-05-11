@@ -8,6 +8,23 @@ The Better Sol command-line tool. Scaffold programs, compile and deploy to Solan
 
 No installation needed. Run with `npx` or `bunx`.
 
+## Interactive and agent usage
+
+Commands behave consistently:
+
+- If required inputs are missing and no non-interactive flags are provided, the CLI opens the interactive UI.
+- If arguments or options are provided, the CLI skips prompts and runs non-interactively.
+- `--yes` skips prompts and accepts defaults where possible.
+- `--json` skips prompts and prints machine-readable output.
+
+Agent-friendly flow:
+
+```bash
+bunx @better-sol/cli@alpha init --yes --json
+bunx @better-sol/cli@alpha create counter --yes --json
+bunx @better-sol/cli@alpha deploy --program counter --dry-run --json
+```
+
 ## Commands
 
 ### `init`
@@ -24,6 +41,8 @@ Creates a payer keypair at `keypair.json`, a `programs/` directory, and a `.giti
 |---|---|
 | `--force` | Overwrite existing files |
 | `--skip-install` | Skip installing better-sol |
+| `--yes` | Use defaults and do not prompt |
+| `--json` | Print machine-readable JSON |
 
 ### `create`
 
@@ -39,6 +58,8 @@ Generates `programs/counter.ts` with a working counter template and `.better-sol
 |---|---|---|
 | `--dir <dir>` | `programs` | Output directory |
 | `--force` | `false` | Overwrite existing files |
+| `--yes` | `false` | Use defaults and do not prompt |
+| `--json` | `false` | Print machine-readable JSON |
 
 ### `deploy`
 
@@ -59,6 +80,7 @@ Parses your TypeScript, compiles it via the cloud API, and deploys the binary. O
 | `--dry-run` | `false` | Validate without compiling or deploying |
 | `--verify` | `false` | Write Rust for OtterSec verified builds |
 | `--output <dir>` | `generated` | Rust output directory (only used with `--verify`) |
+| `--json` | `false` | Print machine-readable JSON |
 
 ### `generate idl`
 
@@ -79,10 +101,11 @@ Produces a typed `.ts` file in `generated/`. Detects whether the argument is an 
 | `--out <path>` | `generated/<name>.ts` | Output file path |
 | `--name <name>` | from IDL metadata | Override the program name |
 | `--cluster <cluster>` | `mainnet` | Cluster for on-chain IDL fetch |
+| `--json` | `false` | Print machine-readable JSON |
 
 ### `generate db`
 
-Generate a Drizzle ORM schema from your account definitions.
+Generate an ORM-ready database schema from your account definitions.
 
 ```bash
 npx @better-sol/cli@alpha generate db
@@ -93,6 +116,7 @@ npx @better-sol/cli@alpha generate db
 | `--dialect <dialect>` | `postgres` | `postgres`, `mysql`, or `sqlite` |
 | `--out <path>` | `src/db/better-sol.ts` | Output file path |
 | `--src <glob>` | from config | Program source glob |
+| `--json` | `false` | Print machine-readable JSON |
 
 ### `login`
 
@@ -103,6 +127,10 @@ npx @better-sol/cli@alpha login <api-key>
 ```
 
 Get an API key at https://better-sol.fun/dash. Saves your key to `.better-sol/auth.json`. Because Better Sol is still experimental, compiler usage is rate limited: without a key you get 20 compiles per hour, and with a key you get 100 per hour.
+
+| Flag | Description |
+|---|---|
+| `--json` | Print machine-readable JSON |
 
 ### `verify`
 
@@ -117,6 +145,7 @@ npx @better-sol/cli@alpha verify counter --program-id <address>
 | `--program-id <id>` | On-chain program ID to verify |
 | `--lib-name <name>` | Rust library name (defaults to program name) |
 | `--mount-path <path>` | Subdirectory with `Cargo.toml` (defaults to `generated/<name>`) |
+| `--json` | Print machine-readable JSON |
 
 ## Configuration
 

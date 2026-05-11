@@ -21,7 +21,7 @@ A single, self-contained Agent Skill for building blockchain programs on Solana 
 ```text
 better-sol/
   SKILL.md              # 181 lines, 6 modes, loads references on demand
-  references/           # 50 reference files for progressive disclosure
+  references/           # 52 reference files for progressive disclosure
   examples/             # 5 working code examples
 ```
 

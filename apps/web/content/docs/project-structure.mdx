@@ -16,6 +16,14 @@ When you run `npx @better-sol/cli@alpha init` followed by `npx @better-sol/cli@a
 
 Then `create` scaffolds a program template inside `programs/` and generates a program keypair in `.better-sol/`.
 
+The CLI is interactive by default only when required inputs are missing. If you pass the required arguments or flags, it runs non-interactively. Use `--yes` to accept defaults and `--json` for machine-readable output in scripts or AI agent workflows:
+
+```bash
+npx @better-sol/cli@alpha init --yes --json
+npx @better-sol/cli@alpha create counter --yes --json
+npx @better-sol/cli@alpha deploy --program counter --dry-run --json
+```
+
 ## The files
 
 <Files>
@@ -74,8 +82,9 @@ import { defineConfig } from "@better-sol/cli"
 
 export default defineConfig({
   programs: "programs/**/*.ts",   // glob for program discovery
-  cluster: "devnet",               // default cluster for deploy
-  payer: "./keypair.json",         // path to payer keypair
+  cluster: "devnet",              // default cluster for deploy
+  out: "generated",               // output directory for generated artifacts
+  payer: "./keypair.json",        // path to payer keypair
 })
 ```
 

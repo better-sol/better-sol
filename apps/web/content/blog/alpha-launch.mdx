@@ -117,7 +117,7 @@ The alpha ships with two packages.
 
 **better-sol** (`npm install better-sol@alpha`) is the runtime SDK. It contains the program definition DSL (`bs.account`, `bs.program`, all type tokens), the typed client with instruction methods, PDA derivation, account fetching, and event and error parsing, token helpers for both SPL Token and Token-2022, `fromIdl()` for loading external programs at runtime, and the full Borsh codec.
 
-**@better-sol/cli** runs via `npx` with no install. It provides `init` to scaffold a project, `create` to generate a program template, `deploy` to compile and deploy to any cluster, `generate idl` to import external programs, `generate db` to produce a Drizzle ORM schema from your account definitions, `verify` to submit to OtterSec verified builds, and `login` to save your API key for higher compilation limits.
+**@better-sol/cli** runs via `npx` with no install. It provides `init` to scaffold a project, `create` to generate a program template, `deploy` to compile and deploy to any cluster, `generate idl` to import external programs, `generate db` to produce ORM-ready database schemas from your account definitions, `verify` to submit to OtterSec verified builds, and `login` to save your API key for higher compilation limits.
 
 Documentation covers the full workflow: [defining programs](/docs/defining-programs/types), [body language](/docs/defining-programs/body-language), [connecting the client](/docs/the-client/connecting), [tokens](/docs/the-client/tokens), [multi-instruction transactions](/docs/the-client/multi-instruction), [advanced topics](/docs/advanced/compute-budget), and three complete [recipes](/docs/recipes/counter) that walk through real programs from scratch.
 

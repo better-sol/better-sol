@@ -382,7 +382,7 @@ function Home() {
               </div>
               <h3 className="font-serif text-lg font-bold">Database schemas</h3>
               <p className="text-muted text-sm leading-relaxed">
-                Generate Drizzle ORM schemas from your account definitions.
+                Generate ORM-ready schemas from your account definitions for indexing, analytics, and app backends.
                 Supports Postgres, MySQL, and SQLite.
               </p>
             </Surface>
@@ -404,7 +404,7 @@ function Home() {
             One skill for your entire agent.
           </h2>
           <p className="text-lg max-w-2xl">
-            A single Agent Skill with 50 references covering programs, security,
+            A single Agent Skill with 52 references covering programs, security,
             DeFi, NFTs, oracles, cross-chain, frontend, tokenomics, and web3
             fundamentals. Install it once and your agent can build anything on
             Solana.
