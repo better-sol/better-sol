@@ -14,7 +14,7 @@ import { clusterUrl, getBalance, requestAirdrop, confirmSignature } from "#lib/s
 import { ensureSolanaCli } from "#lib/solana-cli";
 import type { Cluster, DeployOptions } from "#lib/types";
 import { generateAnchorProject } from "#generator/rust";
-import { discoverProgramsWithSpinner, CLI_COMMAND } from "./shared";
+import { discoverProgramsWithSpinner, CLI_COMMAND, writeJson } from "./shared";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,7 +25,7 @@ const MIN_DEPLOY_BALANCE = 1_500_000_000n;
 const CACHE_DIR = `${BETTER_SOL_DIR}/cache`;
 
 export async function deploy(options: DeployOptions): Promise<void> {
-  intro("better-sol deploy");
+  if (options.json !== true) intro("better-sol deploy");
 
   const apiKey = await getStoredApiKey();
 
@@ -37,12 +37,14 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const payer = await readKeypair(payerPath);
   const rpcUrl = clusterUrl(cluster);
 
-  log.step(`Cluster: ${cluster}`);
-  log.step(`Source:  ${src}`);
+  if (options.json !== true) {
+    log.step(`Cluster: ${cluster}`);
+    log.step(`Source:  ${src}`);
+  }
 
-  await ensureFunded(payer.publicKey, cluster, rpcUrl);
+  await ensureFunded(payer.publicKey, cluster, rpcUrl, options);
 
-  const programs = await discoverProgramsWithSpinner(src);
+  const programs = await discoverProgramsWithSpinner(src, { json: options.json });
 
   const matched =
     options.program !== undefined
@@ -58,12 +60,23 @@ export async function deploy(options: DeployOptions): Promise<void> {
   const projects = matched.map((program) => generateAnchorProject(program));
 
   if (options.dryRun) {
+    if (options.json === true) {
+      writeJson({
+        ok: true,
+        command: "deploy",
+        dryRun: true,
+        cluster,
+        source: src,
+        programs: matched.map((program) => ({ name: program.name, address: program.address })),
+      });
+      return;
+    }
     outro("Dry run complete. No compilation or deployment performed.");
     return;
   }
 
-  const compileSpinner = spinner();
-  compileSpinner.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
+  const compileSpinner = options.json === true ? undefined : spinner();
+  compileSpinner?.start(`Compiling ${matched.length === 1 ? matched[0]?.name : matched.length + " programs"}`);
   let compileResults: readonly CompileResponse[];
   try {
     compileResults = await Promise.all(
@@ -77,36 +90,42 @@ export async function deploy(options: DeployOptions): Promise<void> {
         }),
       ),
     );
-    compileSpinner.stop("Compilation completed");
+    compileSpinner?.stop("Compilation completed");
   } catch (error) {
-    compileSpinner.stop("Compilation failed");
+    compileSpinner?.stop("Compilation failed");
     throw error;
   }
+
+  const deployedPrograms: Array<{ readonly name: string; readonly address: string; readonly signature: string; readonly bytecodeSha256?: string }> = [];
 
   for (const [i, project] of projects.entries()) {
     const result = compileResults[i]!;
     const compileTime = `${(result.compileTimeMs / 1000).toFixed(1)}s`;
 
-    log.info(`Program: ${project.program.name}`);
-    log.step(`Address:  ${project.program.address}`);
+    if (options.json !== true) {
+      log.info(`Program: ${project.program.name}`);
+      log.step(`Address:  ${project.program.address}`);
+    }
 
     if (result.status === "failed" || result.bytecode === null) {
       const logs = result.logs !== undefined && result.logs.length > 0 ? `\n${result.logs}` : "";
       throw new Error(`Compilation failed for ${project.program.name}.${logs}`);
     }
 
-    log.step(`Compiled: ${compileTime}`);
+    if (options.json !== true) {
+      log.step(`Compiled: ${compileTime}`);
 
-    if (result.bytecodeSha256) {
-      log.step(`Binary:   sha256:${result.bytecodeSha256.slice(0, 16)}...`);
+      if (result.bytecodeSha256) {
+        log.step(`Binary:   sha256:${result.bytecodeSha256.slice(0, 16)}...`);
+      }
     }
 
     writeBytecode(project.program.name, result.bytecode);
 
     const programKeypairPath = cwdJoin(BETTER_SOL_DIR, `${project.program.name}.json`);
     const solanaPath = ensureSolanaCli();
-    const deploySpinner = spinner();
-    deploySpinner.start(`Deploying ${project.program.name} to ${cluster}`);
+    const deploySpinner = options.json === true ? undefined : spinner();
+    deploySpinner?.start(`Deploying ${project.program.name} to ${cluster}`);
 
     try {
       const signature = await deployCompiledProgram({
@@ -117,13 +136,21 @@ export async function deploy(options: DeployOptions): Promise<void> {
         cluster,
         solanaPath,
       });
-      deploySpinner.stop("Deployment completed");
-      log.step(`Signature: ${signature}`);
-      log.step(
-        `Explorer:  https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
-      );
+      deploySpinner?.stop("Deployment completed");
+      deployedPrograms.push({
+        name: project.program.name,
+        address: project.program.address,
+        signature,
+        bytecodeSha256: result.bytecodeSha256 ?? undefined,
+      });
+      if (options.json !== true) {
+        log.step(`Signature: ${signature}`);
+        log.step(
+          `Explorer:  https://explorer.solana.com/address/${project.program.address}?cluster=${cluster}`,
+        );
+      }
     } catch (error) {
-      deploySpinner.stop("Deployment failed");
+      deploySpinner?.stop("Deployment failed");
       throw new Error(`Deployment failed: ${extractProcessErrorMessage(error)}`, { cause: error });
     }
   }
@@ -131,13 +158,20 @@ export async function deploy(options: DeployOptions): Promise<void> {
   if (options.verify) {
     const verifyDir = cwdPath(options.output ?? config.out);
     await writeRustForVerify(projects, verifyDir);
-    log.info("To verify this build on-chain:");
-    log.step(
-      `1. Commit and push the ${verifyDir}/ directory to a public repository`,
-    );
-    log.step(
-      `2. Run \`${CLI_COMMAND} verify ${matched[0]?.address ?? "<program-id>"}\``,
-    );
+    if (options.json !== true) {
+      log.info("To verify this build on-chain:");
+      log.step(
+        `1. Commit and push the ${verifyDir}/ directory to a public repository`,
+      );
+      log.step(
+        `2. Run \`${CLI_COMMAND} verify ${matched[0]?.address ?? "<program-id>"}\``,
+      );
+    }
+  }
+
+  if (options.json === true) {
+    writeJson({ ok: true, command: "deploy", cluster, source: src, programs: deployedPrograms });
+    return;
   }
 
   outro("Deploy complete.");
@@ -224,44 +258,44 @@ function resolvePayerPath(payerFlag: string | undefined, configPayer: string | u
   );
 }
 
-async function ensureFunded(address: string, cluster: Cluster, rpcUrl: string): Promise<void> {
-  const s = spinner();
-  s.start(`Checking balance for ${address.slice(0, 8)}...`);
+async function ensureFunded(address: string, cluster: Cluster, rpcUrl: string, options: DeployOptions): Promise<void> {
+  const s = options.json === true ? undefined : spinner();
+  s?.start(`Checking balance for ${address.slice(0, 8)}...`);
 
   const balance = await getBalance(address, rpcUrl);
 
   if (balance >= MIN_DEPLOY_BALANCE) {
-    s.stop(`Balance: ${(Number(balance) / 1e9).toFixed(2)} SOL`);
+    s?.stop(`Balance: ${(Number(balance) / 1e9).toFixed(2)} SOL`);
     return;
   }
 
   if (cluster === "mainnet") {
-    s.stop(`Balance: ${(Number(balance) / 1e9).toFixed(4)} SOL`);
+    s?.stop(`Balance: ${(Number(balance) / 1e9).toFixed(4)} SOL`);
     throw new Error(`Insufficient SOL for deployment. Fund ${address} and try again.`);
   }
 
   if (cluster === "localnet") {
-    s.stop(`Balance: ${(Number(balance) / 1e9).toFixed(4)} SOL`);
+    s?.stop(`Balance: ${(Number(balance) / 1e9).toFixed(4)} SOL`);
     return;
   }
 
-  s.message(`Low balance (${(Number(balance) / 1e9).toFixed(4)} SOL). Requesting airdrop on ${cluster}...`);
+  s?.message(`Low balance (${(Number(balance) / 1e9).toFixed(4)} SOL). Requesting airdrop on ${cluster}...`);
 
   for (let attempt = 1; attempt <= AIRDROP_RETRIES; attempt++) {
     try {
       const signature = await requestAirdrop(address, rpcUrl, AIRDROP_LAMPORTS);
       await confirmSignature(signature, rpcUrl);
       const newBalance = await getBalance(address, rpcUrl);
-      s.stop(`Funded. Balance: ${(Number(newBalance) / 1e9).toFixed(2)} SOL`);
+      s?.stop(`Funded. Balance: ${(Number(newBalance) / 1e9).toFixed(2)} SOL`);
       return;
     } catch {
       if (attempt < AIRDROP_RETRIES) {
-        s.message(`Airdrop attempt ${attempt} failed, retrying...`);
+        s?.message(`Airdrop attempt ${attempt} failed, retrying...`);
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
   }
 
-  s.stop("Airdrop failed");
+  s?.stop("Airdrop failed");
   throw new Error(`Failed to airdrop SOL on ${cluster}. Fund ${address} manually or try again.`);
 }

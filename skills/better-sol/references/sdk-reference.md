@@ -398,24 +398,45 @@ export default defineConfig({
 
 | Command | Purpose | Key options |
 |---|---|---|
-| `npx @better-sol/cli@alpha init` | Initialize project files and payer keypair | `--force`, `--skip-install` |
-| `npx @better-sol/cli@alpha create <name>` | Create a new program template and program keypair | `--dir <dir>`, `--force` |
-| `npx @better-sol/cli@alpha login <api-key>` | Store compiler API key | none |
-| `npx @better-sol/cli@alpha deploy` | Parse, generate, compile, cache binary, and deploy programs | `--src <glob>`, `--program <name>`, `--payer <path>`, `--cluster <cluster>`, `--verify`, `--dry-run`, `--output <dir>` |
-| `npx @better-sol/cli@alpha generate db` | Generate ORM-ready database schema from account definitions | `--dialect postgres|mysql|sqlite`, `--out <path>`, `--src <glob>` |
-| `npx @better-sol/cli@alpha generate idl <source>` | Generate typed Better Sol program from IDL file or on-chain program address | `--out <path>`, `--name <name>`, `--cluster <cluster>` |
-| `npx @better-sol/cli@alpha verify [program]` | Submit a deployed program for OtterSec verified builds | `--program-id <id>`, `--lib-name <name>`, `--mount-path <path>` |
+| `npx @better-sol/cli@alpha init` | Initialize project files and payer keypair | `--force`, `--skip-install`, `--yes`, `--json` |
+| `npx @better-sol/cli@alpha create <name>` | Create a new program template and program keypair | `--dir <dir>`, `--force`, `--yes`, `--json` |
+| `npx @better-sol/cli@alpha login <api-key>` | Store compiler API key | `--json` |
+| `npx @better-sol/cli@alpha deploy` | Parse, generate, compile, cache binary, and deploy programs | `--src <glob>`, `--program <name>`, `--payer <path>`, `--cluster <cluster>`, `--verify`, `--dry-run`, `--output <dir>`, `--json` |
+| `npx @better-sol/cli@alpha generate db` | Generate ORM-ready database schema from account definitions | `--dialect postgres|mysql|sqlite`, `--out <path>`, `--src <glob>`, `--json` |
+| `npx @better-sol/cli@alpha generate idl <source>` | Generate typed Better Sol program from IDL file or on-chain program address | `--out <path>`, `--name <name>`, `--cluster <cluster>`, `--json` |
+| `npx @better-sol/cli@alpha verify [program]` | Submit a deployed program for OtterSec verified builds | `--program-id <id>`, `--lib-name <name>`, `--mount-path <path>`, `--json` |
+
+### Agent-friendly CLI flow
+
+Use the non-interactive flags in automation:
+
+```bash
+bunx @better-sol/cli@alpha init --yes --json
+bunx @better-sol/cli@alpha create counter --yes --json
+bunx @better-sol/cli@alpha deploy --program counter --dry-run --json
+bunx @better-sol/cli@alpha generate db --json
+```
+
+Rules:
+
+- Run `init` before `create` in a fresh project.
+- Run `create <name>` before editing a new program so the CLI generates the program address and `.better-sol/<name>.json` keypair.
+- Commands open the interactive UI only when required inputs are missing and no non-interactive flags are provided.
+- Providing command arguments or options skips prompts and runs non-interactively.
+- `--yes` always skips prompts and uses defaults where possible.
+- `--json` always skips prompts and prints machine-readable output.
+- Use `--force` explicitly if overwriting generated files.
 
 ### CLI option types
 
 | Type | Fields |
 |---|---|
-| `InitOptions` | `force`, `skipInstall` |
-| `CreateOptions` | `dir`, `force` |
-| `DeployOptions` | `src`, `program`, `cluster`, `payer`, `verify`, `dryRun`, `output` |
-| `GenerateDbOptions` | `dialect`, `out`, `src` |
-| `GenerateIdlOptions` | `out`, `name`, `cluster` |
-| `VerifyOptions` | `programId`, `libName`, `mountPath` |
+| `InitOptions` | `force`, `skipInstall`, `yes`, `json` |
+| `CreateOptions` | `dir`, `force`, `yes`, `json` |
+| `DeployOptions` | `src`, `program`, `cluster`, `payer`, `verify`, `dryRun`, `output`, `json` |
+| `GenerateDbOptions` | `dialect`, `out`, `src`, `json` |
+| `GenerateIdlOptions` | `out`, `name`, `cluster`, `json` |
+| `VerifyOptions` | `programId`, `libName`, `mountPath`, `json` |
 
 ## Related
 

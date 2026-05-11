@@ -26,7 +26,9 @@ cli
   .description("Initialize a better-sol project")
   .option("--force", "overwrite existing files", false)
   .option("--skip-install", "skip installing dependencies", false)
-  .action((options: InitOptions) => run(() => init(options)));
+  .option("--yes", "use defaults and do not prompt", false)
+  .option("--json", "print machine-readable JSON", false)
+  .action((options: Omit<InitOptions, "interactive">, command: Command) => run(() => init({ ...options, interactive: shouldUseInteractive(command) })));
 
 cli
   .command("create")
@@ -34,13 +36,16 @@ cli
   .argument("[name]", "program name")
   .option("--dir <dir>", "program directory", "programs")
   .option("--force", "overwrite existing files", false)
-  .action((name: string | undefined, options: CreateOptions) => run(() => create(name, options)));
+  .option("--yes", "use defaults and do not prompt", false)
+  .option("--json", "print machine-readable JSON", false)
+  .action((name: string | undefined, options: Omit<CreateOptions, "interactive">, command: Command) => run(() => create(name, { ...options, interactive: name === undefined && shouldUseInteractive(command) })));
 
 cli
   .command("login")
   .description("Save your compiler API key")
   .argument("[apiKey]", "compiler API key")
-  .action((apiKey: string | undefined) => run(() => login(apiKey)));
+  .option("--json", "print machine-readable JSON", false)
+  .action((apiKey: string | undefined, options: { readonly json: boolean }, command: Command) => run(() => login(apiKey, { ...options, interactive: apiKey === undefined && shouldUseInteractive(command) })));
 
 cli
   .command("deploy")
@@ -52,7 +57,8 @@ cli
   .option("--verify", "write generated Rust for verified builds", false)
   .option("--dry-run", "generate and validate without compiling or deploying", false)
   .option("--output <dir>", "output directory for verified build Rust", "generated")
-  .action((options: DeployOptions) => run(() => deploy(options)));
+  .option("--json", "print machine-readable JSON", false)
+  .action((options: Omit<DeployOptions, "interactive">) => run(() => deploy({ ...options, interactive: false })));
 
 const generate = cli.command("generate").description("Generate derived artifacts");
 
@@ -62,7 +68,8 @@ generate
   .option("--dialect <dialect>", "postgres, mysql, or sqlite", "postgres")
   .option("--out <path>", "output file", "src/db/better-sol.ts")
   .option("--src <glob>", "program source glob")
-  .action((options: GenerateDbOptions) => run(() => generateDb(options)));
+  .option("--json", "print machine-readable JSON", false)
+  .action((options: Omit<GenerateDbOptions, "interactive">) => run(() => generateDb({ ...options, interactive: false })));
 
 generate
   .command("idl")
@@ -71,7 +78,8 @@ generate
   .option("--out <path>", "output TypeScript file (default: generated/<name>.ts)")
   .option("--name <name>", "program name override (default: derived from IDL)")
   .option("--cluster <cluster>", "cluster for on-chain IDL fetch (mainnet, devnet, testnet, localnet)", "mainnet")
-  .action((source: string, options: GenerateIdlOptions) => run(() => generateIdl(source, options)));
+  .option("--json", "print machine-readable JSON", false)
+  .action((source: string, options: Omit<GenerateIdlOptions, "interactive">) => run(() => generateIdl(source, { ...options, interactive: false })));
 
 cli
   .command("verify")
@@ -80,9 +88,21 @@ cli
   .option("--program-id <programId>", "program ID to verify")
   .option("--lib-name <name>", "Rust library name (defaults to program name)")
   .option("--mount-path <path>", "subdirectory in repo where Cargo.toml lives (defaults to generated/<name>)")
-  .action((program: string | undefined, options: VerifyOptions) => run(() => verify(program, options)));
+  .option("--json", "print machine-readable JSON", false)
+  .action((program: string | undefined, options: Omit<VerifyOptions, "interactive">) => run(() => verify(program, { ...options, interactive: false })));
 
 cli.parse(process.argv);
+
+function shouldUseInteractive(command: Command): boolean {
+  const optionValues = command.opts() as { readonly yes?: boolean; readonly json?: boolean };
+  if (optionValues.yes === true || optionValues.json === true) return false;
+
+  for (const option of command.options) {
+    if (command.getOptionValueSource(option.attributeName()) !== "default") return false;
+  }
+
+  return true;
+}
 
 async function run(task: () => Promise<void>): Promise<void> {
   try {

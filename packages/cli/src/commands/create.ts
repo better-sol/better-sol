@@ -3,9 +3,14 @@ import { writeFile } from "node:fs/promises";
 import { createKeypair } from "#lib/keypair";
 import { BETTER_SOL_DIR, cwdJoin, ensureDirectory, fileExists } from "#lib/fs";
 import type { CreateOptions } from "#lib/types";
+import { writeJson } from "./shared";
 
 export async function create(nameArg: string | undefined, options: CreateOptions): Promise<void> {
-  intro("better-sol create");
+  if (options.json !== true) intro("better-sol create");
+
+  if (nameArg === undefined && !options.interactive) {
+    throw new Error("Program name is required in non-interactive mode.");
+  }
 
   const name = nameArg ?? await text({ message: "Program name", placeholder: "counter", validate: validateName });
   if (isCancel(name)) return cancel("Create cancelled");
@@ -16,17 +21,33 @@ export async function create(nameArg: string | undefined, options: CreateOptions
   const keypairPath = cwdJoin(BETTER_SOL_DIR, `${programName}.json`);
 
   if (fileExists(programPath) && !options.force) {
+    if (!options.interactive) {
+      throw new Error(`${directory}/${programName}.ts already exists. Use --force to overwrite in non-interactive mode.`);
+    }
     const overwrite = await confirm({ message: `${directory}/${programName}.ts already exists. Overwrite?`, initialValue: false });
     if (isCancel(overwrite) || !overwrite) return cancel("Create cancelled");
   }
 
-  const s = spinner();
-  s.start("Generating program keypair");
+  const s = options.json === true ? undefined : spinner();
+  s?.start("Generating program keypair");
   const keypair = await createKeypair(keypairPath, options.force);
-  s.message("Writing program template");
+  s?.message("Writing program template");
   await ensureDirectory(cwdJoin(directory));
   await writeFile(programPath, template(programName, keypair.publicKey, directory));
-  s.stop("Program created");
+  s?.stop("Program created");
+
+  if (options.json === true) {
+    writeJson({
+      ok: true,
+      command: "create",
+      programName,
+      programAddress: keypair.publicKey,
+      programPath: `${directory}/${programName}.ts`,
+      keypairPath: `${BETTER_SOL_DIR}/${programName}.json`,
+      next: `npx @better-sol/cli@alpha deploy --program ${programName} --json`,
+    });
+    return;
+  }
 
   outro(`Created ${directory}/${programName}.ts\n  Program:  ${keypair.publicKey}\n  Keypair:  ${BETTER_SOL_DIR}/${programName}.json`);
 }

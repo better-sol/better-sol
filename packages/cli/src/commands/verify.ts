@@ -1,12 +1,12 @@
 import { intro, log, outro, spinner } from "@clack/prompts";
 import { execSync } from "node:child_process";
 import type { VerifyOptions } from "#lib/types";
-import { CLI_COMMAND } from "./shared";
+import { CLI_COMMAND, writeJson } from "./shared";
 
 const OTTERSEC_API = "https://verify.osec.io";
 
 export async function verify(programArg: string | undefined, options: VerifyOptions): Promise<void> {
-  intro("better-sol verify");
+  if (options.json !== true) intro("better-sol verify");
 
   const programId = resolveProgramId(programArg, options);
   if (!isValidProgramId(programId)) {
@@ -15,26 +15,43 @@ export async function verify(programArg: string | undefined, options: VerifyOpti
     );
   }
 
-  const s = spinner();
+  const s = options.json === true ? undefined : spinner();
 
-  s.start("Reading git repository state");
+  s?.start("Reading git repository state");
   const repository = await gitRemote();
   const commitHash = await gitCommit();
-  s.stop(`Found ${repository} at ${commitHash.slice(0, 8)}`);
+  s?.stop(`Found ${repository} at ${commitHash.slice(0, 8)}`);
 
   const libName = options.libName ?? (programArg !== undefined ? programArg : programId);
   const mountPath = options.mountPath ?? `generated/${libName}`;
 
-  log.info("Submission parameters:");
-  log.step(`Program ID:  ${programId}`);
-  log.step(`Repository:  ${repository}`);
-  log.step(`Commit:      ${commitHash.slice(0, 8)}`);
-  log.step(`Library:     ${libName}`);
-  log.step(`Mount path:  ${mountPath}`);
+  if (options.json !== true) {
+    log.info("Submission parameters:");
+    log.step(`Program ID:  ${programId}`);
+    log.step(`Repository:  ${repository}`);
+    log.step(`Commit:      ${commitHash.slice(0, 8)}`);
+    log.step(`Library:     ${libName}`);
+    log.step(`Mount path:  ${mountPath}`);
+  }
 
-  s.start("Submitting to OtterSec");
+  s?.start("Submitting to OtterSec");
   await submitToOtterSec(programId, repository, commitHash, libName, mountPath);
-  s.stop("Submitted");
+  s?.stop("Submitted");
+
+  if (options.json === true) {
+    writeJson({
+      ok: true,
+      command: "verify",
+      programId,
+      repository,
+      commitHash,
+      libName,
+      mountPath,
+      statusUrl: `${OTTERSEC_API}/status/${programId}`,
+      logsUrl: `${OTTERSEC_API}/logs/${programId}`,
+    });
+    return;
+  }
 
   log.success("OtterSec will clone your repo and build the program in a deterministic Docker container.");
   log.step(`Status:  ${OTTERSEC_API}/status/${programId}`);

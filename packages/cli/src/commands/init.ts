@@ -6,7 +6,7 @@ import { execSync } from "node:child_process";
 import { createKeypair } from "#lib/keypair";
 import { cwdJoin, fileExists } from "#lib/fs";
 import type { InitOptions } from "#lib/types";
-import { CLI_COMMAND } from "./shared";
+import { CLI_COMMAND, writeJson } from "./shared";
 
 const PAYER_KEYPAIR_PATH = "keypair.json";
 const GITIGNORE_ENTRIES = [".better-sol/", "generated/", "keypair.json", "node_modules/"];
@@ -15,42 +15,57 @@ const SOLANA_DEFAULT_KEYPAIR_PATH = join(homedir(), ".config", "solana", "id.jso
 type PackageManager = "npm" | "bun" | "pnpm" | "yarn";
 
 export async function init(options: InitOptions): Promise<void> {
-  intro("better-sol init");
+  if (options.json !== true) intro("better-sol init");
 
-  const payerPath = await resolvePayerPath();
+  const payerPath = await resolvePayerPath(options);
 
   if (payerPath === cwdJoin(PAYER_KEYPAIR_PATH)) {
     if (existsSync(payerPath) && !options.force) {
-      log.step("Payer keypair already exists at keypair.json");
+      if (options.json !== true) log.step("Payer keypair already exists at keypair.json");
     } else {
-      const s = spinner();
-      s.start("Generating payer keypair");
+      const s = options.json === true ? undefined : spinner();
+      s?.start("Generating payer keypair");
       const keypair = await createKeypair(payerPath, options.force);
-      s.stop("Payer keypair created");
-      log.step(`Address: ${keypair.publicKey}`);
-      log.step(`Saved:   keypair.json`);
-      log.warn("Keep this file safe. It contains your private key. Never commit it to git.");
+      s?.stop("Payer keypair created");
+      if (options.json !== true) {
+        log.step(`Address: ${keypair.publicKey}`);
+        log.step(`Saved:   keypair.json`);
+        log.warn("Keep this file safe. It contains your private key. Never commit it to git.");
+      }
     }
   } else {
-    log.step(`Using existing keypair at ${payerPath}`);
-    await writePayerConfig();
+    if (options.json !== true) log.step(`Using existing keypair at ${payerPath}`);
+    await writePayerConfig(options);
   }
 
-  await ensureGitignore();
-  ensureProgramsDir();
+  await ensureGitignore(options);
+  ensureProgramsDir(options);
 
   if (!options.skipInstall) {
-    await installDependencies();
+    await installDependencies(options);
+  }
+
+  if (options.json === true) {
+    writeJson({
+      ok: true,
+      command: "init",
+      payerPath,
+      programsDir: "programs",
+      next: [`${CLI_COMMAND} create <program-name> --yes --json`, `${CLI_COMMAND} deploy --json`],
+    });
+    return;
   }
 
   outro(`Project ready.\n  Next: ${CLI_COMMAND} create <program-name>\n  Then: ${CLI_COMMAND} deploy`);
 }
 
-async function resolvePayerPath(): Promise<string> {
+async function resolvePayerPath(options: InitOptions): Promise<string> {
   const localPath = cwdJoin(PAYER_KEYPAIR_PATH);
   if (existsSync(localPath)) return localPath;
 
   if (existsSync(SOLANA_DEFAULT_KEYPAIR_PATH)) {
+    if (!options.interactive) return SOLANA_DEFAULT_KEYPAIR_PATH;
+
     const useGlobal = await confirm({
       message: `Found an existing Solana keypair at ~/.config/solana/id.json. Use it as your payer?`,
       initialValue: true,
@@ -65,12 +80,12 @@ async function resolvePayerPath(): Promise<string> {
   return cwdJoin(PAYER_KEYPAIR_PATH);
 }
 
-async function ensureGitignore(): Promise<void> {
+async function ensureGitignore(options: InitOptions): Promise<void> {
   const gitignorePath = cwdJoin(".gitignore");
 
   if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, `${GITIGNORE_ENTRIES.join("\n")}\n`);
-    log.step("Created .gitignore");
+    if (options.json !== true) log.step("Created .gitignore");
     return;
   }
 
@@ -84,48 +99,48 @@ async function ensureGitignore(): Promise<void> {
     ? `${existing}${missing.join("\n")}\n`
     : `${existing}\n${missing.join("\n")}\n`;
   writeFileSync(gitignorePath, updated);
-  log.step("Updated .gitignore");
+  if (options.json !== true) log.step("Updated .gitignore");
 }
 
-function ensureProgramsDir(): void {
+function ensureProgramsDir(options: InitOptions): void {
   const programsDir = cwdJoin("programs");
   if (!existsSync(programsDir)) {
     mkdirSync(programsDir, { recursive: true });
-    log.step("Created programs/ directory");
+    if (options.json !== true) log.step("Created programs/ directory");
   }
 }
 
-async function installDependencies(): Promise<void> {
+async function installDependencies(options: InitOptions): Promise<void> {
   const hasPackageJson = existsSync(cwdJoin("package.json"));
 
   if (hasPackageJson) {
     const pkg = JSON.parse(readFileSync(cwdJoin("package.json"), "utf8")) as Record<string, unknown>;
     const deps = pkg.dependencies as Record<string, string> | undefined;
     if (deps !== undefined && "better-sol" in deps) {
-      log.step("better-sol is already installed");
+      if (options.json !== true) log.step("better-sol is already installed");
       return;
     }
 
-    const shouldInstall = await confirm({
+    const shouldInstall = !options.interactive || await confirm({
       message: "Install better-sol?",
       initialValue: true,
     });
     if (isCancel(shouldInstall) || !shouldInstall) return;
 
     const pm = await detectPackageManager();
-    installPackage(pm, "better-sol");
+    installPackage(pm, "better-sol", options);
     return;
   }
 
-  const shouldCreate = await confirm({
+  const shouldCreate = !options.interactive || await confirm({
     message: "No package.json found. Create one with better-sol?",
     initialValue: true,
   });
   if (isCancel(shouldCreate) || !shouldCreate) return;
 
-  const pm = await selectPackageManager();
-  createPackageJson();
-  installPackage(pm, "better-sol");
+  const pm = options.interactive ? await selectPackageManager() : await detectPackageManager();
+  createPackageJson(options);
+  installPackage(pm, "better-sol", options);
 }
 
 async function detectPackageManager(): Promise<PackageManager> {
@@ -153,7 +168,7 @@ async function selectPackageManager(): Promise<PackageManager> {
   return result;
 }
 
-function createPackageJson(): void {
+function createPackageJson(options: InitOptions): void {
   const projectName = cwdJoin(".").split("/").pop() ?? "my-project";
   const pkg = {
     name: projectName,
@@ -161,12 +176,12 @@ function createPackageJson(): void {
     dependencies: {} as Record<string, string>,
   };
   writeFileSync(cwdJoin("package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
-  log.step("Created package.json");
+  if (options.json !== true) log.step("Created package.json");
 }
 
-function installPackage(pm: PackageManager, packageName: string): void {
-  const s = spinner();
-  s.start(`Installing ${packageName} with ${pm}`);
+function installPackage(pm: PackageManager, packageName: string, options: InitOptions): void {
+  const s = options.json === true ? undefined : spinner();
+  s?.start(`Installing ${packageName} with ${pm}`);
 
   const commands: Record<PackageManager, string> = {
     npm: `npm install ${packageName}`,
@@ -177,14 +192,14 @@ function installPackage(pm: PackageManager, packageName: string): void {
 
   try {
     execSync(commands[pm], { encoding: "utf8", timeout: 120_000, stdio: "pipe" });
-    s.stop(`Installed ${packageName}`);
+    s?.stop(`Installed ${packageName}`);
   } catch {
-    s.stop(`Failed to install ${packageName}`);
-    log.warn(`Run manually: ${commands[pm]}`);
+    s?.stop(`Failed to install ${packageName}`);
+    if (options.json !== true) log.warn(`Run manually: ${commands[pm]}`);
   }
 }
 
-async function writePayerConfig(): Promise<void> {
+async function writePayerConfig(options: InitOptions): Promise<void> {
   const configPath = cwdJoin("better-sol.config.ts");
   if (fileExists(configPath)) return;
 
@@ -200,5 +215,5 @@ async function writePayerConfig(): Promise<void> {
       `});`,
     ].join("\n"),
   );
-  log.step("Created better-sol.config.ts");
+  if (options.json !== true) log.step("Created better-sol.config.ts");
 }

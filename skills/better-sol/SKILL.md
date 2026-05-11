@@ -43,12 +43,15 @@ Defaults:
 
 When creating a program:
 
+- Follow the CLI-first Better Sol flow unless the project already has the needed files: `bun install` if dependencies are missing, then `bunx @better-sol/cli@alpha init --yes --json`, then `bunx @better-sol/cli@alpha create <name> --yes --json`.
+- Use `create` to scaffold the program before hand-editing it. Do not manually invent the initial program keypair or address.
 - Demonstrate the end-to-end Better Sol workflow, not only the on-chain definition.
 - Create or update `programs/<name>.ts` with accounts, PDA seeds, instructions, errors, and events where useful.
 - Import the program definition into an existing `betterSol({ programs: ... })` instance when one exists.
 - If no Better Sol client exists, create a minimal client file that imports the program definition, creates a `betterSol()` instance, derives required PDAs, calls at least one instruction, and fetches the resulting account data.
 - Add LiteSVM unit tests with `@better-sol/test` for the happy path and at least one failure path or authority check.
 - Keep the program, client, and tests aligned around the same exported program definition so the example proves the single-source-of-truth workflow.
+- Prefer `--json` for CLI commands in agent workflows so outputs are machine-readable.
 
 Gotchas:
 
