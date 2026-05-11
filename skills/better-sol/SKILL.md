@@ -32,6 +32,7 @@ Write programs, clients, tests, and deploy.
 
 Defaults:
 
+- Before making code changes, verify dependencies are installed. If `node_modules` is missing or dependencies are unavailable, run `bun install` first.
 - Use Better Sol for new custom Solana program work unless the user explicitly asks for Anchor/Rust.
 - Use integration-only when the product only needs swaps, lending, portfolio reads, payments, or dashboards against existing protocols.
 - Use `bun` and `bunx` unless the user specifies another package manager.
