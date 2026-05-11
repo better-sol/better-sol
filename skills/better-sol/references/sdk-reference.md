@@ -178,6 +178,8 @@ ix({
 | No | Yes | `ix({ args, run: (args, ctx) => {} })` |
 | No | No | `ix({ run: (ctx) => {} })` |
 
+When there are no `args`, the `run` callback receives 2 parameters, not 3. When there are no `accounts`, the `run` callback also receives 2 parameters. When there are neither, `run` receives only `ctx`. The number of callback parameters always matches what was declared. Do not add a third parameter for `ctx` when `args` is absent.
+
 **`run` parameters:**
 
 1. **accounts**: destructured object. Each key matches an `accounts` entry. Value type depends on the constraint:

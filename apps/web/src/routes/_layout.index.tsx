@@ -404,7 +404,7 @@ function Home() {
             One skill for your entire agent.
           </h2>
           <p className="text-lg max-w-2xl">
-            A single Agent Skill with 52 references covering programs, security,
+            A single Agent Skill with 53 references covering programs, security,
             DeFi, NFTs, oracles, cross-chain, frontend, tokenomics, and web3
             fundamentals. Install it once and your agent can build anything on
             Solana.

@@ -112,7 +112,7 @@ function Superskill() {
           </h1>
 
           <p className="text-lg md:text-xl text-muted leading-relaxed max-w-lg">
-            52 references covering programs, clients, testing, security, DeFi,
+            53 references covering programs, clients, testing, security, DeFi,
             tokens, NFTs, DAOs, oracles, cross-chain, frontend, tokenomics, and
             product strategy. One install.
           </p>
@@ -173,7 +173,7 @@ function Superskill() {
         </div>
 
         <div className="flex items-center justify-center gap-8 mt-12 text-sm text-muted">
-          <span>52 references</span>
+          <span>53 references</span>
           <span className="size-1 rounded-full bg-border" />
           <span>10 examples</span>
           <span className="size-1 rounded-full bg-border" />
