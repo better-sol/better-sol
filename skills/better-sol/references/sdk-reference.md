@@ -1,6 +1,20 @@
 # Better Sol SDK Reference
 
-Use this reference for the complete API surface of the Better Sol program DSL and runtime client.
+Use this reference for the complete API surface of the Better Sol program DSL, runtime client, testing SDK, CLI, package exports, and config definition.
+
+## Package exports
+
+| Import path | Exports |
+|---|---|
+| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `ProgramError`, `TransactionFailedError`, `bs`, `cpi`, `nonDivisibleSequentialInstructionPlan`, `flattenInstructionPlan`, public types |
+| `better-sol/program` | `bs`, `cpi`, program definition classes, account/type helpers, inferred type helpers |
+| `better-sol/codec` | `anchorDiscriminator`, `accountDiscriminator`, `encodeField`, `decodeField`, `encodeAccount`, `decodeAccount`, `decodeZeroCopyAccount`, `encodeInstruction` |
+| `better-sol/wallets` | `walletAdapter`, `reownWallet`, `privyWallet`, `dynamicWallet` |
+| `better-sol/wallets/reown` | `reownWallet` |
+| `better-sol/wallets/privy` | `privyWallet` |
+| `better-sol/wallets/dynamic` | `dynamicWallet` |
+| `@better-sol/test` | `createTestContext`, `TestContext`, `TestContextConfig`, `TestSigner` |
+| `@better-sol/cli` | CLI executable plus `defineConfig` and CLI option types for `better-sol.config.ts` |
 
 ## Program DSL
 
@@ -234,7 +248,7 @@ import { keypairFile, secretKey } from "better-sol"
 
 keypairFile("./keypair.json")          // reads a keypair file from disk
 secretKey(new Uint8Array([/* 64 bytes */])) // raw secret key bytes
-walletAdapter.signer                   // TransactionSigner from a wallet adapter
+walletAdapter(wallet)                  // TransactionSigner from better-sol/wallets
 ```
 
 ### Client methods
@@ -247,6 +261,8 @@ For each registered program, the client exposes a namespace:
 sol.counter                           // program namespace
 sol.counter.address                   // program's on-chain address
 sol.counter.accounts.Counter          // BoundAccount with derive() and fetch()
+sol.counter.parseErrors(logs)         // parse Anchor-style program errors from logs
+sol.counter.parseEvents(logs)         // parse Anchor events from logs
 sol.counter.initialize(params)        // instruction method
 sol.counter.increment(params)         // instruction method
 ```
@@ -264,6 +280,18 @@ const multiple = await sol.counter.accounts.Counter.fetchMultiple([addr1, addr2]
 | `derive(values)` | PDA seed values matching `.derive()` definition | `Promise<Address>` |
 | `fetch(address)` | Account address | `Promise<FieldType | null>` |
 | `fetchMultiple(addresses)` | Array of addresses | `Promise<(FieldType | null)[]>` |
+
+#### Error and event parsing
+
+```ts
+const error = sol.counter.parseErrors(logs)
+const events = await sol.counter.parseEvents(logs)
+```
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `parseErrors(logs)` | transaction log messages | `ProgramError | undefined` |
+| `parseEvents(logs)` | transaction log messages | `Promise<ParsedEvent[]>` |
 
 #### Instruction methods
 
@@ -341,6 +369,53 @@ const ctx = await createTestContext({ programs: { counter } })
 | `ctx.program.*` | same as production client | Full typed client for registered programs |
 | `ctx.send([...])` | same as production client | Atomic multi-instruction transaction |
 | `ctx.token.*` | same as production client | Token operations |
+
+## CLI and config
+
+Import config helper from `@better-sol/cli`:
+
+```ts
+import { defineConfig } from "@better-sol/cli"
+
+export default defineConfig({
+  programs: "programs/**/*.ts",
+  cluster: "devnet",
+  out: "generated",
+  payer: "./keypair.json",
+})
+```
+
+### `CliConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `programs` | `string` | `"programs/**/*.ts"` | Glob used by CLI program discovery |
+| `cluster` | `"devnet" | "testnet" | "mainnet" | "localnet"` | `"devnet"` | Default cluster for deploy and generate commands |
+| `out` | `string` | `"generated"` | Default output directory for generated artifacts |
+| `payer` | `string` | `undefined` | Optional keypair path when not using `./keypair.json` |
+
+### CLI commands
+
+| Command | Purpose | Key options |
+|---|---|---|
+| `npx @better-sol/cli@alpha init` | Initialize project files and payer keypair | `--force`, `--skip-install` |
+| `npx @better-sol/cli@alpha create <name>` | Create a new program template and program keypair | `--dir <dir>`, `--force` |
+| `npx @better-sol/cli@alpha login <api-key>` | Store compiler API key | none |
+| `npx @better-sol/cli@alpha deploy` | Parse, generate, compile, cache binary, and deploy programs | `--src <glob>`, `--program <name>`, `--payer <path>`, `--cluster <cluster>`, `--verify`, `--dry-run`, `--output <dir>` |
+| `npx @better-sol/cli@alpha generate db` | Generate ORM-ready database schema from account definitions | `--dialect postgres|mysql|sqlite`, `--out <path>`, `--src <glob>` |
+| `npx @better-sol/cli@alpha generate idl <source>` | Generate typed Better Sol program from IDL file or on-chain program address | `--out <path>`, `--name <name>`, `--cluster <cluster>` |
+| `npx @better-sol/cli@alpha verify [program]` | Submit a deployed program for OtterSec verified builds | `--program-id <id>`, `--lib-name <name>`, `--mount-path <path>` |
+
+### CLI option types
+
+| Type | Fields |
+|---|---|
+| `InitOptions` | `force`, `skipInstall` |
+| `CreateOptions` | `dir`, `force` |
+| `DeployOptions` | `src`, `program`, `cluster`, `payer`, `verify`, `dryRun`, `output` |
+| `GenerateDbOptions` | `dialect`, `out`, `src` |
+| `GenerateIdlOptions` | `out`, `name`, `cluster` |
+| `VerifyOptions` | `programId`, `libName`, `mountPath` |
 
 ## Related
 

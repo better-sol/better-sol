@@ -25,7 +25,7 @@ Write programs, clients, tests, and deploy.
 | Write tests, use LiteSVM, compile binaries | `references/client-testing-deploy.md` |
 | Import external Anchor IDLs or migrate from Anchor | `references/interop-and-migration.md` |
 | Debug compile, deploy, transaction, or account failures | `references/troubleshooting.md` |
-| Exact API names, types, constraints, and helpers | `references/sdk-reference.md` |
+| Exact API names, package exports, config, CLI options, types, constraints, and helpers | `references/sdk-reference.md` |
 | dApp layers, wallet/RPC patterns, transaction construction | `references/web3-dapp-architecture.md` |
 | Wallet options: Solana Wallet Adapter, Reown, Privy, Dynamic | `references/wallet-connection.md` |
 | Compute budget, ALTs, compression, Token-2022 internals | `references/advanced-solana.md` |
@@ -37,6 +37,15 @@ Defaults:
 - Use `bun` and `bunx` unless the user specifies another package manager.
 - Keep keypair files and raw secret keys out of browser/mobile code; use wallet signer scoping.
 - Use `bigint` for token amounts, lamports, balances, and u64/u128 values.
+
+When creating a program:
+
+- Demonstrate the end-to-end Better Sol workflow, not only the on-chain definition.
+- Create or update `programs/<name>.ts` with accounts, PDA seeds, instructions, errors, and events where useful.
+- Import the program definition into an existing `betterSol({ programs: ... })` instance when one exists.
+- If no Better Sol client exists, create a minimal client file that imports the program definition, creates a `betterSol()` instance, derives required PDAs, calls at least one instruction, and fetches the resulting account data.
+- Add LiteSVM unit tests with `@better-sol/test` for the happy path and at least one failure path or authority check.
+- Keep the program, client, and tests aligned around the same exported program definition so the example proves the single-source-of-truth workflow.
 
 Gotchas:
 

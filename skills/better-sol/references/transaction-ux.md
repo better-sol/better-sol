@@ -139,11 +139,13 @@ When showing past transactions:
 The Better Sol client handles most of the transaction lifecycle automatically:
 
 ```tsx
-const sol = await betterSol({
+import { walletAdapter } from "better-sol/wallets"
+
+const baseSol = await betterSol({
   cluster: "devnet",
-  payer: walletAdapter.signer,
   programs: { counter },
 })
+const sol = await baseSol.withSigner(walletAdapter(wallet))
 
 try {
   const signature = await sol.counter.increment({

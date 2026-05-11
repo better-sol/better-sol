@@ -136,14 +136,15 @@ export const sol = await betterSol({
 
 ```ts
 import { betterSol } from "better-sol"
+import { walletAdapter } from "better-sol/wallets"
 import { counter } from "./programs/counter"
 
-export async function createClient(walletAdapter: WalletAdapter) {
-  return betterSol({
+export async function createClient(wallet: WalletAdapter) {
+  const baseSol = await betterSol({
     cluster: "devnet",
-    payer: walletAdapter.signer,
     programs: { counter },
   })
+  return baseSol.withSigner(walletAdapter(wallet))
 }
 ```
 

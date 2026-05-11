@@ -21,13 +21,15 @@ const sol = await betterSol({
 
 ```ts
 import { betterSol } from "better-sol"
+import { walletAdapter } from "better-sol/wallets"
 import { counter } from "./programs/counter"
 
-const sol = await betterSol({
+const baseSol = await betterSol({
   cluster: "devnet",
-  payer: walletAdapter.signer,
   programs: { counter },
 })
+
+const sol = await baseSol.withSigner(walletAdapter(wallet))
 ```
 
 ### Read-only (no signing)
@@ -45,7 +47,7 @@ const sol = await betterSol({
 |---|---|
 | `keypairFile("./keypair.json")` | Server-side scripts, CLI tools |
 | `secretKey(new Uint8Array([...64 bytes]))` | Environment variables, secret managers |
-| `walletAdapter.signer` | Browser apps with wallet extension |
+| `walletAdapter(wallet)` | Browser apps with wallet extension |
 
 ## Account operations
 
@@ -72,14 +74,6 @@ const accounts = await sol.counter.accounts.Counter.fetchMultiple([addr1, addr2,
 ```
 
 Returns an array where unfound accounts are `null`.
-
-### Fetch all program accounts
-
-```ts
-const allCounters = await sol.counter.accounts.Counter.all()
-```
-
-Returns `{ address: string, data: Counter }[]`.
 
 ## Instruction operations
 

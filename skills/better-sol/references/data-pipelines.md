@@ -8,7 +8,7 @@ Use this reference when building indexers, analytics dashboards, webhook process
 - **Webhooks**: Helius (`helius.xyz`) or Yellowstone (Triton) for geyser-style WebSocket feeds. Both deliver decoded account diffs and transaction events via HTTP callbacks. Suitable for moderate real-time needs (hundreds of accounts, sub-second latency).
 - **Geyser/indexer**: Yellowstone geyser plugin for node operators, or Triton's managed geyser API for high-throughput low-latency ingestion. Suitable for indexing entire programs or processing thousands of events per second.
 - **Backfill**: write a script using the Better Sol typed client to iterate `getProgramAccounts` with `dataSlice` and pagination. Suitable for historical analytics and recovery.
-- **Storage**: Drizzle ORM (Postgres, MySQL, SQLite) or Prisma. Better Sol generates Drizzle schemas from account definitions via `@better-sol/cli generate schema`.
+- **Storage**: ORM-backed Postgres, MySQL, or SQLite. Better Sol generates ORM-ready database schemas from account definitions via `npx @better-sol/cli@alpha generate db`.
 
 ## Source selection
 
