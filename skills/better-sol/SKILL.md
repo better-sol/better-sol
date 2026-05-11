@@ -39,6 +39,7 @@ Also load `references/sdk-reference.md` for exact API names, type signatures, an
 
 Defaults:
 
+- Do not use workarounds, backward compatibility hacks, or fallback patterns. Use best practices even if the code becomes very long. Write correct, complete code over shortcuts.
 - Before making code changes, verify dependencies are installed. If `node_modules` is missing or dependencies are unavailable, run `bun install` first.
 - Always install the latest alpha versions of all Better Sol packages. Use the `@alpha` tag to get the latest pre-release:
   ```bash
@@ -53,6 +54,7 @@ Defaults:
 - When Better Sol does not expose a required low-level primitive, compose with `@solana/kit` rather than inventing unsupported Better Sol APIs.
 - Use integration-only when the product only needs swaps, lending, portfolio reads, payments, or dashboards against existing protocols.
 - Use `bun` and `bunx` unless the user specifies another package manager.
+- Always use `devnet` for development and deployment. Do not use `mainnet`, `testnet`, or `localnet` unless the user explicitly asks for a different cluster.
 - Keep keypair files and raw secret keys out of browser/mobile code; use wallet signer scoping.
 - Use `bigint` for token amounts, lamports, balances, and u64/u128 values.
 
