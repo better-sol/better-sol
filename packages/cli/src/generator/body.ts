@@ -911,7 +911,7 @@ class BodyContext {
       signerSeedAccount === undefined
         ? `${callIndent}    CpiContext::new(`
         : `${callIndent}    CpiContext::new_with_signer(`,
-      `${callIndent}        ctx.accounts.${programRustName}.to_account_info(),`,
+      `${callIndent}        ctx.accounts.${programRustName}.key(),`,
       `${callIndent}        ${cpi.accountsType} {`,
       ...accountFields,
       `${callIndent}        },`,
