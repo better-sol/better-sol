@@ -749,7 +749,7 @@ class BodyContext {
       }
       if (method === "abs") return this.coerceRendered(`${this.renderExpression(expression.object, "value")}.abs()`, this.inferExpressionType(expression.object), expectedType);
     }
-    this.unsupported(`function call '${nodeTextOf(this.source, node.callee)}'`, node, "Supported calls are ctx.require, ctx.emit, ctx.log, sol.timestamp(), .abs(), and token CPI helpers.");
+    this.unsupported(`function call '${nodeTextOf(this.source, node.callee)}'`, node, "Supported calls are ctx.require, ctx.emit, ctx.log, cpi.token.*, cpi.sol.timestamp(), .abs(). Helper functions are not supported in run() bodies. Inline all logic directly.");
   }
 
   private renderNewExpression(node: NewExpression, expectedType?: IrType): string {

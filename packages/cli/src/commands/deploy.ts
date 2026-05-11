@@ -297,5 +297,14 @@ async function ensureFunded(address: string, cluster: Cluster, rpcUrl: string, o
   }
 
   s?.stop("Airdrop failed");
-  throw new Error(`Failed to airdrop SOL on ${cluster}. Fund ${address} manually or try again.`);
+  const faucetUrl = "https://faucet.solana.com/";
+  throw new Error(
+    `Failed to airdrop SOL on ${cluster} after ${AIRDROP_RETRIES} attempts. `
+    + `This is common when the devnet faucet is rate-limited.\n\n`
+    + `Get SOL instantly:\n`
+    + `  1. Open ${faucetUrl}\n`
+    + `  2. Paste your address: ${address}\n`
+    + `  3. Click "Request Airdrop"\n\n`
+    + `Then re-run this command.`,
+  );
 }

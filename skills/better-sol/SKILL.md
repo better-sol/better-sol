@@ -56,6 +56,7 @@ When creating a program:
 Gotchas:
 
 - Do not guess Better Sol APIs. If an operation is not in `sdk-reference.md`, check `solana-kit-reference.md` and compose with official `@solana/kit` primitives.
+- The `run()` body is transpiled to Rust, not executed as TypeScript. Only a subset of syntax is supported: variable declarations, arithmetic/comparisons, `ctx.*`, `cpi.*`, `if`/`else`, bounded `for` loops, and property access on declared accounts. No helper functions, no `await`, no `try`/`catch`, no arbitrary function calls. Inline all logic.
 - `ctx.require()` error names must exist in the program `errors` map.
 - PDA seed logic belongs in `.derive(...)`; app code should call typed `.derive(...)` helpers.
 - `@better-sol/test` expects compiled binaries under `.better-sol/cache/<program>.so`.

@@ -214,6 +214,27 @@ cpi.sol.timestamp() // returns bigint (current unix timestamp)
 
 `from`, `to`, `mint` are the deserialized account objects from the instruction's `accounts` parameter. `authority` is an `Address` string (from a signer or stored authority).
 
+### Supported run() body syntax
+
+The `run()` body is transpiled to Anchor Rust. These TypeScript features are supported:
+
+- Variable declarations (`const`, `let`)
+- Arithmetic, comparison, and logical operators on fields and args
+- `ctx.require()`, `ctx.emit()`, `ctx.log()`
+- `cpi.token.*` and `cpi.sol.*` calls
+- `if`/`else` branches
+- Bounded `for` loops: `for (let i = 0; i < limit; i++)`
+- Property access and assignment on declared accounts
+- `clock.unixTimestamp` for time-based logic
+
+These are **not** supported in `run()`:
+
+- Helper functions or nested functions. Inline all logic.
+- Arbitrary function calls (only `ctx.*`, `cpi.*`, `.key()`, `.abs()`, `cpi.sol.timestamp()`).
+- `await`, `try`/`catch`, `while`, `switch`, `for...of`, template literals.
+- External constants or type references (e.g. `typeof Account.type`). Use inline values.
+- Object/array destructuring in variable declarations (declare each variable separately).
+
 ## Runtime client
 
 Import: `import { betterSol, keypairFile, secretKey } from "better-sol"`

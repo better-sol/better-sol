@@ -208,6 +208,25 @@ export const vault = bs.program({
 
 Available CPI functions: `cpi.token.transfer()`, `cpi.token.transferChecked()`, `cpi.token.mintTo()`, `cpi.token.burn()`, `cpi.sol.timestamp()`.
 
+### What you cannot do in run()
+
+The `run()` body is transpiled to Rust. Only a subset of TypeScript is supported:
+
+- Variable declarations with `const` and `let`
+- Arithmetic and comparisons on account fields and args
+- `ctx.require()`, `ctx.emit()`, `ctx.log()`
+- `cpi.token.*` and `cpi.sol.*` calls
+- `if`/`else` branches
+- `for (let i = 0; i < n; i++)` bounded loops
+- Property reads and writes on declared accounts
+
+You **cannot**:
+
+- Define helper functions and call them. Inline all logic directly in the `run()` body. If two instructions share logic, duplicate it.
+- Call arbitrary functions or methods (except `ctx.*`, `cpi.*`, `.key()`, `.abs()`).
+- Use `await`, `try`/`catch`, `while`, `switch`, `for...of`, or template literals.
+- Reference external constants or types (e.g. `typeof SomeAccount.type`). Use literal values and inline types instead.
+
 ### Initialize pattern (account creation)
 
 ```ts
