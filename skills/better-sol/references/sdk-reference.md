@@ -1,139 +1,349 @@
 # Better Sol SDK Reference
 
-## Core idea
+Use this reference for the complete API surface of the Better Sol program DSL and runtime client.
 
-A Better Sol-native program definition is both deploy-time source and runtime client schema. Avoid creating separate hand-written client types or an IDL as an extra source of truth.
+## Program DSL
 
-## Packages
+Import: `import { bs, cpi } from "better-sol/program"`
 
-- `better-sol`: `bs`, `cpi`, `betterSol`, token helpers, `fromIdl`, Borsh codec.
-- `@better-sol/cli`: init, create, deploy, generate IDL client, generate DB schema, verify.
-- `@better-sol/test`: LiteSVM-backed typed tests.
+### Type builders
 
-## CLI
+| Method | Return type | On-chain size | TypeScript type |
+|---|---|---|---|
+| `bs.u8()` | `TypeToken<number>` | 1 byte | `number` |
+| `bs.u16()` | `TypeToken<number>` | 2 bytes | `number` |
+| `bs.u32()` | `TypeToken<number>` | 4 bytes | `number` |
+| `bs.u64()` | `TypeToken<bigint>` | 8 bytes | `bigint` |
+| `bs.u128()` | `TypeToken<bigint>` | 16 bytes | `bigint` |
+| `bs.i8()` | `TypeToken<number>` | 1 byte | `number` |
+| `bs.i16()` | `TypeToken<number>` | 2 bytes | `number` |
+| `bs.i32()` | `TypeToken<number>` | 4 bytes | `number` |
+| `bs.i64()` | `TypeToken<bigint>` | 8 bytes | `bigint` |
+| `bs.i128()` | `TypeToken<bigint>` | 16 bytes | `bigint` |
+| `bs.f32()` | `TypeToken<number>` | 4 bytes | `number` |
+| `bs.f64()` | `TypeToken<number>` | 8 bytes | `number` |
+| `bs.bool()` | `TypeToken<boolean>` | 1 byte | `boolean` |
+| `bs.pubkey()` | `TypeToken<Address>` | 32 bytes | `string` (base58) |
+| `bs.string()` | `TypeToken<string>` | 4 + len | `string` |
+| `bs.bytes()` | `TypeToken<Uint8Array>` | 4 + len | `Uint8Array` |
+| `bs.optional(inner)` | `OptionToken<T>` | 1 + inner | `T | null` |
+| `bs.vector(inner, max?)` | `VecToken<T>` | 4 + len * inner | `T[]` (max defaults to 32) |
+| `bs.array(inner, size)` | `ArrayToken<T>` | size * inner | `T[]` (fixed length) |
+| `bs.struct({ fields })` | `StructZCDefinition<T>` | sum of fields | `{ fields }` |
 
-```bash
-bunx @better-sol/cli@alpha init
-bunx @better-sol/cli@alpha create counter
-bunx @better-sol/cli@alpha deploy --dry-run
-bunx @better-sol/cli@alpha deploy --cluster devnet
-bunx @better-sol/cli@alpha deploy --cluster mainnet --dry-run
-bunx @better-sol/cli@alpha generate idl ./idl.json --out generated/program.ts
-bunx @better-sol/cli@alpha generate db --dialect postgres --out src/db/better-sol.ts
-bunx @better-sol/cli@alpha verify counter --program-id <ADDRESS>
-```
-
-## Program imports
-
-```ts
-import { bs, cpi } from "better-sol/program"
-```
-
-## Types
-
-| Token | TS type | Use |
-|---|---|---|
-| `bs.u8/u16/u32`, `bs.i8/i16/i32`, `bs.f32/f64` | `number` | small numeric values |
-| `bs.u64/u128`, `bs.i64/i128` | `bigint` | balances, amounts, timestamps |
-| `bs.bool()` | `boolean` | flags |
-| `bs.pubkey()` | `string` | Solana addresses |
-| `bs.string()` | `string` | UTF-8 text |
-| `bs.bytes()` | `Uint8Array` | raw bytes |
-| `bs.optional(t)` | `T | null` | optional values |
-| `bs.vector(t, max?)` | bounded array | dynamic list |
-| `bs.array(t, size)` | fixed array | fixed-size data |
-
-## Accounts
+### Account definition
 
 ```ts
-const RecordAccount = bs.account({
+const Counter = bs.account({
+  count: bs.u64(),
   authority: bs.pubkey(),
-  value: bs.u64(),
-}).derive(seed => ["record", seed.authority])
-
-const Fixed = bs.account({ values: bs.array(bs.u64(), 16) }).zeroCopy()
+})
 ```
 
-## Program
+Creates an `AccountDefinition` with the given fields.
+
+#### `.derive(buildSeeds)`
 
 ```ts
-export const program = bs.program({
-  name: "program",
-  address: "PROGRAM_ID",
-  accounts: { RecordAccount },
-  errors: { Unauthorized: "Only authority may call this" },
-  events: { Updated: { account: bs.pubkey() } },
-}, ix => ({
-  update: ix({
-    accounts: { record: bs.mut(RecordAccount), authority: bs.signer() },
-    args: { value: bs.u64() },
-    run: ({ record, authority }, { value }, ctx) => {
-      ctx.require(record.authority === authority, "Unauthorized")
-      record.value = value
-      ctx.emit("Updated", { account: record.key })
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+}).derive((seed) => ["counter", seed.authority])
+```
+
+Defines PDA seeds. The `seed` parameter is a proxy that lets you reference account fields. Only numeric and pubkey fields can be used as seeds.
+
+The seed array can mix literal strings and field references:
+
+```ts
+.derive((seed) => ["position", seed.user, seed.market])
+```
+
+#### `.zeroCopy()`
+
+```ts
+const Header = bs.account({
+  authority: bs.pubkey(),
+  count: bs.u64(),
+}).zeroCopy()
+```
+
+Enables zero-copy deserialization. Only allowed on accounts where every field is a numeric, float, pubkey, or struct of the same. No strings, vectors, or optional fields.
+
+#### `.hasOne(field)`
+
+```ts
+const TokenAccount = bs.account({
+  owner: bs.pubkey(),
+  mint: bs.pubkey(),
+}).hasOne("mint")
+```
+
+Declares that the account has a one-to-one relationship with another account, referenced by a field.
+
+### Account constraint modes
+
+Used in instruction `accounts` declarations:
+
+| Method | Kind | Mutable | Use when |
+|---|---|---|---|
+| `bs.init(AccountDef)` | init | yes | Creating a new account |
+| `bs.initIfNeeded(AccountDef)` | initIfNeeded | yes | Create if not exists, use existing if it does |
+| `bs.mut(AccountDef)` | mut | yes | Writing to an existing account |
+| `bs.close(AccountDef, "refundTo")` | close | yes | Closing an account and reclaiming rent |
+| `bs.realloc(AccountDef, space)` | realloc | yes | Resizing account data |
+| `bs.signer()` | signer | no | Transaction signer (auto-resolved to payer) |
+| `bs.mint()` | mint | no | SPL Token mint account |
+| `bs.mint().writable()` | mint | yes | Writable SPL Token mint |
+| `bs.tokenAccount()` | tokenAccount | no | SPL Token token account |
+| `bs.tokenAccount().writable()` | tokenAccount | yes | Writable token account |
+| `bs.tokenProgram()` | tokenProgram | no | SPL Token program (auto-resolved) |
+| `bs.token2022Program()` | token2022Program | no | Token-2022 program (auto-resolved) |
+| `bs.systemProgram()` | systemProgram | no | System program (auto-resolved) |
+| `bs.clock()` | clock | no | Clock sysvar (auto-resolved) |
+| `bs.remaining(AccountDef)` | remaining | no | Dynamic remaining accounts |
+
+Auto-resolved constraints (`signer`, `systemProgram`, `tokenProgram`, `token2022Program`, `clock`) are optional in the client call. The client fills them automatically.
+
+### Program definition
+
+```ts
+export const counter = bs.program({
+  name: "counter",
+  address: "PROGRAM_ADDRESS",
+  accounts: { Counter },
+  errors: {
+    Unauthorized: "Only the authority can perform this action",
+    Underflow: "Counter cannot go below zero",
+  },
+  events: {
+    CounterChanged: { counter: bs.pubkey(), authority: bs.pubkey(), count: bs.u64() },
+  },
+}, (ix) => ({
+  initialize: ix({
+    accounts: { counter: bs.init(Counter), authority: bs.signer() },
+    args: { initialValue: bs.u64() },
+    run: ({ counter, authority }, { initialValue }, ctx) => {
+      counter.count = initialValue
+      counter.authority = authority
     },
   }),
 }))
 ```
 
-## Constraints
+#### `bs.program(config, buildInstructions)`
 
-- `bs.init(Account)`: create account.
-- `bs.initIfNeeded(Account)`: create if missing; guard against reinitialization.
-- `bs.mut(Account)`: mutable account.
-- `bs.close(Account, "refundTo")`: close and refund rent.
-- `bs.realloc(Account, space)`: resize.
-- `bs.signer()`: signer, usually auto-filled by client payer.
-- `bs.mint()`, `bs.mint().writable()`.
-- `bs.tokenAccount()`, `bs.tokenAccount().writable()`.
-- `bs.tokenProgram()`, `bs.token2022Program()`.
-- `bs.systemProgram()`, `bs.clock()`.
-- `bs.remaining(AccountOrConstraint)`.
+**config fields:**
 
-## CPI helpers
+| Field | Required | Type | Description |
+|---|---|---|---|
+| `name` | yes | `string` | Program name for logging and debugging |
+| `address` | yes | `Address` | On-chain program ID (base58 string) |
+| `accounts` | no | `Record<string, AccountDefinition>` | Named account definitions |
+| `errors` | no | `Record<string, string>` | Error name to human-readable message |
+| `events` | no | `Record<string, FieldSchema>` | Event name to field schema |
+
+**`buildInstructions(ix)`:** a function that receives the `ix` builder and returns an object of instruction definitions.
+
+### Instruction definition
+
+```ts
+ix({
+  accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+  args: { amount: bs.u64() },
+  run: (accounts, args, ctx) => { /* instruction logic */ },
+})
+```
+
+**Overloads:**
+
+| Has accounts | Has args | Signature |
+|---|---|---|
+| Yes | Yes | `ix({ accounts, args, run: (accounts, args, ctx) => {} })` |
+| Yes | No | `ix({ accounts, run: (accounts, ctx) => {} })` |
+| No | Yes | `ix({ args, run: (args, ctx) => {} })` |
+| No | No | `ix({ run: (ctx) => {} })` |
+
+**`run` parameters:**
+
+1. **accounts**: destructured object. Each key matches an `accounts` entry. Value type depends on the constraint:
+   - `bs.init(Counter)` → `Counter & { key: Address }` (includes `.key`)
+   - `bs.mut(Counter)` → `Counter & { key: Address }`
+   - `bs.signer()` → `Address` (just the public key string)
+   - `bs.mint()` → `{ key: Address, supply: bigint, decimals: number, mintAuthority: Address | null, freezeAuthority: Address | null }`
+   - `bs.tokenAccount()` → `{ key: Address, mint: Address, owner: Address, amount: bigint }`
+   - `bs.tokenProgram()` → `{ key: Address }`
+   - `bs.systemProgram()` → `{ key: Address }`
+   - `bs.clock()` → `{ unixTimestamp: bigint, slot: bigint, epoch: bigint }`
+
+2. **args**: destructured object matching the `args` schema, or `{}` if no args.
+
+3. **ctx**: `InstructionContext` with:
+   - `ctx.require(condition: boolean, errorName: string): void` - assert a condition, fail with named error
+   - `ctx.emit(eventName: string, payload: object): void` - emit a program event
+   - `ctx.log(message: string, ...values): void` - log a message to transaction logs
+
+### CPI functions
+
+Import: `import { cpi } from "better-sol/program"`
 
 ```ts
 cpi.token.transfer({ from, to, authority, amount })
-cpi.token.transferChecked({ from, to, authority, mint, amount, decimals })
+cpi.token.transferChecked({ from, to, authority, amount, mint, decimals })
 cpi.token.mintTo({ mint, to, authority, amount })
 cpi.token.burn({ from, mint, authority, amount })
-cpi.sol.timestamp()
+cpi.sol.timestamp() // returns bigint (current unix timestamp)
 ```
 
-## Client
+`from`, `to`, `mint` are the deserialized account objects from the instruction's `accounts` parameter. `authority` is an `Address` string (from a signer or stored authority).
+
+## Runtime client
+
+Import: `import { betterSol, keypairFile, secretKey } from "better-sol"`
+
+### Creating a client
 
 ```ts
-import { betterSol, keypairFile, secretKey, fromIdl } from "better-sol"
-
-const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs })
+const sol = await betterSol({
+  cluster: "devnet",
+  payer: keypairFile("./keypair.json"),
+  programs: { counter },
+})
 ```
 
-Capabilities:
+### Configuration options
 
-- instruction call: `sol.counter.increment({ counter, amount: 1n })`
-- explicit send: `.send(params)`
-- raw instruction: `.instruction(params)`
-- signed transaction: `.transaction(params)`
-- simulation: `.simulate(params)`
-- metadata: `.prepare(params)`
-- Solana Kit plan: `.plan(params)`
-- PDA: `sol.counter.accounts.Counter.derive({ authority })`
-- fetch: `.fetch(address)`, `.fetchMultiple(addresses)`
-- compose: `sol.send([...])`, `sol.batch([...])`, `sol.steps([...])`
-- tokens: `sol.token`, `sol.token2022`
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `cluster` | `"devnet" | "testnet" | "mainnet" | "localnet"` | `"devnet"` | Solana cluster |
+| `rpcUrl` | `string` | cluster default | Custom RPC endpoint |
+| `rpcSubscriptionsUrl` | `string` | cluster default | Custom WebSocket URL |
+| `rpc` | `Rpc` | built from cluster | Pre-existing RPC connection |
+| `rpcSubscriptions` | `RpcSubscriptions` | built from cluster | Pre-existing WebSocket connection |
+| `payer` | `SignerInput` | none | Transaction signer |
+| `programs` | `Record<string, AnyProgram>` | none | Program definitions to register |
+| `commitment` | `"processed" | "confirmed" | "finalized"` | `"confirmed"` | Transaction confirmation level |
+| `computeUnits` | `{ computeUnitLimit?: bigint, computeUnitPrice?: bigint }` | none | Compute budget settings |
+| `addressLookupTables` | `Address[]` | none | Address Lookup Table addresses |
+| `durableNonce` | `{ nonceAccountAddress, nonceAuthority }` | none | Durable nonce config |
 
-## Token client
+### Signer input types
 
 ```ts
-const { mint } = await sol.token.createMint({ decimals: 9 })
-const ata = await sol.token.getATA({ owner, mint })
-await sol.token.mintTo({ mint, to: owner, amount: 1_000_000_000n })
-await sol.token.transfer({ mint, to: recipient, amount: 100_000_000n })
-const balance = await sol.token.getBalance({ owner, mint })
+import { keypairFile, secretKey } from "better-sol"
+
+keypairFile("./keypair.json")          // reads a keypair file from disk
+secretKey(new Uint8Array([/* 64 bytes */])) // raw secret key bytes
+walletAdapter.signer                   // TransactionSigner from a wallet adapter
 ```
+
+### Client methods
+
+#### Program namespace
+
+For each registered program, the client exposes a namespace:
+
+```ts
+sol.counter                           // program namespace
+sol.counter.address                   // program's on-chain address
+sol.counter.accounts.Counter          // BoundAccount with derive() and fetch()
+sol.counter.initialize(params)        // instruction method
+sol.counter.increment(params)         // instruction method
+```
+
+#### Bound account methods
+
+```ts
+const addr = await sol.counter.accounts.Counter.derive({ authority: sol.payer })
+const data = await sol.counter.accounts.Counter.fetch(addr)
+const multiple = await sol.counter.accounts.Counter.fetchMultiple([addr1, addr2])
+```
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `derive(values)` | PDA seed values matching `.derive()` definition | `Promise<Address>` |
+| `fetch(address)` | Account address | `Promise<FieldType | null>` |
+| `fetchMultiple(addresses)` | Array of addresses | `Promise<(FieldType | null)[]>` |
+
+#### Instruction methods
+
+Every instruction on the program is available as a method on the namespace:
+
+```ts
+const signature = await sol.counter.increment({ counter: addr, amount: 5n })
+```
+
+Each instruction method has these variants:
+
+| Method | Returns | Description |
+|---|---|---|
+| `method(params)` | `Promise<Signature>` | Send and confirm (default) |
+| `method.send(params)` | `Promise<Signature>` | Same as calling directly |
+| `method.instruction(params)` | `Promise<Instruction>` | Get the raw instruction |
+| `method.transaction(params)` | `Promise<SignedTransaction>` | Build the full transaction |
+| `method.simulate(params)` | `Promise<SimulateResult>` | Simulate without sending |
+| `method.prepare(params)` | `Promise<PrepareResult>` | Get instruction + signers + pubkeys |
+| `method.plan(params)` | `Promise<InstructionPlanResult>` | Get instruction + plan object |
+
+#### Transaction methods
+
+```ts
+sol.send([...instructions])           // atomic multi-instruction transaction
+sol.batch([...instructions])          // non-divisible sequential plan
+sol.steps([step1, step2, step3])      // sequential with dependency passing
+sol.transfer({ to, amount })          // transfer SOL (lamports)
+sol.getBalance(address)               // get SOL balance (lamports)
+sol.withSigner(signer)                // create scoped client with different signer
+sol.onTransaction(callback)           // listen for confirmed transactions
+```
+
+#### Token client
+
+```ts
+sol.token.createMint({ decimals, authority?, freezeAuthority? })
+// Returns { mint: Address, mintSigner: TransactionSigner, signature: Signature }
+
+sol.token.mintTo({ mint, to, amount, decimals? })
+// Returns Signature
+
+sol.token.transfer({ mint, to, amount, from?, decimals? })
+// Returns Signature. Derives ATAs automatically.
+
+sol.token.getBalance({ owner, mint })
+// Returns bigint
+
+sol.token.getATA({ owner, mint })
+// Returns Address (the Associated Token Address)
+```
+
+`sol.token2022` has the same API but uses the Token-2022 program.
+
+## Test context
+
+Import: `import { createTestContext } from "@better-sol/test"`
+
+```ts
+const ctx = await createTestContext({ programs: { counter } })
+```
+
+| Property | Type | Description |
+|---|---|---|
+| `ctx.svm` | `LiteSVM` | Underlying LiteSVM instance |
+| `ctx.payer` | `Address` | Test payer public key |
+| `ctx.newSigner(fundSol?)` | `Promise<TransactionSigner>` | Generate a funded keypair (default: 100 SOL) |
+| `ctx.as(signer)` | `Promise<TestContext>` | Create scoped client for a signer |
+| `ctx.warp(seconds)` | `void` | Advance clock by relative seconds |
+| `ctx.setClock(timestamp)` | `void` | Set exact clock unix timestamp |
+| `ctx.setBalance(address, sol)` | `void` | Set account SOL balance |
+| `ctx.createMint(decimals)` | `Promise<{ mint, mintSigner }>` | Create a token mint |
+| `ctx.mintTokens(params)` | `Promise<Signature>` | Mint tokens to an address |
+| `ctx.profile(fn)` | `Promise<{ result, computeUnits, logs }>` | Profile a transaction |
+| `ctx.program.*` | same as production client | Full typed client for registered programs |
+| `ctx.send([...])` | same as production client | Atomic multi-instruction transaction |
+| `ctx.token.*` | same as production client | Token operations |
 
 ## Related
 
-- `program-patterns.md` for how these APIs fit into account and instruction design.
-- `client-testing-deploy.md` for runtime client, LiteSVM, and deploy workflows.
-- `tokens.md` for token-specific architecture choices.
+- `program-patterns.md` for program definition patterns.
+- `client-testing-deploy.md` for testing and deployment workflows.
+- `cookbook-recipes.md` for runnable examples.

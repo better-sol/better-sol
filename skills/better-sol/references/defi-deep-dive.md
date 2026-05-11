@@ -146,6 +146,46 @@ CPI chains create transitive trust. Each protocol in a CPI chain adds its own ri
 
 Protocol failures cascade through interconnected DeFi. Impossible to eliminate. Mitigate with position limits, insurance, and monitoring.
 
+## DeFi analysis framework
+
+### Invariant-first design
+
+Every DeFi primitive should be described by invariants before code is written.
+
+| Primitive | Example invariant |
+|---|---|
+| AMM | `x * y` never decreases except through fees and rounding |
+| Lending market | Total debt plus reserves never exceeds collateral-adjusted assets |
+| Vault | Sum of user shares always maps to claimable assets |
+| Perps | Funding payments are zero-sum between longs and shorts |
+| Staking | Rewards emitted never exceed authorized reward budget |
+
+Write tests around invariant preservation under deposits, withdrawals, swaps, liquidations, and failed transactions. If the invariant cannot be stated clearly, the protocol design is not ready.
+
+### Risk decomposition
+
+Analyze each DeFi product through four risk layers:
+
+1. **Smart contract risk**: bugs in accounting, authority checks, CPIs, or math.
+2. **Oracle risk**: stale, manipulated, or unavailable external prices.
+3. **Liquidity risk**: inability to exit, liquidate, or rebalance without large slippage.
+4. **Incentive risk**: rational users can extract value by gaming rewards, fees, or governance.
+
+A design is only as safe as the weakest layer. A perfectly audited lending program can still fail if its oracle or liquidation market fails.
+
+### Economic stress testing
+
+Before mainnet, simulate:
+
+- 50% collateral price crash in one hour
+- Oracle downtime during volatile markets
+- Liquidity withdrawal by the largest LP
+- Reward farming with 100 sybil wallets
+- Liquidation congestion during high priority fees
+- Admin key compromise followed by delayed multisig response
+
+The output should be a table of losses, blocked actions, and manual recovery steps.
+
 ## Related
 
 - `defi.md` for build-vs-integrate decisions, common accounts, and transaction flows.

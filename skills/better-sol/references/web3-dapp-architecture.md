@@ -1,146 +1,195 @@
 # Web3 and dApp Architecture
 
-Use this reference when designing how frontend, backend, RPC, wallet, and on-chain programs connect in a Solana dApp, or when comparing approaches across blockchains.
+Use this reference when designing how frontend, backend, RPC, wallet, indexer, and on-chain programs connect in a Solana or multi-chain dApp.
 
-## dApp architecture layers
+## Core principle
+
+A dApp is a distributed system with money at the boundary. Architecture decisions should be made by asking:
 
 ```text
-┌──────────────────────────────┐
-│  Browser / Mobile            │
-│  UI → wallet adapter → client│
-├──────────────────────────────┤
-│  Backend (optional)          │
-│  API → indexer → cron jobs   │
-├──────────────────────────────┤
-│  RPC Provider                │
-│  JSON-RPC / WebSocket / gRPC │
-├──────────────────────────────┤
-│  Solana Runtime (SVM)        │
-│  Programs → Accounts         │
-└──────────────────────────────┘
+What must be trust-minimized, what can be cached, and what can fail safely?
 ```
 
-Each layer has different trust boundaries, latency, and failure modes. The UI must never assume backend data matches on-chain state for financial decisions.
+Do not put everything on-chain. Do not trust the backend for financial truth. Put each responsibility where it belongs.
+
+## Architecture layers
+
+```text
+┌──────────────────────────────────────┐
+│ Browser / Mobile                     │
+│ UI, wallet, transaction preview      │
+├──────────────────────────────────────┤
+│ Client                               │
+│ Better Sol typed client, SDKs        │
+├──────────────────────────────────────┤
+│ Backend (optional)                   │
+│ APIs, auth, webhooks, cron, relayers │
+├──────────────────────────────────────┤
+│ Data layer                           │
+│ RPC, WebSocket, indexer, database    │
+├──────────────────────────────────────┤
+│ Solana runtime                       │
+│ Programs, accounts, token programs   │
+└──────────────────────────────────────┘
+```
+
+Each layer has a different trust boundary. The frontend can lie. The backend can be down. RPC can be stale. Wallets can reject. Programs must enforce the invariant regardless of what every other layer says.
+
+## Responsibility split
+
+| Responsibility | Best layer | Why |
+|---|---|---|
+| Asset custody | Program or external protocol | Must be enforceable without trusting backend |
+| Transaction signing | Wallet | Private keys stay outside app code |
+| Transaction preview | Frontend | User must understand before signing |
+| Risk checks | Frontend + program | UI warns, program enforces critical conditions |
+| Historical analytics | Indexer/database | Too expensive to compute on-chain |
+| Notifications | Backend | Off-chain side effect |
+| Search and filtering | Backend/database | Not a chain responsibility |
+| Rewards, claims, escrow | Program | Needs public verifiability |
+| Eligibility scoring | Backend + on-chain proof | Raw data off-chain, result or claim on-chain |
 
 ## Client patterns across chains
 
 | Concept | Ethereum (EVM) | Solana (SVM) |
 |---|---|---|
-| State location | contract storage | separate accounts |
-| Transaction model | single contract call | multi-instruction bundles |
-| Gas | variable, auction-based | fixed compute budget |
-| Account model | single contract address | many accounts per program |
-| Client library | ethers.js / viem | @solana/kit / better-sol |
+| State location | Contract storage | Separate accounts |
+| Transaction model | Contract calls | Multi-instruction transactions |
+| Fee model | Gas market | Compute budget + priority fee |
 | Wallet standard | EIP-1193 / EIP-6963 | wallet-standard |
-| IDL/ABI | Solidity ABI | Anchor IDL / Better Sol program def |
-| Indexing | Dune / The Graph / Ponder | Helius / Triton / custom indexers |
-| Address format | 0x hex (20 bytes) | Base58 (32 bytes) |
+| Client library | viem, wagmi, ethers | `@solana/kit`, Better Sol |
+| Interface source | ABI | Better Sol definition, Anchor IDL |
+| Indexing | The Graph, Ponder, Dune | Helius, Triton, geyser, custom indexer |
+| Address format | 0x hex | Base58 |
 
-## Wallet connection
+Solana requires explicit accounts. That makes transaction construction more complex but enables parallel execution. Design state so users write their own accounts instead of a single global bottleneck.
 
-EVM uses `window.ethereum` (EIP-1193) or multi-provider discovery (EIP-6963). Solana uses wallet-standard, which decouples wallet detection from specific adapters. Both ecosystems prefer connection → network check → active account subscription.
+## Wallet architecture
 
-Cross-chain dApps need separate wallet contexts per chain. Never assume a connected Solana wallet implies an EVM wallet or vice versa.
+Wallet choice determines onboarding and custody assumptions:
 
-## RPC strategies
+- Solana-only: Solana Wallet Adapter.
+- Multi-chain web/mobile: Reown AppKit.
+- Consumer login and embedded wallets: Privy or Dynamic.
+- EVM-heavy app: wagmi + viem, with a separate Solana provider if needed.
 
-- JSON-RPC over HTTP: request/response, suitable for reads and transaction submission.
-- WebSocket subscriptions: account changes, program logs, slot updates. Reconnect with backoff.
-- geyser plugins: high-throughput streaming to external databases. Used by indexers and analytics.
-- GraphQL: some providers expose filtered queries. Not a Solana native feature.
+Never assume a connected wallet on one namespace implies connection on another. Track Solana, EVM, and Bitcoin accounts separately unless the wallet SDK returns explicit namespace state.
 
-Rate limiting, caching, and failover are necessary for production. Avoid single-provider dependencies for critical paths.
+See `wallet-connection.md` for setup examples.
 
-## State synchronization patterns
+## RPC and data strategy
 
-### Optimistic UI
+### RPC reads
 
-Show expected result immediately after wallet signature. Roll back if the transaction fails. Requires reliable confirmation tracking.
+Use RPC for fresh account state and transaction submission. Avoid using RPC as your analytics database.
 
-### Polling
+Best practices:
 
-Periodically fetch account state. Simple but wasteful. Suitable for dashboards and non-critical reads.
+- Batch account reads.
+- Deduplicate identical queries.
+- Use fallback providers for critical reads.
+- Show stale-state indicators.
+- Simulate transactions before signing.
 
 ### WebSocket subscriptions
 
-Subscribe to account or program changes. Lower latency than polling. Handle disconnects and missed updates.
+Use subscriptions for account changes, program logs, and confirmation updates. Always handle reconnects and missed messages. A WebSocket stream is a convenience, not a source of final truth.
 
-### Event-sourced indexing
+### Indexer/database
 
-Parse transaction logs and program events into a queryable database. Required for history, analytics, and complex queries that on-chain state alone cannot serve.
+Use an indexer for:
 
-## Transaction construction patterns
+- Transaction history
+- Portfolio views
+- Leaderboards
+- Analytics
+- Search
+- Aggregations
+- Notifications
+
+Indexers can lag or be wrong. If a user is about to sign a transaction, refresh critical on-chain state from RPC.
+
+## Transaction architecture
 
 ### Single instruction
 
-Simplest case. One program call per transaction.
+Use for simple state changes. Easier to preview and debug.
 
-### Multi-instruction atomic bundle
+### Atomic multi-instruction transaction
 
-Multiple instructions in one transaction. All succeed or all fail. Used for approve+transfer, create+initialize, or multi-step DeFi operations.
+Use when all steps must succeed together: create account, initialize, transfer, record claim.
 
-### Versioned transactions with lookup tables
+### Sequential plan
 
-Address Lookup Tables (ALTs) compress account references, allowing more accounts per transaction. Essential for complex DeFi operations.
+Use when later transactions depend on earlier signatures or confirmations. Provide recovery if the sequence stops halfway.
 
-### Compute budget management
+### Versioned transaction with ALTs
 
-Set compute unit limit and price. Under-budget transactions fail. Over-paying wastes SOL. Simulate first to estimate.
+Use when too many accounts exceed transaction size. Adds setup and lifecycle management.
 
-### Priority fees
+### Relayed transaction
 
-Pay higher compute unit prices for faster inclusion during congestion. Monitor recent priority fee averages.
+Backend builds or sponsors part of the transaction. User still signs the authority-bearing part. Be explicit about what the relayer can and cannot do.
 
-### Jito bundles and MEV
+## State synchronization model
 
-Submit transaction bundles with tips to Jito validators for priority execution. Relevant for time-sensitive DeFi operations. Front-running and sandwich attacks are MEV risks to consider when designing user-facing transaction flows.
+Use a state machine, not booleans:
 
-## Cross-chain patterns
+```text
+idle → preparing → previewing → signing → submitted → confirming → confirmed
+                              ↘ rejected  ↘ failed    ↘ timeout
+```
 
-### Bridges
+Rules:
 
-Lock-and-mint, burn-and-release, or liquidity pool bridges connect assets across chains. Wormhole, LayerZero, and deBridge are common Solana bridge protocols.
+- Never show confirmed state before confirmation.
+- If confirmation times out, show "status unknown" with explorer link.
+- On app reload, recover pending transactions from local storage or backend.
+- After confirmation, invalidate affected account queries.
 
-Bridge risks: custodian compromise, validator set attacks, message relay delays, and liquidity drain. Never assume bridge state equals native chain state without confirmation.
+## Backend decision framework
 
-### Cross-chain messaging
+Add a backend when:
 
-General message passing protocols allow smart contract calls across chains. Useful for governance, state synchronization, and multi-chain DeFi.
+- You need webhooks, notifications, or email.
+- You need private API keys.
+- You need indexing or historical analytics.
+- You need server-side eligibility checks.
+- You need relayers, crons, or automation.
 
-### Multi-chain dApp design
+Do not add a backend to decide whether funds can move. The program must enforce that.
 
-Separate chain-specific logic from shared business logic. Use chain adapters that implement a common interface for wallet, transaction, and state operations.
+## Failure-mode checklist
 
-## Backend patterns for dApps
+Before launch, answer:
 
-### Transaction relaying
+- What happens if the frontend is compromised?
+- What happens if the backend is down?
+- What happens if RPC returns stale data?
+- What happens if the wallet changes account mid-flow?
+- What happens if a transaction confirms after the UI times out?
+- What happens if the indexer misses a slot?
+- What happens if a protocol dependency pauses?
+- What happens if the admin key is compromised?
 
-Backend constructs and partially signs transactions. User completes signing. Useful when backend knows required accounts or must sequence operations.
+If the answer is "users lose funds," move the control into the program or remove the feature.
 
-### Off-chain computation
+## Architecture review checklist
 
-Compute proofs, eligibility checks, API aggregations, and data transformations off-chain. Only put the result or commitment on-chain.
-
-### Oracle integration
-
-Pyth Network and Switchboard provide on-chain price feeds. Oracles are essential for DeFi but introduce trust assumptions about data freshness and manipulation resistance.
-
-### Keeper and automation
-
-Cron-triggered transactions for liquidations, rebalancing, reward distributions, and expiry processing. Can use Clockwork (deprecated), custom cron services, or self-hosted schedulers.
-
-## Error handling across the stack
-
-- RPC errors: rate limits, node sync issues, unsupported methods.
-- Transaction errors: program runtime errors, insufficient compute, insufficient balance, timeout.
-- Wallet errors: user rejection, wallet disconnected, wrong network.
-- Simulation errors: catch before submission using `simulateTransaction`.
-- Client errors: stale account data, race conditions, cached state.
-- Network errors: WebSocket disconnects, provider outages, DNS failures.
-
-Every layer should have typed error handling. Never surface raw RPC error messages to end users.
+- [ ] Program enforces all critical invariants.
+- [ ] Frontend never asks for blind signatures.
+- [ ] Backend cannot forge user intent.
+- [ ] RPC state is refreshed before signing.
+- [ ] Indexer state is labeled with freshness.
+- [ ] Wallet connection handles disconnect and account switch.
+- [ ] Transaction failures have clear recovery paths.
+- [ ] Cross-chain or external protocol dependencies are explicit.
+- [ ] Sensitive keys never ship to browser or mobile.
 
 ## Related
 
+- `wallet-connection.md` for Solana Wallet Adapter, Reown, Privy, and Dynamic setup patterns.
 - `dapp-state-management.md` for frontend state domains and error handling patterns.
 - `multi-chain-ui.md` for chain-specific error display.
+- `data-pipelines.md` for indexer and webhook architecture.
+- `transaction-ux.md` for transaction preview and signing states.

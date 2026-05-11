@@ -132,6 +132,32 @@ Only one transaction can write-lock an account per slot. High-frequency programs
 - Separate read and write paths.
 - Event-driven updates instead of synchronous writes.
 
+## Performance decision framework
+
+### Diagnose before optimizing
+
+Optimize only after identifying the bottleneck:
+
+| Symptom | Likely bottleneck | First response |
+|---|---|---|
+| Transaction too large | Account list or instruction data | Use ALTs, split transaction, reduce accounts |
+| Compute exceeded | CPI depth or heavy verification | Profile logs, reduce CPIs, raise compute budget only if justified |
+| High failure during traffic spikes | Write-lock contention | Shard state by user, market, or epoch |
+| RPC slow reads | Too many account fetches | Batch with `getMultipleAccounts`, cache, index |
+| Mobile signing unreliable | Transaction assembly latency | Preload accounts, simulate before wallet handoff |
+
+### Architectural tradeoffs
+
+| Technique | Benefit | Cost |
+|---|---|---|
+| Address Lookup Tables | More accounts per transaction | Extra setup, lifecycle management |
+| Compression | Massive scale at lower cost | Indexer dependency, harder composability |
+| Token-2022 extensions | Rich token behavior | Larger account size, wallet compatibility checks |
+| Zero-copy accounts | Faster deserialization | Stricter layout constraints |
+| Priority fees | Better inclusion probability | Higher user cost, fee estimation complexity |
+
+The best optimization is usually state layout, not a compute budget increase. If many users write the same account, no amount of compute optimization fixes the throughput bottleneck.
+
 ## Related
 
 - `web3-dapp-architecture.md` for dApp architecture patterns that use these runtime features.

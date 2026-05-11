@@ -2,142 +2,236 @@
 
 Use this reference when designing token economies, reviewing token mechanics, planning token launches, or evaluating protocol sustainability.
 
-## Token utility types
+This is not legal, tax, or investment advice. Token design can create regulatory and financial risk. Consult qualified counsel before any public sale, revenue share, or regulated asset launch.
 
-### Governance tokens
+## First principle
 
-Holders vote on protocol decisions. Value derives from future protocol revenue or decision-making power.
+A token is justified only if it coordinates behavior that the product cannot coordinate as well without a token.
 
-Design considerations:
+Bad reason:
 
-- Vote delegation for passive holders.
-- Quorum requirements for meaningful decisions.
-- Timelocks to prevent emergency governance capture.
-- Separation of governance and operational keys.
+```text
+We need a token because crypto products have tokens.
+```
 
-### Utility tokens
+Better reason:
 
-Required to access protocol features: fees, staking, premium features, or rate limits.
+```text
+The protocol needs a scarce coordination asset for staking, slashing, governance, rewards, or access that must be enforced on-chain.
+```
 
-Design considerations:
+## Token necessity test
 
-- Fee burn vs fee distribution to stakers.
-- Whether utility creates sustainable demand beyond speculation.
-- Velocity problem: high-velocity tokens face selling pressure.
+Before designing supply, answer:
 
-### Staking tokens
+| Question | If no |
+|---|---|
+| Does the token have a job inside the protocol? | Do not launch it yet |
+| Would users buy or hold it without speculation? | Utility is weak |
+| Does it improve security, coordination, or access? | It may be a marketing token |
+| Can the product work with SOL, USDC, or existing tokens? | Use existing tokens |
+| Is the legal risk worth the product benefit? | Delay launch |
 
-Bonded for network security or protocol participation. Rewards come from inflation or protocol revenue.
+Most early products should launch without a token until usage patterns are proven.
 
-Design considerations:
+## Utility types
 
-- Lock-up periods and unbonding time.
-- Slashing conditions and severity.
-- Reward rate sustainability.
-- Relationship between staked supply and circulating supply.
+| Utility | Strong version | Weak version |
+|---|---|---|
+| Governance | Controls meaningful parameters with safeguards | Votes on cosmetic decisions |
+| Staking | Secures a service with slashing or real opportunity cost | Locks token only to reduce circulating supply |
+| Fee payment | Required for protocol usage and creates recurring demand | Optional discount token |
+| Access | Unlocks scarce capacity or rights | Token-gated Discord |
+| Collateral | Backs credit, insurance, or risk | Thinly traded self-collateral |
+| Rewards | Bootstraps useful behavior | Pays mercenary users to farm and dump |
+| Revenue claim | Contractual, legal, and transparent | Vague promise of future value |
 
-### Revenue-sharing tokens
+A token can combine utilities, but each utility increases complexity. Do not add utility that the protocol cannot explain or enforce.
 
-Holders receive a share of protocol revenue. May qualify as securities in some jurisdictions.
+## Value capture models
 
-Design considerations:
+### Fee sink
 
-- Distribution mechanism: direct transfer, buyback-and-burn, or compound.
-- Legal classification in target jurisdictions.
-- Sustainability of revenue relative to token valuation.
+Users pay protocol fees in the token, or fees are used to buy back the token.
 
-## Token launch strategies
+Pros: direct link between usage and demand.
+Cons: buybacks can create securities questions and treasury timing risk.
 
-### Fair launch
+### Staking and slashing
 
-No pre-mine, no investor allocation. Tokens are earned through participation. Maximum decentralization but no guaranteed initial liquidity.
+Operators stake tokens and can be slashed for bad behavior.
 
-### Liquidity bootstrapping
+Pros: token secures service quality.
+Cons: requires objective fault detection and credible slashing.
 
-Initial token distribution through a liquidity pool. Price discovery is market-driven. Common in DeFi.
+### Governance control
 
-### Airdrop
+Token holders govern parameters, treasury, or upgrades.
 
-Distribute tokens to eligible wallets. Builds community but creates sell pressure. Eligibility criteria affect fairness and sybil resistance.
+Pros: decentralizes control over time.
+Cons: voter apathy and whale capture are common.
 
-### Token sale
+### Access rights
 
-Fixed or dutch auction for early token distribution. Provides capital but requires regulatory compliance.
+Token grants access to scarce capacity: API calls, vault allocation, launchpad slots, or membership.
 
-### Bonding curve
-
-Price increases with supply. Common in social tokens and pump.fun-style launches. Creates built-in liquidity but can be speculative.
+Pros: understandable utility.
+Cons: access demand must be real and recurring.
 
 ## Supply mechanics
 
 ### Fixed supply
 
-Maximum supply is constant. Deflationary if tokens are burned. Value appreciation through scarcity.
+Total supply is set at launch. No new tokens are minted.
+
+Best for: simple governance, membership, or fixed-cap rewards.
+Risk: poor initial distribution is permanent unless governance redistributes treasury.
 
 ### Inflationary supply
 
-New tokens minted on a schedule. Inflation must be offset by demand growth or utility. Common in staking rewards.
+New tokens are minted on a schedule.
+
+Best for: validator rewards, liquidity incentives, ongoing contributor rewards.
+Risk: inflation becomes sell pressure unless matched by real demand.
 
 ### Deflationary mechanics
 
-Tokens burned through fees, buyback, or mechanism design. Must balance deflation with economic growth needs.
+Tokens are burned or removed from supply.
 
-### Emission schedule
+Best for: fee burn tied to real usage.
+Risk: burns do not matter if demand is weak or liquidity is poor.
 
-Plan token releases over time:
+### Hybrid supply
 
-- Team and investor vesting.
-- Ecosystem incentives.
-- Staking rewards.
-- Treasury allocation.
-- Community grants.
+Most mature systems combine emissions and sinks:
 
-Front-loaded emissions create sell pressure. Back-loaded emissions risk insufficient early incentive.
+```text
+net_supply_change = emissions + unlocks - burns - permanent locks
+```
 
-## Fee model design
+Analyze net supply, not just max supply.
 
-### Protocol fees
+## Distribution design
 
-Charged on protocol operations. Revenue can flow to:
+### Allocation table
 
-- Token holders (direct distribution or buyback)
-- Treasury (for development and operations)
-- Insurance fund (for risk coverage)
-- Liquidity incentives (for bootstrapping)
+| Group | Purpose | Common risk |
+|---|---|---|
+| Community | Users, contributors, ecosystem growth | Sybil farming and immediate sell pressure |
+| Team | Long-term development | Misaligned if vesting is too short |
+| Investors | Capital and network | Unlock cliffs can dominate market structure |
+| Treasury | Future grants, liquidity, partnerships | Poor governance or opaque spending |
+| Liquidity | Market depth | Can be drained if incentives end |
 
-### Fee optimization
+### Vesting principles
 
-- Flat fees: simple but may not reflect cost.
-- Percentage fees: scales with value but may be regressive.
-- Tiered fees: rewards high-volume users.
-- Dynamic fees: adjusts based on demand or risk.
+- Team: 2-4 years, 6-12 month cliff.
+- Investors: 1-2 years, clear unlock calendar.
+- Advisors: smaller allocation, milestone-based vesting.
+- Treasury: governed release schedule with reporting.
+- Community rewards: anti-sybil rules and claim records.
 
-## Tokenomics audit checklist
+Unlocks are market events. Publish them clearly. Hidden unlocks destroy trust.
 
-- [ ] Total supply and emission schedule are explicit.
-- [ ] Vesting schedules prevent cliff-driven sell pressure.
-- [ ] Token utility creates sustainable demand.
-- [ ] Fee model covers operational costs.
-- [ ] Governance structure prevents capture.
-- [ ] Inflation rate is sustainable relative to demand.
-- [ ] Distribution is fair and disclosed.
-- [ ] Regulatory classification has been considered.
-- [ ] Stress-tested under multiple price scenarios.
-- [ ] Emergency mechanisms exist for market stress.
+## Emission design
 
-## Common tokenomics mistakes
+Emission must buy behavior the protocol actually needs.
 
-- Designing tokenomics to justify a token rather than solving a real problem.
-- Relying on perpetual token emissions to incentivize usage.
-- No sustainable revenue model beyond emissions.
-- Governance theater where decisions are already made off-chain.
-- Ignoring regulatory implications of revenue-sharing tokens.
-- Overcomplicating utility to inflate perceived value.
-- Launching a token before product-market fit.
-- Concentrated supply that discourages community participation.
+| Desired behavior | Better emission design |
+|---|---|
+| Deep liquidity | Rewards weighted by useful liquidity and duration |
+| Long-term staking | Rewards increase with lock duration but cap whale advantage |
+| Governance participation | Reward useful participation carefully, not blind voting |
+| Developer ecosystem | Milestone grants, not one-time vanity bounties |
+| User acquisition | Rewards tied to retained usage, not first transaction only |
+
+Avoid paying users for actions that are easy to fake. If the emission can be farmed by 1,000 wallets in a script, it will be.
+
+## Token velocity
+
+Token value capture weakens when tokens are immediately sold after use.
+
+High velocity pattern:
+
+```text
+User buys token → pays fee → recipient sells token
+```
+
+Lower velocity pattern:
+
+```text
+User needs token → stakes/locks for access or security → earns/loses based on useful behavior
+```
+
+Do not artificially lock tokens only to create scarcity. Locks should map to a real commitment: security, access, governance, or service quality.
+
+## Liquidity and market structure
+
+A token launch is also a market design problem.
+
+Checklist:
+
+- [ ] Initial liquidity is deep enough for expected demand.
+- [ ] Market makers or LPs are disclosed if used.
+- [ ] Treasury does not rely on selling illiquid tokens for runway.
+- [ ] Major unlocks do not coincide with low liquidity.
+- [ ] Users can see circulating supply, total supply, FDV, and unlock schedule.
+- [ ] Token mint and authorities are public.
+
+## Governance risk
+
+Governance tokens can make protocols less safe if control is too easy to buy.
+
+Protect high-risk actions:
+
+| Action | Controls |
+|---|---|
+| Parameter change | Quorum, timelock, simulation |
+| Treasury spend | Budget cap, milestone release |
+| Program upgrade | Supermajority, multisig review, long timelock |
+| Emergency pause | Narrow multisig, postmortem, expiration |
+
+Governance should decentralize credible control, not create a theatrical vote over decisions already made by insiders.
+
+## Launch sequence
+
+1. Prove product usage without a token if possible.
+2. Define token job and why existing assets are insufficient.
+3. Model supply, emissions, unlocks, and fee sinks.
+4. Run sybil analysis for distribution.
+5. Get legal review.
+6. Deploy mint and authority controls.
+7. Publish token address, supply, authorities, and unlock schedule.
+8. Seed liquidity responsibly.
+9. Monitor abnormal trading and claim patterns.
+
+## Failure modes
+
+| Failure | Cause | Prevention |
+|---|---|---|
+| Farm and dump | Rewards not tied to retained value | Duration weighting, caps, quality metrics |
+| Governance capture | Low quorum or concentrated supply | Delegation, quorum, timelocks, caps |
+| Liquidity death spiral | Incentives end and LPs leave | Real fee demand, staged emissions |
+| Regulatory shock | Token resembles unregistered security | Legal review, avoid vague profit promises |
+| Treasury insolvency | Runway held mostly in own token | Diversify treasury into stable assets |
+| User distrust | Hidden unlocks or admin powers | Publish authorities, unlocks, and controls |
+
+## Evaluation questions
+
+1. What behavior does the token coordinate?
+2. Who must hold it and why?
+3. What creates recurring demand beyond speculation?
+4. What creates sell pressure and when?
+5. Who controls mint, freeze, upgrade, and treasury authority?
+6. What happens if token price falls 80%?
+7. Can the protocol still function if rewards stop?
+8. Can whales or sybils dominate distribution or governance?
+9. Is the token necessary now, or later?
 
 ## Related
 
-- `economic-security.md` for game-theoretic security, incentive stress testing, and slashing patterns.
-- `dao-governance.md` for governance token design and voting mechanics.
-- `tokens.md` for SPL Token and Token-2022 launch mechanics.
+- `economic-security.md` for game theory and attack-cost analysis.
+- `tokens.md` for SPL Token and Token-2022 implementation patterns.
+- `dao-governance.md` for governance controls.
+- `humanity.md` for sybil-resistant distribution.
+- `strategy.md` for product positioning before token launch.

@@ -27,6 +27,7 @@ Write programs, clients, tests, and deploy.
 | Debug compile, deploy, transaction, or account failures | `references/troubleshooting.md` |
 | Exact API names, types, constraints, and helpers | `references/sdk-reference.md` |
 | dApp layers, wallet/RPC patterns, transaction construction | `references/web3-dapp-architecture.md` |
+| Wallet options: Solana Wallet Adapter, Reown, Privy, Dynamic | `references/wallet-connection.md` |
 | Compute budget, ALTs, compression, Token-2022 internals | `references/advanced-solana.md` |
 
 Defaults:
@@ -45,7 +46,7 @@ Gotchas:
 - Anchor clients depend on IDLs; Better Sol-native programs should not introduce an IDL as extra source of truth.
 - Browser code that imports `keypairFile` or `secretKey` is a security bug.
 
-Examples: `examples/counter.ts`, `examples/counter-client.ts`, `examples/counter.test.ts`, `examples/token-rewards.ts`.
+Examples: `examples/counter.ts`, `examples/counter-client.ts`, `examples/counter.test.ts`, `examples/token-rewards.ts`, `examples/airdrop-claim.ts`, `examples/wallet-adapter-counter.tsx`, `examples/reown-counter.tsx`, `examples/privy-counter.tsx`, `examples/dynamic-counter.tsx`.
 
 Validation:
 
@@ -89,6 +90,7 @@ Choose architecture before writing code for a specific domain.
 | Stablecoins, fiat-backed, crypto-backed, RWA tokenization | `references/stablecoins-and-rwas.md` |
 | Indexer, analytics, webhooks, monitoring, backfills | `references/data-pipelines.md` |
 | Mobile app, React Native, wallet UX | `references/mobile.md` |
+| Wallet options: Solana Wallet Adapter, Reown, Privy, Dynamic | `references/wallet-connection.md` |
 | Proof-of-human, sybil resistance, anti-bot, gated claims | `references/humanity.md` |
 
 Decision workflow:
@@ -130,6 +132,7 @@ Build crypto interfaces that make risk, state, and value legible.
 |---|---|
 | Brand, palette, typography, voice | `references/brand.md` |
 | Generate and compare visual brand directions | `references/brand-preview-workflow.md` |
+| Wallet connection, provider options, embedded wallets | `references/wallet-connection.md` |
 | Wallet connection, transaction preview, signing states | `references/transaction-ux.md` |
 | Multi-chain wallet, address, and transaction UI | `references/multi-chain-ui.md` |
 | dApp state, caching, optimistic updates, subscriptions | `references/dapp-state-management.md` |
@@ -171,11 +174,11 @@ Anti-hype rule: avoid "revolutionizing Web3", vague decentralization claims, fak
 
 Most real tasks span multiple modes. Use this order:
 
-1. **Learn** — understand the domain and concepts.
-2. **Domain** — choose architecture and define invariants.
-3. **Build** — implement programs, clients, and tests.
-4. **Design** — build the frontend.
-5. **Secure** — review before devnet/mainnet.
-6. **Launch** — validate, pitch, and ship.
+1. **Learn** - understand the domain and concepts.
+2. **Domain** - choose architecture and define invariants.
+3. **Build** - implement programs, clients, and tests.
+4. **Design** - build the frontend.
+5. **Secure** - review before devnet/mainnet.
+6. **Launch** - validate, pitch, and ship.
 
 Not every task needs every mode. Load only the references relevant to the current step.

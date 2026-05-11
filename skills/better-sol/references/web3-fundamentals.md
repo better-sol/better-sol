@@ -159,6 +159,41 @@ Computation on encrypted data without decryption. Used for confidential DeFi and
 
 A subset of key holders must cooperate to produce a valid signature. Used for multisig wallets, bridge validators, and distributed key generation.
 
+## Critical thinking framework
+
+### Ask what trust is being removed
+
+A blockchain product should be able to state which trust assumption it reduces. If the answer is only "it is decentralized," the design is not mature.
+
+| Claim | Better question |
+|---|---|
+| Decentralized storage | Who can delete, censor, or mutate the data? |
+| On-chain settlement | Who can reverse or block settlement? |
+| Smart contract escrow | Who can upgrade, pause, or drain the escrow? |
+| Token incentives | What behavior is rewarded and what behavior is attacked? |
+| Cross-chain | Which validator or guardian set is trusted? |
+
+### Match architecture to trust need
+
+Not every feature belongs on-chain. Use this rule:
+
+- Put assets, permissions, and irreversible settlement on-chain.
+- Put search, analytics, notifications, and personalization off-chain.
+- Put proofs or commitments on-chain when the raw data is private or large.
+- Use signatures when the user needs to authorize without paying a transaction fee.
+
+### Failure-mode thinking
+
+For every web3 system, ask:
+
+1. What happens if the frontend disappears?
+2. What happens if the backend lies?
+3. What happens if the RPC provider is down?
+4. What happens if the admin key is compromised?
+5. What happens if users coordinate rationally against incentives?
+
+The answers determine whether the system is truly trust-minimized or only blockchain-branded.
+
 ## Related
 
 - `solana-knowledge-base.md` for Solana-specific mappings of these general concepts.

@@ -1,88 +1,215 @@
-# Better Sol Learning Tracks
+# Learning Tracks
 
-## Track A: Complete beginner
+Use this reference when teaching Solana, web3, or Better Sol concepts to developers. Adapt the track to the learner's background.
 
-1. Wallets, signatures, and SOL.
-2. Accounts as state containers.
-3. Programs as stateless code.
-4. Instructions as function calls with accounts.
-5. PDAs as deterministic program-owned addresses.
-6. A Better Sol counter program.
-7. Typed client calls.
-8. LiteSVM tests.
+## Assess background first
 
-Exercise: add a `decrement` instruction that cannot underflow.
+Ask: "What is your development background?" Then select the track:
 
-## Track B: EVM developer
+| Background | Start track | Prerequisites |
+|---|---|---|
+| Frontend (React, TypeScript) | Frontend to Solana | JavaScript async, HTTP APIs |
+| Backend (Node.js, Python) | Backend to Solana | REST APIs, databases |
+| EVM (Solidity, Ethereum) | EVM to Solana | Solidity, ethers.js/viem |
+| Rust | Rust to Solana | Rust fundamentals |
+| Complete beginner | Beginner | Basic programming |
 
-See `solana-knowledge-base.md` for the full EVM-to-Solana concept map. Key differences to internalize first:
+## Beginner track
 
-- State lives in separate accounts, not contract storage.
-- `msg.sender` becomes an explicit `bs.signer()` account that must be compared to stored authority.
-- Mappings become PDA namespaces with seeds.
-- Internal calls become CPIs.
+### Module 1: What is a blockchain?
 
-Exercise: build an ERC20-like reward minter mental model using mint, token account, and authority.
+- Distributed ledger where transactions are grouped into blocks
+- Consensus mechanism: how nodes agree on the state (Solana uses Proof of History + Proof of Stake)
+- State model: accounts hold data, programs hold logic
+- Transactions: signed instructions that modify state
 
-## Track C: Frontend developer
+### Module 2: What makes Solana different?
 
-Focus:
+- Speed: 400ms finality, 65,000+ transactions per second
+- Cost: $0.00025 per transaction
+- Monolithic execution: all programs share one global state (no sharding)
+- Parallel execution: transactions touch different accounts simultaneously
 
-- `betterSol({ programs })` read-only clients
-- `withSigner(walletSigner)` for wallet actions
-- deriving PDAs
-- fetching accounts
-- transaction states
-- formatting token amounts
+### Module 3: Accounts
 
-Exercise: derive a profile PDA, call initialize, fetch it, and render disconnected/loading/success/error states.
+Every piece of data on Solana lives in an account. Accounts have:
 
-## Track D: Backend developer
+- Address (public key)
+- Owner (the program that can modify the data)
+- Lamports (SOL balance, minimum rent-exempt balance required)
+- Data (arbitrary bytes, interpreted by the owning program)
 
-Focus:
+Key concept: programs are also accounts. A program account has executable data but no mutable state of its own.
 
-- `keypairFile()` for scripts
-- RPC configuration
-- scheduled jobs
-- IDL imports
-- account fetching
-- indexers
-- LiteSVM tests
+### Module 4: Programs
 
-Exercise: write a script that reads all known account addresses, fetches them, and prints a summarized report.
+Programs process instructions. An instruction specifies:
 
-## Track E: DeFi builder
+- The program to call
+- The accounts to read or write
+- The instruction data (arguments)
 
-Focus:
+Solana programs are stateless. All state lives in accounts that the program owns.
 
-- token mints and token accounts
-- CPIs
-- authorities and PDAs
-- vault/share accounting
-- invariant tests
-- mainnet readiness
+### Module 5: Your first Better Sol program
 
-Exercise: design a vault account and list invariants before writing the deposit instruction.
+Read `cookbook-recipes.md` for the counter example. Key concepts:
 
-## Common misconceptions
+- `bs.account()` defines the data schema
+- `.derive()` defines PDA seeds
+- `bs.program()` wraps instructions
+- `ix()` defines each instruction with accounts, args, constraints, and run logic
 
-- A signer is not automatically the authority; compare it to the stored authority field.
-- Deriving a PDA address does not create the account; initialization creates it.
-- A token account is not a mint; it belongs to an owner and references a mint.
-- Client-side checks are not security boundaries; program checks are.
-- Devnet success is not mainnet readiness.
+### Module 6: Your first client
 
-## Tiny counter lesson
+Connect to Solana and interact with the program:
 
 ```ts
-const Counter = bs.account({ count: bs.u64(), authority: bs.pubkey() })
-  .derive(seed => ["counter", seed.authority])
+const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs: { counter } })
+await sol.counter.increment({ counter: addr, amount: 5n })
 ```
 
-This says: a counter account stores a bigint count and an authority address; its PDA can be derived from the static namespace `counter` and the authority.
+## EVM to Solana track
+
+### Key differences
+
+| Concept | Ethereum | Solana |
+|---|---|---|
+| State model | Contracts hold state | Accounts hold state, programs are stateless |
+| Execution | Sequential (EVM) | Parallel (SVM) |
+| Accounts | Implicit (storage vars) | Explicit (must pass every account) |
+| Gas | Variable, auction-based | Fixed fee + optional priority |
+| Programs/smart contracts | Solidity, Vyper | Rust, TypeScript (Better Sol), Anchor |
+| Address model | CREATE2 for contract addresses | PDAs derived from seeds |
+| Composability | Contract calls | Cross-program invocations (CPIs) |
+| Token standard | ERC-20 | SPL Token, Token-2022 |
+| Transaction structure | Single contract call | Multiple instructions in one transaction |
+
+### Mental model shift
+
+1. **No implicit storage**. In Solidity, `mapping(address => uint256) public balances` just works. On Solana, you must create an account for each entry and pass it as an instruction argument.
+
+2. **No msg.sender**. Instead, you pass a `Signer` account and check `account.isSigner` in the program.
+
+3. **Parallel by default**. Transactions that touch different accounts run simultaneously. This is a performance feature but requires thinking about account contention.
+
+4. **Multi-instruction transactions**. A Solana transaction can include multiple instructions to different programs. This is the normal way to compose operations, not an advanced pattern.
+
+### Solidity to Better Sol mapping
+
+```solidity
+// Solidity
+contract Counter {
+    uint256 public count;
+    address public authority;
+    
+    function increment(uint256 amount) public {
+        require(msg.sender == authority);
+        count += amount;
+    }
+}
+```
+
+```ts
+// Better Sol
+const Counter = bs.account({
+  count: bs.u64(),
+  authority: bs.pubkey(),
+})
+
+export const counter = bs.program({ name: "counter", address: "<key>" }, (ix) => ({
+  increment: ix({
+    accounts: { counter: bs.mut(Counter), authority: bs.signer() },
+    args: { amount: bs.u64() },
+    run: ({ counter, authority }, ctx) => {
+      ctx.require(counter.authority === authority, "Unauthorized")
+    },
+    run: ({ counter }, { amount }) => { counter.count += amount },
+  }),
+}))
+```
+
+## Frontend to Solana track
+
+### Module 1: Wallet connection
+
+Use `@solana/wallet-adapter-react` or `@solana/react-hooks`:
+
+```tsx
+import { useWallet } from "@solana/wallet-adapter-react"
+
+function App() {
+  const { connected, connect, disconnect, publicKey } = useWallet()
+  return connected
+    ? <p>Connected: {publicKey.toBase58()}</p>
+    : <button onClick={connect}>Connect Wallet</button>
+}
+```
+
+### Module 2: Reading on-chain data
+
+```tsx
+const sol = await createClient(walletAdapter)
+const account = await sol.counter.accounts.Counter.fetch(addr)
+```
+
+### Module 3: Sending transactions
+
+```tsx
+const signature = await sol.counter.increment({ counter: addr, amount: 5n })
+```
+
+### Module 4: State management
+
+Use TanStack Query to cache on-chain data. See `dapp-state-management.md` for patterns.
+
+## Backend to Solana track
+
+### Module 1: RPC basics
+
+```ts
+const sol = await betterSol({ cluster: "devnet", payer: keypairFile("./keypair.json"), programs: { counter } })
+const balance = await sol.getBalance(address)
+const account = await sol.counter.accounts.Counter.fetch(addr)
+```
+
+### Module 2: Building API endpoints
+
+```ts
+app.get("/api/counter/:address", async (req, res) => {
+  const account = await sol.counter.accounts.Counter.fetch(req.params.address)
+  res.json({ count: account.count, authority: account.authority })
+})
+```
+
+### Module 3: Webhooks and indexing
+
+See `data-pipelines.md` for webhook processing and indexing patterns.
+
+## Exercise progression
+
+| Exercise | Concepts tested |
+|---|---|
+| Counter program | Accounts, instructions, PDAs, typed client |
+| Token transfer | SPL Token, ATAs, token operations |
+| Escrow program | Multi-account state, signer checks, constraints |
+| Token vault | Deposits, withdrawals, time locks |
+| Governance voting | Proposals, one-vote-per-voter, deadlines |
+| Rewards distribution | Token CPI, batch operations, idempotency |
+
+Each exercise has a specification in `cookbook-recipes.md`.
+
+## Teaching rules
+
+- Use runnable code. Every concept must be demonstrated with a working example.
+- Introduce one concept at a time: concept, Better Sol mapping, code, exercise.
+- Correct misconceptions directly. Do not let wrong mental models persist.
+- Contrast with the learner's existing framework (Anchor for Rust devs, EVM for Solidity devs, REST for backend devs) only when it helps understanding.
+- Never explain Solana internals (sealevel, geyser, tower BFT) unless the learner asks. Start with what they need to build.
 
 ## Related
 
-- `solana-knowledge-base.md` for conceptual explanations used in each track.
-- `web3-fundamentals.md` for broader blockchain foundations.
-- `cookbook-recipes.md` for exercises matched to each track.
+- `cookbook-recipes.md` for runnable code examples and exercises.
+- `solana-knowledge-base.md` for Solana fundamentals reference.
+- `web3-fundamentals.md` for blockchain and cryptography concepts.
+- `program-patterns.md` for program definition patterns.

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createTestContext } from "@better-sol/test"
-import { counter } from "../programs/counter"
+import { counter } from "./counter"
 
 describe("counter", () => {
   test("authority can increment", async () => {

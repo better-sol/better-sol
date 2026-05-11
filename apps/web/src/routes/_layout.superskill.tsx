@@ -122,6 +122,7 @@ const references = [
   { name: "Troubleshooting", file: "references/troubleshooting.md" },
   { name: "Interop & migration", file: "references/interop-and-migration.md" },
   { name: "Web3 dApp architecture", file: "references/web3-dapp-architecture.md" },
+  { name: "Wallet connection", file: "references/wallet-connection.md" },
   { name: "Advanced Solana", file: "references/advanced-solana.md" },
   { name: "Solana knowledge base", file: "references/solana-knowledge-base.md" },
   { name: "Web3 fundamentals", file: "references/web3-fundamentals.md" },

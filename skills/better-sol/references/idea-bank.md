@@ -1,118 +1,254 @@
-# Crypto Idea Bank
+# Idea Bank
 
-Use this reference when the user asks what to build, wants idea generation, or needs a better hackathon/startup direction.
+Use this reference when the user asks what to build, wants idea generation, or needs a sharper crypto product direction.
 
-Treat these as starting points, not guaranteed opportunities. Always validate user access, market timing, and Solana necessity.
+Treat every idea as a hypothesis. The purpose of an idea bank is not to pick something that sounds cool. It is to generate options, score them, and force validation before building.
+
+## Research tools
+
+- DefiLlama API (`https://api.llama.fi/protocols`) for protocol TVL, chain growth, fees, and categories.
+- CoinGecko API (`https://api.coingecko.com/api/v3`) for token price and market data.
+- GitHub search for existing tools, SDKs, and abandoned attempts.
+- X/Twitter, Discord, governance forums, and protocol docs for user pain signals.
+- Better Sol examples and references for implementation feasibility.
+
+## Idea generation process
+
+### Step 1: Choose a user wedge
+
+Start from a user, not a technology.
+
+| User | Typical pain |
+|---|---|
+| Solana developer | Boilerplate, testing, client drift, deployment mistakes |
+| DeFi trader | Risk, routing, liquidation, slippage, fragmented positions |
+| DAO operator | Treasury controls, voter apathy, proposal quality |
+| Consumer user | Wallet friction, confusing signatures, scams |
+| Protocol team | Integrations, analytics, incentives, monitoring |
+| Mobile user | Signing interruptions, wallet switching, poor recovery |
+
+If you cannot name the user, the idea is probably too vague.
+
+### Step 2: Identify a painful workflow
+
+Good crypto products usually compress a workflow:
+
+```text
+Before: user does 5 steps across 3 products with high risk
+After: user does 1 reviewed action with clear state and recovery
+```
+
+Look for workflows with:
+
+- Repeated manual work
+- High transaction failure rate
+- Poor visibility into risk
+- Fragmented protocol state
+- Strong need for verifiable records
+- Expensive mistakes users already fear
+
+### Step 3: Decide why on-chain is necessary
+
+Use on-chain state only when it adds one of these:
+
+| On-chain reason | Example |
+|---|---|
+| Custody | Escrow, vault, treasury, claim contract |
+| Permission | Allowlist, token gate, human verification |
+| Settlement | Atomic payment, swap, liquidation |
+| Verifiability | Public rewards, claims, receipts, attestations |
+| Composability | Other programs need to read or call it |
+
+If the product is only a dashboard, do not force a custom program. Use an indexer and typed client.
+
+## Idea scoring rubric
+
+Score 1-5 in each category:
+
+| Category | 1 | 5 |
+|---|---|---|
+| Problem clarity | Vague trend | Specific painful workflow |
+| User access | No channel | Direct access to target users |
+| Solana necessity | Could be normal SaaS | Needs low-cost, fast, composable settlement |
+| Technical feasibility | Requires unsolved research | Buildable in weeks |
+| Distribution wedge | No route to users | Built-in channel or partner |
+| Defensibility | Easy clone | Data, integrations, trust, or network effects |
+| Risk control | Can lose funds easily | Risk isolated and explainable |
+
+Scores:
+
+- **30+**: strong candidate. Build a prototype.
+- **22-29**: validate weak dimension before building.
+- **Below 22**: keep as inspiration, do not commit yet.
 
 ## Better Sol-native ideas
 
-### TypeScript-first program examples marketplace
+### Typed program template marketplace
 
-A gallery of audited, tested Better Sol program templates: escrow, rewards, claims, token gates, attestations, vault records, and payment links.
+A gallery of audited, tested Better Sol templates: escrow, rewards, claims, token gates, attestations, vault records, and payment links.
 
-Why Better Sol fits: the product demonstrates the SDK and gives developers copyable typed clients.
+Why it works:
+
+- Clear user: TypeScript developers building Solana programs.
+- Clear pain: starting from blank files and unsafe examples.
+- Better Sol advantage: one program definition powers accounts, instructions, errors, events, client, and tests.
+
+Validation actions:
+
+- Interview 10 TypeScript developers new to Solana.
+- Ask them to build a claim contract from current docs.
+- Measure time-to-first-test and where they get stuck.
+- Offer three templates and track which they choose.
 
 ### Program-to-client drift detector
 
-A tool that compares Anchor IDLs, generated clients, and frontend usage to detect broken account or instruction assumptions.
+CI tool that checks a deployed program interface against the client definition and flags account or instruction drift.
 
-Why Better Sol fits: positions Better Sol’s single-source-of-truth model against IDL/client drift.
+Why it works:
 
-### LiteSVM test harness generator
+- Drift bugs are common and painful.
+- The buyer is a serious team with production risk.
+- Strong distribution through GitHub Actions and CLI.
 
-A tool that reads a Better Sol program definition and proposes authority, PDA, token, and edge-case tests.
+Validation actions:
 
-Why Better Sol fits: tests can be generated from the same TypeScript schema.
+- Search GitHub issues for Solana deserialization or IDL mismatch bugs.
+- Ask teams if they have broken production clients after program upgrades.
+- Build a CLI prototype that checks one program and one account.
+
+### Typed security test generator
+
+Given a Better Sol program definition, generate LiteSVM tests for authority checks, account substitution, duplicate claims, and numeric boundaries.
+
+Why it works:
+
+- Security testing is valuable and often skipped.
+- Better Sol definitions expose instruction and account schemas.
+- Output is concrete code, not a vague report.
+
+Validation actions:
+
+- Generate tests for `counter`, `token-rewards`, and `airdrop-claim` examples.
+- Measure how many generated tests catch intentionally inserted bugs.
+- Ask auditors which generated tests are useful versus noise.
 
 ## DeFi ideas
 
-### Risk-aware deposit flow
+### Risk-aware deposit router
 
-A safer frontend layer for vault/lending deposits that explains mint, protocol, slippage, lockups, authority, and failure states before signing.
+A safer deposit flow across lending and vault protocols. Shows health factor, oracle age, withdrawal liquidity, and worst-case liquidation price before signing.
 
-Architecture: integration-only or hybrid with Better Sol records for user preferences and attestations.
+Build shape:
 
-### Treasury policy vault
+- No custom custody at first.
+- Indexer and client integrations for protocols.
+- Optional Better Sol program later for user risk preferences and alerts.
 
-DAO/team treasury rules encoded in a thin Better Sol program: allowed mints, per-epoch limits, approvers, and event logs.
+Risk: protocol SDK changes and data accuracy. Keep action buttons disabled when data is stale.
 
-Architecture: Better Sol program plus existing token protocols.
+### Treasury rebalancing assistant
 
-### Yield change alerts
+DAO treasury tool that proposes stablecoin, SOL, and yield allocation changes, then creates multisig-ready transactions.
 
-Indexer that watches lending/yield protocols and alerts users when APY, utilization, or risk changes beyond a threshold.
+Build shape:
 
-Architecture: data pipeline, no custom program unless users store alert preferences on-chain.
+- Off-chain analytics for recommendations.
+- Better Sol program only if treasury policy needs on-chain attestations or spending limits.
 
-## Consumer and creator ideas
+Risk: bad recommendations can lose funds. Start as read-only with human approval.
 
-### On-chain membership claims
+### Rewards layer for protocol campaigns
 
-Creators issue membership or reward claims gated by wallet, payment, human verification, or event attendance.
+Better Sol program tracks eligible activity and distributes rewards based on verified protocol positions.
 
-Architecture: Better Sol claim records + token/NFT integration.
+Build shape:
 
-### Proof-of-contribution rewards
+- App-owned `RewardPosition` account.
+- External protocol position verification.
+- Claim record to prevent double claims.
 
-Projects reward contributors with claims tied to GitHub, Discord, or product actions.
+Risk: fake activity and sybil farming. Use humanity and anti-abuse scoring.
 
-Architecture: backend verification + Better Sol claim/reward program.
+## Consumer ideas
 
-### Refundable access pass
+### On-chain receipt and warranty system
 
-Users deposit for access; unused or satisfied conditions refund automatically.
+Products are registered as NFTs or compressed NFTs. Warranty validity is verifiable and transferable with ownership.
 
-Architecture: escrow-like Better Sol program.
+Good for: high-value physical goods, collectibles, event equipment, warranties.
 
-## Data and infrastructure ideas
+Risk: off-chain truth. The hardest part is merchant adoption and fraud resolution, not minting.
 
-### Program health monitor
+### Event ticketing with compressed NFTs
 
-Monitor events, failed transactions, account changes, and admin actions for a Better Sol or Anchor program.
+Compressed NFTs as tickets with wallet-based ownership, QR display, and anti-scalping rules.
 
-Architecture: indexer + alerting.
+Good for: crypto events, gated communities, small venues.
 
-### Human-readable transaction simulator
+Risk: venue operations. The scanner and refund flow matter more than the mint.
 
-A tool that simulates a transaction and translates account changes, token movement, and errors into user-readable output.
+### Group payments and revenue splits
 
-Architecture: client/infrastructure product.
+A program where a group creates a payment pool and splits funds by predefined ratios.
 
-### Devnet demo seeder
+Good for: creators, hackathon teams, small DAOs, event organizers.
 
-Creates predictable devnet state for demos: mints, funded wallets, initialized accounts, and scripted transactions.
+Risk: disputes. Add clear withdrawal rules and immutable split terms.
 
-Architecture: CLI/script product using Better Sol typed clients.
+## Infrastructure ideas
 
-## Validation filters
+### Transaction simulator API
 
-Reject or pivot ideas that fail most of these:
+API that accepts a transaction, simulates it, decodes account changes, and returns human-readable risk summary.
 
-- A specific user can be named.
-- The user has a repeated pain or urgent deadline.
-- Solana adds something beyond buzzwords.
-- A demo can be built in days, not months.
-- The first proof does not require mainnet funds.
-- The project can explain why it is different in one sentence.
+Good for: wallets, dApps, security tools.
 
-## Scoring shortcut
+Risk: decoding coverage. Start with Better Sol programs and SPL Token before expanding.
 
-Strong hackathon idea:
+### Program event webhook service
 
-- demo quality: 4–5
-- buildability: 4–5
-- technical depth: 3–5
-- user clarity: 3–5
+Reliable webhook delivery for Better Sol program events with retries, idempotency keys, and typed payloads.
 
-Strong startup idea:
+Good for: app backends that need off-chain reactions to on-chain events.
 
-- pain: 4–5
-- distribution: 4–5
-- willingness to pay or switch: 3–5
-- defensibility: 3–5
+Risk: competing with Helius/Triton. Win by being Better Sol-native and simpler.
+
+### Multi-program account explorer
+
+Developer tool that decodes any known program account and shows state, discriminator, owner, and recent changes.
+
+Good for: debugging, audits, education.
+
+Risk: broad protocol coverage. Start with Better Sol definitions and imported IDLs.
+
+## Anti-ideas
+
+Avoid these unless you have an unusual wedge:
+
+- Another generic NFT marketplace without supply or demand.
+- Another wallet with no clear custody, recovery, or distribution advantage.
+- A token launch where the token has no necessary role.
+- A DeFi protocol that only copies an existing primitive with incentives.
+- A social app where on-chain state adds cost but no user benefit.
+- A bridge, unless the team has deep security expertise and a serious reason to build one.
+
+## Validation sprint
+
+Run this before building for more than a few days:
+
+1. Write the one-sentence user pain.
+2. Identify 10 target users.
+3. Ask how they solve it today.
+4. Ask what happens if they do nothing.
+5. Prototype only the riskiest workflow.
+6. Measure time-to-value.
+7. Ask for a commitment: waitlist, pilot, integration, or payment.
+
+A good idea earns pull from users. A weak idea requires constant explanation.
 
 ## Related
 
-- `strategy.md` for turning an idea into a validation sprint.
-- `evaluation-frameworks.md` for scoring ideas and reducing bias.
+- `strategy.md` for validation and positioning.
+- `evaluation-frameworks.md` for structured scoring.
 - `defillama-research.md` for DeFi opportunity research.
+- `wallet-connection.md` for onboarding-sensitive consumer product decisions.
