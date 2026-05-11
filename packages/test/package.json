@@ -1,6 +1,6 @@
 {
   "name": "@better-sol/test",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Blazing-fast local testing for Better Sol programs, powered by LiteSVM.",
   "license": "MIT",
   "type": "module",
