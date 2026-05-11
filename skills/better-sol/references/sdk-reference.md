@@ -447,20 +447,14 @@ export default defineConfig({
 
 ### Installing and updating
 
-All Better Sol packages must be the latest published versions. Check before installing:
+All Better Sol packages must be from the same alpha release. Install with the `@alpha` tag:
 
 ```bash
-npm view better-sol version && npm view @better-sol/test version && npm view @better-sol/cli version
+bun add better-sol@alpha
+bun add -d @better-sol/test@alpha
 ```
 
-Then install with the exact versions:
-
-```bash
-bun add better-sol@<version>
-bun add -d @better-sol/test@<version>
-```
-
-Never hardcode a version. Always check first. Mismatches between `better-sol` and `@better-sol/test` cause TypeScript errors where program namespaces resolve to `never`.
+Mismatches between `better-sol` and `@better-sol/test` cause TypeScript errors where program namespaces resolve to `never`.
 
 ### Agent-friendly CLI flow
 

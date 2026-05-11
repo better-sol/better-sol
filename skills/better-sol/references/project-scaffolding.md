@@ -18,24 +18,18 @@ When in doubt, scaffold a web dApp. It covers the most common case and includes 
 
 Every project type starts here. This creates the program scaffolding, payer keypair, and gitignore.
 
-First, check and install the latest versions of all Better Sol packages:
+First, install the latest alpha versions of all Better Sol packages:
 
 ```bash
 mkdir my-project && cd my-project
 git init
 bun init -y
 
-npm view better-sol version && npm view @better-sol/test version && npm view @better-sol/cli version
+bun add better-sol@alpha
+bun add -d @better-sol/test@alpha
 ```
 
-Then install with the exact versions returned:
-
-```bash
-bun add better-sol@<version>
-bun add -d @better-sol/test@<version>
-```
-
-All three packages must be the latest published versions. Version mismatches between `better-sol` and `@better-sol/test` cause type errors.
+Both `better-sol` and `@better-sol/test` must be from the same alpha release. Version mismatches cause type errors.
 
 Now initialize the project:
 
