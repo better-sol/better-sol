@@ -43,7 +43,20 @@ Import: `import { bs, cpi } from "better-sol/program"`
 | `bs.optional(inner)` | `OptionToken<T>` | 1 + inner | `T | null` |
 | `bs.vector(inner, max?)` | `VecToken<T>` | 4 + len * inner | `T[]` (max defaults to 32) |
 | `bs.array(inner, size)` | `ArrayToken<T>` | size * inner | `T[]` (fixed length) |
-| `bs.struct({ fields })` | `StructZCDefinition<T>` | sum of fields | `{ fields }` |
+| `bs.struct({ fields })` | `StructZCDefinition<T>` | sum of fields | `{ fields }` (zero-copy accounts only) |
+
+### Types not yet supported
+
+These Anchor types are not yet available in the Better Sol program DSL. If your program needs them, write the program in Anchor/Rust directly and import the IDL with `fromIdl()`:
+
+| Anchor type | Status | Workaround |
+|---|---|---|
+| `enum` (simple, e.g. `enum Status { Active, Paused }`) | Not supported | Use `u8` constants with `ctx.require` checks |
+| `enum` (data-carrying, e.g. `enum Instruction { Transfer { amount: u64 } }`) | Not supported | Flatten to separate fields with an optional discriminator |
+| `u256` / `i256` | Not supported | Use `u128` or `bs.bytes()` for large values |
+| `COption<T>` | IDL parsing only | Use `bs.optional()` for program definitions |
+| `HashMap` / `BTreeMap` | Not supported | Use `bs.vector(bs.struct({ key, value }))` and iterate |
+| Nested structs in regular accounts | Not supported | Flatten fields into the account, or use `.zeroCopy()` accounts |
 
 ### Account definition
 

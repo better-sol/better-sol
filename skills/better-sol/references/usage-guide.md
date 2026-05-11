@@ -451,6 +451,87 @@ close: ix({
 
 The `receiver` must be declared as a separate account in the same instruction.
 
+## Types not yet supported
+
+The Better Sol program DSL does not yet support these Anchor types. If your program needs them, write the program in Anchor/Rust directly and import the IDL with `fromIdl()`, or use the workarounds below.
+
+### Enums
+
+Anchor supports both simple enums (`enum Status { Active, Paused }`) and data-carrying enums (`enum Instruction { Transfer { amount: u64 } }`). Better Sol does not support enum types in account or arg definitions.
+
+**Workaround**: use a `u8` or `u64` field with named constants checked by `ctx.require`:
+
+```ts
+const Pool = bs.account({
+  status: bs.u8(),          // 0 = Active, 1 = Paused, 2 = Closed
+  authority: bs.pubkey(),
+  totalStaked: bs.u64(),
+})
+
+// In instruction logic:
+ctx.require(pool.status === 0, "PoolNotActive")
+pool.status = 1  // Paused
+```
+
+In the client, define constants or a TypeScript enum:
+
+```ts
+const PoolStatus = { Active: 0, Paused: 1, Closed: 2 } as const
+```
+
+### u256 / i256
+
+Anchor IDL supports 256-bit integers. Better Sol does not.
+
+**Workaround**: use `u128` if the value fits, or `bs.bytes()` for a raw 32-byte field:
+
+```ts
+const Data = bs.account({
+  largeValue: bs.bytes(),   // 32 bytes, Uint8Array in TS
+  maxValue: bs.u128(),      // if 128 bits is enough
+})
+```
+
+### HashMap / BTreeMap
+
+On-chain maps are not supported.
+
+**Workaround**: use `bs.vector(bs.struct({ key, value }))` and iterate:
+
+```ts
+const Metadata = bs.account({
+  entries: bs.vector(bs.struct({ key: bs.string(), value: bs.string() }), 10),
+}).zeroCopy()
+```
+
+Note: `bs.struct` inside `bs.vector` is only supported in zero-copy accounts. For regular accounts, flatten the key-value pairs into separate vectors:
+
+```ts
+const Data = bs.account({
+  keys: bs.vector(bs.string(), 10),
+  values: bs.vector(bs.string(), 10),
+})
+```
+
+### Nested structs in regular accounts
+
+`bs.struct()` can only be used inside zero-copy accounts (`.zeroCopy()`). For regular accounts, flatten the fields:
+
+```ts
+// Not supported in regular accounts:
+const Inner = bs.struct({ x: bs.u64(), y: bs.u64() })
+const Data = bs.account({ point: Inner })
+
+// Workaround: flatten into the account
+const Data = bs.account({
+  pointX: bs.u64(),
+  pointY: bs.u64(),
+})
+
+// Or use zero-copy:
+const Data = bs.account({ point: Inner }).zeroCopy()
+```
+
 ## Related
 
 - `sdk-reference.md` for the complete API reference with every type, method, and constraint.

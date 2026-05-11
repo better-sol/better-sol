@@ -61,7 +61,9 @@ export const counter = bs.program({
 | Option | `bs.optional(bs.pubkey())` | 1 + inner size | `string | null` |
 | Vector | `bs.vector(bs.u64(), 32)` | 4 + len * inner size | `bigint[]` |
 | Fixed array | `bs.array(bs.u8(), 32)` | size * inner size | `number[]` |
-| Struct | `bs.struct({ amount: bs.u64() })` | sum of field sizes | `{ amount: bigint }` |
+| Struct | `bs.struct({ amount: bs.u64() })` | sum of field sizes | `{ amount: bigint }` (zero-copy accounts only) |
+
+Types not yet supported in the program DSL: `enum` (both simple and data-carrying), `u256`/`i256`, `COption`, `HashMap`/`BTreeMap`, and nested structs in regular (non-zero-copy) accounts. See `sdk-reference.md` for workarounds.
 
 ## Instruction definitions
 
