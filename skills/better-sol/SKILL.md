@@ -17,17 +17,21 @@ Better Sol is a TypeScript-first Solana framework. One program definition descri
 
 Write programs, clients, tests, and deploy.
 
+**Before writing any program code, always load `references/usage-guide.md`.** It documents every transpiler-enforced rule that has no TypeScript error to catch it: PDA seed naming, run() body syntax, event field matching, error name resolution, and CPI constraints. Agents that skip this file produce programs that fail at deploy time with confusing transpiler errors.
+
+Also load `references/sdk-reference.md` for exact API names, type signatures, and package exports. These two files together provide the complete specification for writing valid Better Sol programs.
+
 | Need | Load |
 |---|---|
+| Common mistakes, PDA seed naming, run() constraints, CPI rules | `references/usage-guide.md` |
+| Exact API names, package exports, config, CLI options, types, constraints, and helpers | `references/sdk-reference.md` |
+| Write accounts, PDAs, instructions, constraints, CPIs | `references/program-patterns.md` |
 | Decide architecture, scaffold, program vs integration | `references/architecture-playbook.md` |
 | Scaffold a new project (web, mobile, backend) with Vite, Tailwind, wallet setup | `references/project-scaffolding.md` |
-| Write accounts, PDAs, instructions, constraints, CPIs | `references/program-patterns.md` |
-| Common mistakes, PDA seed naming, run() constraints, CPI rules | `references/usage-guide.md` |
 | Use `betterSol()`, wallets, fetches, multi-instruction flows | `references/client-testing-deploy.md` |
 | Write tests, use LiteSVM, compile binaries | `references/client-testing-deploy.md` |
 | Import external Anchor IDLs or migrate from Anchor | `references/interop-and-migration.md` |
 | Debug compile, deploy, transaction, or account failures | `references/troubleshooting.md` |
-| Exact API names, package exports, config, CLI options, types, constraints, and helpers | `references/sdk-reference.md` |
 | dApp layers, wallet/RPC patterns, transaction construction | `references/web3-dapp-architecture.md` |
 | Wallet options: Solana Wallet Adapter, Reown, Privy, Dynamic | `references/wallet-connection.md` |
 | Compute budget, ALTs, compression, Token-2022 internals | `references/advanced-solana.md` |
