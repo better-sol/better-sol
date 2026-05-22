@@ -345,4 +345,87 @@ describe("fromIdl", () => {
     const stakedFields = prog.events["Staked"]!;
     expect(Object.keys(stakedFields)).toEqual(["user", "amount"]);
   });
+
+  test("resolves defined type aliases", () => {
+    const idl = {
+      name: "aliases",
+      instructions: [
+        {
+          name: "setAmount",
+          args: [{ name: "amount", type: { defined: { name: "Amount" } } }],
+        },
+      ],
+      accounts: [
+        { name: "Data", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+      types: [
+        { name: "Amount", type: { kind: "type" as const, alias: "u64" as const } },
+        {
+          name: "Data",
+          type: {
+            kind: "struct" as const,
+            fields: [{ name: "amount", type: { defined: { name: "Amount" } } }],
+          },
+        },
+      ],
+    } as AnchorIdl;
+
+    const prog = fromIdl(idl);
+
+    expect(prog.instructions.setAmount!.args!.amount!.kind).toBe("u64");
+    expect(prog.accounts.Data!.fields.amount!.kind).toBe("u64");
+  });
+
+  test("rejects unsupported defined struct field types", () => {
+    const idl = {
+      name: "struct_field",
+      instructions: [],
+      accounts: [
+        { name: "Data", discriminator: [1, 2, 3, 4, 5, 6, 7, 8] },
+      ],
+      types: [
+        {
+          name: "Nested",
+          type: {
+            kind: "struct" as const,
+            fields: [{ name: "value", type: "u64" as const }],
+          },
+        },
+        {
+          name: "Data",
+          type: {
+            kind: "struct" as const,
+            fields: [{ name: "nested", type: { defined: { name: "Nested" } } }],
+          },
+        },
+      ],
+    } as AnchorIdl;
+
+    expect(() => fromIdl(idl)).toThrow("Defined struct IDL field types are not supported: Nested");
+  });
+
+  test("rejects unsupported 256-bit integer primitives", () => {
+    const idl = {
+      name: "wide_int",
+      instructions: [
+        { name: "set", args: [{ name: "value", type: "u256" as const }] },
+      ],
+    } as AnchorIdl;
+
+    expect(() => fromIdl(idl)).toThrow("Unsupported IDL primitive type: u256");
+  });
+
+  test("rejects recursive defined type aliases", () => {
+    const idl = {
+      name: "recursive_alias",
+      instructions: [
+        { name: "set", args: [{ name: "value", type: { defined: { name: "Amount" } } }] },
+      ],
+      types: [
+        { name: "Amount", type: { kind: "type" as const, alias: { defined: { name: "Amount" } } } },
+      ],
+    } as AnchorIdl;
+
+    expect(() => fromIdl(idl)).toThrow("Recursive IDL type aliases are not supported: Amount");
+  });
 });

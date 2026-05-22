@@ -167,23 +167,44 @@ function getStructFields(typeDef: IdlTypeDef | undefined): readonly IdlField[] {
   return typeDef.type.fields;
 }
 
-function idlTypeToToken(type: IdlType): TypeToken<unknown, TypeKind> {
+function idlTypeToToken(
+  type: IdlType,
+  typesByName: ReadonlyMap<string, IdlTypeDef>,
+  visitedDefinedTypes: ReadonlySet<string> = new Set(),
+): TypeToken<unknown, TypeKind> {
   if (typeof type === "string") {
     const token = idlPrimitiveToToken(type);
     if (token === undefined) throw new Error(`Unsupported IDL primitive type: ${type}`);
     return token;
   }
-  if ("option" in type && type.option !== undefined) return bs.optional(idlTypeToToken(type.option));
-  if ("coption" in type && type.coption !== undefined) return bs.optional(idlTypeToToken(type.coption));
-  if ("vec" in type && type.vec !== undefined) return bs.vector(idlTypeToToken(type.vec));
+  if ("option" in type && type.option !== undefined) return bs.optional(idlTypeToToken(type.option, typesByName, visitedDefinedTypes));
+  if ("coption" in type && type.coption !== undefined) return bs.optional(idlTypeToToken(type.coption, typesByName, visitedDefinedTypes));
+  if ("vec" in type && type.vec !== undefined) return bs.vector(idlTypeToToken(type.vec, typesByName, visitedDefinedTypes));
   if ("array" in type && type.array !== undefined) {
     const [inner, size] = type.array;
     if (typeof size !== "number") throw new Error(`Generic array lengths are not supported: ${JSON.stringify(size)}`);
-    return bs.array(idlTypeToToken(inner), size);
+    return bs.array(idlTypeToToken(inner, typesByName, visitedDefinedTypes), size);
   }
-  if ("defined" in type) return bs.pubkey();
+  if ("defined" in type) return definedIdlTypeToToken(type.defined.name, typesByName, visitedDefinedTypes);
   if ("generic" in type) throw new Error(`Generic types are not supported: ${type.generic}`);
   throw new Error(`Unknown IDL type: ${JSON.stringify(type)}`);
+}
+
+function definedIdlTypeToToken(
+  name: string,
+  typesByName: ReadonlyMap<string, IdlTypeDef>,
+  visitedDefinedTypes: ReadonlySet<string>,
+): TypeToken<unknown, TypeKind> {
+  if (visitedDefinedTypes.has(name)) throw new Error(`Recursive IDL type aliases are not supported: ${name}`);
+  const typeDef = typesByName.get(name);
+  if (typeDef === undefined) throw new Error(`Defined IDL type is missing from types array: ${name}`);
+  if (typeDef.type.kind === "type") {
+    const nextVisited = new Set(visitedDefinedTypes);
+    nextVisited.add(name);
+    return idlTypeToToken(typeDef.type.alias, typesByName, nextVisited);
+  }
+  if (typeDef.type.kind === "struct") throw new Error(`Defined struct IDL field types are not supported: ${name}`);
+  throw new Error(`Defined enum IDL field types are not supported: ${name}`);
 }
 
 function idlPrimitiveToToken(type: IdlTypePrimitive): TypeToken<unknown, TypeKind> | undefined {
@@ -193,13 +214,11 @@ function idlPrimitiveToToken(type: IdlTypePrimitive): TypeToken<unknown, TypeKin
     case "u32": return bs.u32();
     case "u64": return bs.u64();
     case "u128": return bs.u128();
-    case "u256": return bs.u128();
     case "i8": return bs.i8();
     case "i16": return bs.i16();
     case "i32": return bs.i32();
     case "i64": return bs.i64();
     case "i128": return bs.i128();
-    case "i256": return bs.i128();
     case "f32": return bs.f32();
     case "f64": return bs.f64();
     case "bool": return bs.bool();
@@ -210,11 +229,11 @@ function idlPrimitiveToToken(type: IdlTypePrimitive): TypeToken<unknown, TypeKin
   }
 }
 
-function fieldsToSchema(fields: readonly IdlField[] | undefined): FieldSchema {
+function fieldsToSchema(fields: readonly IdlField[] | undefined, typesByName: ReadonlyMap<string, IdlTypeDef>): FieldSchema {
   if (fields === undefined || fields.length === 0) return {};
   const result: Record<string, TypeToken<unknown, TypeKind>> = {};
   for (const field of fields) {
-    result[field.name] = idlTypeToToken(field.type);
+    result[field.name] = idlTypeToToken(field.type, typesByName);
   }
   return result as FieldSchema;
 }
@@ -246,7 +265,7 @@ export function fromIdl(idl: AnchorIdl): IdlProgram {
     programAddress,
     buildErrors(idl.errors),
     buildEvents(idl.events, typesByName),
-    buildInstructions(idl.instructions) as Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>,
+    buildInstructions(idl.instructions, typesByName) as Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>,
     buildAccounts(idl.accounts, typesByName),
   ) as IdlProgram;
 }
@@ -264,7 +283,7 @@ type FlattenAccountItems<T extends readonly IdlInstructionAccountItem[]> =
 
 type IdlTypeToValue<T> =
   T extends "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "f32" | "f64" ? number :
-  T extends "u64" | "u128" | "i64" | "i128" | "u256" | "i256" ? bigint :
+  T extends "u64" | "u128" | "i64" | "i128" ? bigint :
   T extends "bool" ? boolean :
   T extends "pubkey" | "publicKey" ? Address :
   T extends "string" ? string :
@@ -348,13 +367,14 @@ function buildEvents(events: readonly IdlEvent[] | undefined, typesByName: Map<s
   const result: Record<string, FieldSchema> = {};
   for (const event of events) {
     const fields = getStructFields(typesByName.get(event.name));
-    result[event.name] = fieldsToSchema(fields);
+    result[event.name] = fieldsToSchema(fields, typesByName);
   }
   return result;
 }
 
 function buildInstructions(
   idlInstructions: readonly IdlInstruction[],
+  typesByName: ReadonlyMap<string, IdlTypeDef>,
 ): Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> {
   const result: Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> = {};
   for (const ix of idlInstructions) {
@@ -375,7 +395,7 @@ function buildInstructions(
 
     const args: Record<string, TypeToken<unknown, TypeKind>> = {};
     for (const arg of ix.args ?? []) {
-      args[arg.name] = idlTypeToToken(arg.type);
+      args[arg.name] = idlTypeToToken(arg.type, typesByName);
     }
 
     result[ix.name] = new InstructionDefinition(
@@ -405,7 +425,7 @@ function buildAccounts(
   const result: Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>> = {};
   for (const acc of idlAccounts) {
     const fields = getStructFields(typesByName.get(acc.name));
-    const schema = fieldsToSchema(fields);
+    const schema = fieldsToSchema(fields, typesByName);
     if (Object.keys(schema).length === 0) continue;
     result[acc.name] = bs.account(schema);
   }
