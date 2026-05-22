@@ -375,4 +375,22 @@ describe("withSigner", () => {
     expect(scoped.prog).toBeDefined();
     expect(typeof scoped.prog.ping).toBe("function");
   });
+
+  test("scoped client instruction methods use the scoped signer after prior access", async () => {
+    const prog = bs.program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      (ix) => ({ ping: ix({ accounts: { authority: bs.signer() }, run: () => {} }) }),
+    );
+    const secondSigner = {
+      address: address("Bi43bsYfqreLYcuHuBm7rmFinztHDDk4gDpTRNdtgqTm"),
+      signTransactions: async <T extends readonly unknown[]>(txs: T): Promise<T> => txs,
+    };
+    const client = await betterSol({ cluster: "devnet", programs: { prog } });
+    expect(typeof client.prog.ping).toBe("function");
+
+    const scoped = await client.withSigner(secondSigner);
+    const instruction = await scoped.prog.ping.instruction();
+
+    expect(instruction.accounts?.[0]?.address).toBe(secondSigner.address);
+  });
 });

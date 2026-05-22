@@ -266,6 +266,8 @@ function createProgramClient(
     return results;
   };
 
+  const instructionMethods = new Map<string, InstructionFn>();
+
   const handler: ProxyHandler<ProgramClientImpl> = {
     get(_target: ProgramClientImpl, property: string | symbol): unknown {
       if (property === "address") return programAddress;
@@ -279,7 +281,12 @@ function createProgramClient(
       const ixDef = program.instructions[property];
       if (ixDef === undefined) return undefined;
 
-      return createInstructionProxy(ixDef, property, program.address, rpc, rpcSubscriptions, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed, parseLogsForError);
+      const cachedInstructionMethod = instructionMethods.get(property);
+      if (cachedInstructionMethod !== undefined) return cachedInstructionMethod;
+
+      const instructionMethod = createInstructionProxy(ixDef, property, program.address, rpc, rpcSubscriptions, signer, commitment, nonceConfig, lookupTableIndex, onConfirmed, parseLogsForError);
+      instructionMethods.set(property, instructionMethod);
+      return instructionMethod;
     },
     ownKeys(): (string | symbol)[] {
       return ["address", "accounts", "parseErrors", "parseEvents", ...Object.keys(program.instructions)];
@@ -310,7 +317,6 @@ interface InstructionFn {
   plan(params?: Record<string, unknown>): Promise<InstructionPlanResult>;
 }
 
-const instructionCache = new WeakMap<InstructionDefinition<AccountInputs, ArgsSchema | undefined>, InstructionFn>();
 
 function createInstructionProxy(
   ixDef: InstructionDefinition<AccountInputs, ArgsSchema | undefined>,
@@ -325,9 +331,6 @@ function createInstructionProxy(
   onConfirmed: TransactionCallback,
   parseLogsForError: (error: unknown) => never,
 ): InstructionFn {
-  const cached = instructionCache.get(ixDef);
-  if (cached !== undefined) return cached;
-
   const snakeName = toSnake(ixName);
 
   const sendFn = async (inputParams?: Record<string, unknown>): Promise<Signature> => {
@@ -382,16 +385,15 @@ function createInstructionProxy(
     return { instruction: ix, plan: { kind: "single", instruction: ix, planType: "instructionPlan" } };
   };
 
-  const fn = Object.assign(sendFn, {
+  const fn: InstructionFn = Object.assign(sendFn, {
     send: sendFn,
     instruction: instructionFn,
     transaction: transactionFn,
     simulate: simulateFn,
     prepare: prepareFn,
     plan: planFn,
-  }) as InstructionFn;
+  });
 
-  instructionCache.set(ixDef, fn);
   return fn;
 }
 

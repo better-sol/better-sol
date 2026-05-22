@@ -25,21 +25,21 @@ class PrimitiveToken<TValue, TKind extends PrimitiveKind> implements TypeToken<T
 class OptionToken<TInner extends TypeToken<unknown, TypeKind>> implements TypeToken<InferType<TInner> | null, "option"> {
   public readonly kind = "option";
   public readonly __typeValue__: InferType<TInner> | null = null;
-  public readonly __typeKind__: "option" = "option";
+  public readonly __typeKind__ = "option";
   public constructor(public readonly inner: TInner) {}
 }
 
 class VecToken<TInner extends TypeToken<unknown, TypeKind>, TMax extends number> implements TypeToken<BoundedArray<InferType<TInner>>, "vec"> {
   public readonly kind = "vec";
   public readonly __typeValue__: BoundedArray<InferType<TInner>> = undefined as unknown as BoundedArray<InferType<TInner>>;
-  public readonly __typeKind__: "vec" = "vec";
+  public readonly __typeKind__ = "vec";
   public constructor(public readonly inner: TInner, public readonly maxEntries: TMax) {}
 }
 
 class ArrayToken<TInner extends TypeToken<unknown, TypeKind>, TSize extends number> implements TypeToken<FixedArray<InferType<TInner>, TSize>, "array"> {
   public readonly kind = "array";
   public readonly __typeValue__: FixedArray<InferType<TInner>, TSize> = undefined as unknown as FixedArray<InferType<TInner>, TSize>;
-  public readonly __typeKind__: "array" = "array";
+  public readonly __typeKind__ = "array";
   public constructor(public readonly inner: TInner, public readonly size: TSize) {}
 }
 
@@ -121,7 +121,7 @@ type NormalizeSeeds<T extends readonly unknown[]> = { [I in keyof T]: NormalizeS
 export class StructZCDefinition<TFields extends FieldSchema> implements TypeToken<InferFields<TFields>, "struct_zc_ref"> {
   public readonly kind = "struct_zc_ref";
   public readonly __typeValue__: InferFields<TFields> = undefined as unknown as InferFields<TFields>;
-  public readonly __typeKind__: "struct_zc_ref" = "struct_zc_ref";
+  public readonly __typeKind__ = "struct_zc_ref";
   public constructor(public readonly fields: TFields) {}
 }
 
