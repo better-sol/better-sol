@@ -1,3 +1,5 @@
+import { address as kitAddress, getAddressDecoder, getAddressEncoder, getProgramDerivedAddress } from "@solana/kit";
+import { encodeField } from "#codec";
 import {
   bs,
   AccountConstraint,
@@ -10,6 +12,8 @@ import {
   type TypeToken,
   type TypeKind,
   type AccountInputs,
+  type AccountResolutionContext,
+  type AccountAddressResolver,
 } from "#program";
 
 // ── Anchor IDL type definitions ──
@@ -378,24 +382,16 @@ function buildInstructions(
 ): Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> {
   const result: Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>> = {};
   for (const ix of idlInstructions) {
+    const args: Record<string, TypeToken<unknown, TypeKind>> = {};
+    for (const arg of ix.args ?? []) {
+      args[arg.name] = idlTypeToToken(arg.type, typesByName);
+    }
+
     const flatAccounts = flattenAccountItems(ix.accounts);
     const accounts: Record<string, AccountConstraint<unknown, "signer" | "mut", boolean>> = {};
     for (const acc of flatAccounts) {
       if (acc.optional ?? false) continue;
-      if (acc.writable && acc.signer) {
-        accounts[acc.name] = new AccountConstraint("signer", true) as AccountConstraint<unknown, "signer" | "mut", boolean>;
-      } else if (acc.signer) {
-        accounts[acc.name] = new AccountConstraint("signer", false) as AccountConstraint<unknown, "signer" | "mut", boolean>;
-      } else if (acc.writable) {
-        accounts[acc.name] = new AccountConstraint("mut", true) as AccountConstraint<unknown, "signer" | "mut", boolean>;
-      } else {
-        accounts[acc.name] = new AccountConstraint("mut", false) as AccountConstraint<unknown, "signer" | "mut", boolean>;
-      }
-    }
-
-    const args: Record<string, TypeToken<unknown, TypeKind>> = {};
-    for (const arg of ix.args ?? []) {
-      args[arg.name] = idlTypeToToken(arg.type, typesByName);
+      accounts[acc.name] = createIdlAccountConstraint(acc, args);
     }
 
     result[ix.name] = new InstructionDefinition(
@@ -405,6 +401,107 @@ function buildInstructions(
     );
   }
   return result;
+}
+
+function createIdlAccountConstraint(
+  account: IdlInstructionAccount,
+  args: Readonly<Record<string, TypeToken<unknown, TypeKind>>>,
+): AccountConstraint<unknown, "signer" | "mut", boolean> {
+  const addressResolver = createIdlAccountAddressResolver(account, args);
+  if (account.signer) return new AccountConstraint("signer", account.writable === true, undefined, undefined, undefined, undefined, addressResolver);
+  return new AccountConstraint("mut", account.writable === true, undefined, undefined, undefined, undefined, addressResolver);
+}
+
+function createIdlAccountAddressResolver(
+  account: IdlInstructionAccount,
+  args: Readonly<Record<string, TypeToken<unknown, TypeKind>>>,
+): AccountAddressResolver | undefined {
+  const fixedAddress = account.address;
+  if (fixedAddress !== undefined) return () => fixedAddress;
+  const pda = account.pda;
+  if (pda === undefined) return undefined;
+  return async (context: AccountResolutionContext): Promise<Address> => {
+    const programAddress = await resolvePdaProgramAddress(pda, context);
+    const seeds = pda.seeds.map((seed) => resolvePdaSeedBytes(seed, args, context));
+    const [derivedAddress] = await getProgramDerivedAddress({ programAddress: kitAddress(programAddress), seeds });
+    return derivedAddress;
+  };
+}
+
+async function resolvePdaProgramAddress(pda: IdlPda, context: AccountResolutionContext): Promise<Address> {
+  if (pda.program === undefined) return context.programAddress;
+  return resolvePdaSeedAddress(pda.program, context);
+}
+
+function resolvePdaSeedBytes(
+  seed: IdlSeed,
+  args: Readonly<Record<string, TypeToken<unknown, TypeKind>>>,
+  context: AccountResolutionContext,
+): Uint8Array {
+  switch (seed.kind) {
+    case "const": return new Uint8Array(seed.value);
+    case "arg": return pdaValueToBytes(seed.path, resolvePath(context.params, seed.path), args[seed.path]);
+    case "account": return pdaAddressToBytes(resolveAccountPath(seed.path, context));
+  }
+}
+
+function resolvePdaSeedAddress(seed: IdlSeed, context: AccountResolutionContext): Address {
+  switch (seed.kind) {
+    case "const": return getAddressDecoder().decode(new Uint8Array(seed.value));
+    case "arg": return resolveAddressValue(seed.path, resolvePath(context.params, seed.path));
+    case "account": return resolveAccountPath(seed.path, context);
+  }
+}
+
+function resolveAccountPath(path: string, context: AccountResolutionContext): Address {
+  if (path in context.resolvedAccounts) return context.resolvedAccounts[path] ?? unreachablePath(path);
+  const paramValue = resolvePath(context.params, path);
+  if (paramValue !== undefined) return resolveAddressValue(path, paramValue);
+  if (context.signerAddress !== undefined && (path === "signer" || path === "authority" || path === "user" || path === "payer")) return context.signerAddress;
+  throw new Error(`Unable to resolve PDA account seed '${path}'`);
+}
+
+function pdaValueToBytes(path: string, value: unknown, token: TypeToken<unknown, TypeKind> | undefined): Uint8Array {
+  if (token !== undefined) {
+    if (token.kind === "pubkey") return pdaAddressToBytes(resolveAddressValue(path, value));
+    if (isPdaNumericToken(token)) return encodeField(token, value);
+  }
+  if (typeof value === "string") return new TextEncoder().encode(value);
+  if (typeof value === "number") return encodeU64PdaSeed(BigInt(value));
+  if (typeof value === "bigint") return encodeU64PdaSeed(value);
+  if (value instanceof Uint8Array) return value;
+  throw new Error(`Unable to encode PDA seed '${path}'`);
+}
+
+function isPdaNumericToken(token: TypeToken<unknown, TypeKind>): boolean {
+  return token.kind === "u8" || token.kind === "u16" || token.kind === "u32" || token.kind === "u64" || token.kind === "u128" || token.kind === "i8" || token.kind === "i16" || token.kind === "i32" || token.kind === "i64" || token.kind === "i128";
+}
+
+function resolveAddressValue(path: string, value: unknown): Address {
+  if (typeof value !== "string") throw new Error(`PDA seed '${path}' must be an address`);
+  return kitAddress(value);
+}
+
+function pdaAddressToBytes(value: Address): Uint8Array {
+  return new Uint8Array(getAddressEncoder().encode(kitAddress(value)));
+}
+
+function encodeU64PdaSeed(value: bigint): Uint8Array {
+  const buffer = new Uint8Array(8);
+  for (let i = 0; i < 8; i++) buffer[i] = Number((value >> BigInt(i * 8)) & 0xffn);
+  return buffer;
+}
+
+function resolvePath(source: Readonly<Record<string, unknown>>, path: string): unknown {
+  return path.split(".").reduce<unknown>((current, part) => {
+    if (typeof current !== "object" || current === null) return undefined;
+    if (!Object.prototype.hasOwnProperty.call(current, part)) return undefined;
+    return Reflect.get(current, part);
+  }, source);
+}
+
+function unreachablePath(path: string): never {
+  throw new Error(`Unable to resolve PDA account seed '${path}'`);
 }
 
 function flattenAccountItems(items: readonly IdlInstructionAccountItem[] | undefined): readonly IdlInstructionAccount[] {

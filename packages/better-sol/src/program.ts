@@ -155,6 +155,15 @@ export type EventSchema = Readonly<Record<string, FieldSchema>>;
 
 type AccountConstraintKind = "init" | "initIfNeeded" | "mut" | "close" | "realloc" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";
 
+export type AccountResolutionContext = {
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly programAddress: Address;
+  readonly signerAddress: Address | undefined;
+  readonly resolvedAccounts: Readonly<Record<string, Address>>;
+};
+
+export type AccountAddressResolver = (context: AccountResolutionContext) => Address | Promise<Address>;
+
 export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMutable extends boolean = false> {
   public readonly __constraintValue__: TValue = undefined as unknown as TValue;
   public constructor(
@@ -164,6 +173,7 @@ export class AccountConstraint<TValue, TKind extends AccountConstraintKind, TMut
     public readonly refundTo: string | undefined = undefined,
     public readonly remainingItem: unknown = undefined,
     public readonly reallocSpace: number | undefined = undefined,
+    public readonly addressResolver: AccountAddressResolver | undefined = undefined,
   ) {}
 }
 

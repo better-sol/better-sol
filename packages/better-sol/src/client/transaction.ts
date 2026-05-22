@@ -26,6 +26,8 @@ import {
   type AccountInputs,
   type ArgsSchema,
   type InstructionDefinition,
+  type AccountResolutionContext,
+  type AccountAddressResolver,
 } from "#program";
 import type {
   InstructionSigningMode,
@@ -189,13 +191,14 @@ export async function runSimulation(
   };
 }
 
-export function buildAccountMetas(
+export async function buildAccountMetas(
   ixDef: InstructionDefinition<AccountInputs, ArgsSchema | undefined>,
   params: Record<string, unknown>,
+  programAddress: string,
   signer: TransactionSigner | undefined,
   mode: InstructionSigningMode,
   lookupTableIndex?: LookupTableIndex,
-): readonly ResolvedAccountMeta[] {
+): Promise<readonly ResolvedAccountMeta[]> {
   const accountMetas: (AccountMeta | AccountSignerMeta)[] = [];
   const accountEntries = Object.entries(ixDef.accounts);
 
@@ -207,13 +210,23 @@ export function buildAccountMetas(
     throw new Error("Multiple signer accounts omitted. Pass explicit addresses for all but one signer, or use sol.withSigner() for a different signer.");
   }
 
-  for (const [name, input] of Object.entries(ixDef.accounts)) {
+  const resolvedAccounts: Record<string, string> = {};
+  for (const [name, input] of accountEntries) {
+    if (typeof params[name] === "string") resolvedAccounts[name] = params[name];
+    if (input instanceof AccountConstraint && input.constraintKind === "signer" && params[name] === undefined && signer !== undefined) {
+      resolvedAccounts[name] = signer.address;
+    }
+  }
+  await accountEntries.reduce<Promise<void>>(async (previous, [name, input]) => {
+    await previous;
     if (input instanceof AccountConstraint && input.constraintKind === "remaining") {
       accountMetas.push(...remainingAccountMetas(name, params[name], input.remainingItem));
-      continue;
+      return;
     }
-    accountMetas.push(resolveAccountMetaInput(name, input, params[name], signer, mode));
-  }
+    const meta = await resolveAccountMetaInput(name, input, params[name], params, programAddress, resolvedAccounts, signer, mode);
+    resolvedAccounts[name] = meta.address;
+    accountMetas.push(meta);
+  }, Promise.resolve());
 
   const hasInit = accountEntries.some(
     ([, input]) => input instanceof AccountConstraint && (input.constraintKind === "init" || input.constraintKind === "initIfNeeded"),
@@ -230,13 +243,16 @@ export function buildAccountMetas(
   return accountMetas;
 }
 
-function resolveAccountMetaInput(
+async function resolveAccountMetaInput(
   name: string,
   input: AccountInputs[string],
   value: unknown,
+  params: Readonly<Record<string, unknown>>,
+  programAddress: string,
+  resolvedAccounts: Readonly<Record<string, string>>,
   signer: TransactionSigner | undefined,
   mode: InstructionSigningMode,
-): AccountMeta | AccountSignerMeta {
+): Promise<AccountMeta | AccountSignerMeta> {
   if (!(input instanceof AccountConstraint)) {
     if (typeof value !== "string") throw new Error(`Missing account '${name}'`);
     return { address: kitAddress(value), role: AccountRole.READONLY };
@@ -252,8 +268,32 @@ function resolveAccountMetaInput(
   if (kind === "clock") return fixedProgramMeta(name, value, CLOCK_SYSVAR_ADDRESS, role);
 
   if (kind === "signer") return signerMeta(name, value, signer, isWritable, mode);
+  const resolvedAddress = await resolveAccountAddress(input, params, programAddress, resolvedAccounts, signer);
+  if (resolvedAddress !== undefined) {
+    if (value !== undefined && (typeof value !== "string" || kitAddress(value) !== kitAddress(resolvedAddress))) {
+      throw new Error(`Account '${name}' must be ${resolvedAddress}`);
+    }
+    return { address: kitAddress(resolvedAddress), role };
+  }
   if (typeof value !== "string") throw new Error(`Missing account '${name}'`);
   return { address: kitAddress(value), role };
+}
+
+async function resolveAccountAddress(
+  input: { readonly addressResolver: AccountAddressResolver | undefined },
+  params: Readonly<Record<string, unknown>>,
+  programAddress: string,
+  resolvedAccounts: Readonly<Record<string, string>>,
+  signer: TransactionSigner | undefined,
+): Promise<string | undefined> {
+  if (input.addressResolver === undefined) return undefined;
+  const context: AccountResolutionContext = {
+    params,
+    programAddress,
+    signerAddress: signer?.address,
+    resolvedAccounts,
+  };
+  return await input.addressResolver(context);
 }
 
 function fixedProgramMeta(name: string, value: unknown, expected: KitAddress, role: AccountRole): AccountMeta {

@@ -165,7 +165,7 @@ describe("realloc constraint", () => {
     expect(prog.instructions.resize.accounts.data.constraintKind).toBe("realloc");
   });
 
-  test("realloc accounts are writable", () => {
+  test("realloc accounts are writable", async () => {
     const Data = bs.account({ value: bs.string() });
     const prog = bs.program(
       { name: "test", address: "11111111111111111111111111111111" },
@@ -176,13 +176,14 @@ describe("realloc constraint", () => {
         }),
       }),
     );
-    const metas = buildAccountMetas(
+    const metas = await buildAccountMetas(
       prog.instructions.resize,
       { data: signer.address, authority: undefined },
+      "11111111111111111111111111111111",
       signer,
       "unsigned",
     );
-    const dataMeta = metas.find((m) => "address" in m && m.address === signer.address && !("signer" in m));
+    const dataMeta = metas.find((meta) => "address" in meta && meta.address === signer.address && !("signer" in meta));
     expect(dataMeta).toBeDefined();
   });
 

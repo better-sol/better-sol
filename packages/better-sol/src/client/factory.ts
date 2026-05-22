@@ -406,8 +406,11 @@ async function buildInstruction(
   mode: InstructionSigningMode,
   lookupTableIndex?: LookupTableIndex,
 ): Promise<Instruction> {
-  const accounts = buildAccountMetas(ixDef, params, signer, mode, lookupTableIndex);
-  return buildInstructionData(snakeName, ixDef, params).then((data) => ({ programAddress: kitAddress(programId), accounts, data }));
+  const [accounts, data] = await Promise.all([
+    buildAccountMetas(ixDef, params, programId, signer, mode, lookupTableIndex),
+    buildInstructionData(snakeName, ixDef, params),
+  ]);
+  return { programAddress: kitAddress(programId), accounts, data };
 }
 
 async function buildInstructionData(

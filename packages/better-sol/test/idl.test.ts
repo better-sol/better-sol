@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { address, getAddressEncoder, getProgramDerivedAddress } from "@solana/kit";
 import { AccountConstraint } from "../src/program";
+import { buildAccountMetas } from "../src/client/transaction";
 import { fromIdl, type AnchorIdl } from "../src/idl";
 
 describe("fromIdl", () => {
@@ -344,6 +346,67 @@ describe("fromIdl", () => {
     expect(Object.keys(prog.events)).toEqual(["Staked"]);
     const stakedFields = prog.events["Staked"]!;
     expect(Object.keys(stakedFields)).toEqual(["user", "amount"]);
+  });
+
+  test("auto-resolves IDL PDA accounts from const and signer account seeds", async () => {
+    const signer = {
+      address: address("11111111111111111111111111111111"),
+      signTransactions: async <T extends readonly unknown[]>(transactions: T): Promise<T> => transactions,
+    };
+    const idl = {
+      address: "BPFLoader1111111111111111111111111111111111",
+      name: "staking",
+      instructions: [
+        {
+          name: "claim",
+          accounts: [
+            { name: "user", writable: true, signer: true },
+            {
+              name: "stake_pool",
+              writable: true,
+              pda: {
+                seeds: [
+                  { kind: "const" as const, value: [115, 116, 97, 107, 101] },
+                  { kind: "account" as const, path: "user" },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    const metas = await buildAccountMetas(prog.instructions.claim!, {}, prog.address, signer, "unsigned");
+    const [expectedPool] = await getProgramDerivedAddress({
+      programAddress: address(prog.address),
+      seeds: [new TextEncoder().encode("stake"), new Uint8Array(getAddressEncoder().encode(signer.address))],
+    });
+
+    expect(metas.map((meta) => meta.address)).toEqual([signer.address, expectedPool]);
+  });
+
+  test("auto-resolves and validates IDL fixed-address accounts", async () => {
+    const idl = {
+      address: "BPFLoader1111111111111111111111111111111111",
+      name: "fixed",
+      instructions: [
+        {
+          name: "ping",
+          accounts: [{ name: "system_program", address: "11111111111111111111111111111111" }],
+        },
+      ],
+    } as AnchorIdl;
+    const prog = fromIdl(idl);
+    const metas = await buildAccountMetas(prog.instructions.ping!, {}, prog.address, undefined, "unsigned");
+
+    expect(metas[0]?.address).toBe(address("11111111111111111111111111111111"));
+    await expect(buildAccountMetas(
+      prog.instructions.ping!,
+      { system_program: "BPFLoader1111111111111111111111111111111111" },
+      prog.address,
+      undefined,
+      "unsigned",
+    )).rejects.toThrow("Account 'system_program' must be 11111111111111111111111111111111");
   });
 
   test("resolves defined type aliases", () => {
