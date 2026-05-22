@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { address, getAddressEncoder, getProgramDerivedAddress } from "@solana/kit";
 import { AccountConstraint } from "../src/program";
 import { buildAccountMetas } from "../src/client/transaction";
-import { fromIdl, type AnchorIdl } from "../src/idl";
+import { betterSol, fromIdl, type AnchorIdl } from "../src/index";
 
 describe("fromIdl", () => {
   test("parses a minimal IDL", () => {
@@ -346,6 +346,51 @@ describe("fromIdl", () => {
     expect(Object.keys(prog.events)).toEqual(["Staked"]);
     const stakedFields = prog.events["Staked"]!;
     expect(Object.keys(stakedFields)).toEqual(["user", "amount"]);
+  });
+
+  test("preserves explicit IDL discriminators", async () => {
+    const instructionDiscriminator = [8, 7, 6, 5, 4, 3, 2, 1] as const;
+    const accountDiscriminator = [1, 3, 5, 7, 9, 11, 13, 15] as const;
+    const eventDiscriminator = [2, 4, 6, 8, 10, 12, 14, 16] as const;
+    const idl = {
+      address: "BPFLoader1111111111111111111111111111111111",
+      name: "explicit",
+      instructions: [
+        { name: "custom", discriminator: instructionDiscriminator, args: [] },
+      ],
+      accounts: [
+        { name: "Data", discriminator: accountDiscriminator },
+      ],
+      events: [
+        { name: "Changed", discriminator: eventDiscriminator },
+      ],
+      types: [
+        { name: "Data", type: { kind: "struct" as const, fields: [{ name: "value", type: "u64" as const }] } },
+        { name: "Changed", type: { kind: "struct" as const, fields: [{ name: "value", type: "u64" as const }] } },
+      ],
+    } as AnchorIdl;
+
+    const prog = fromIdl(idl);
+    const client = await betterSol({ programs: { prog } });
+    const customInstruction = client.prog.custom;
+    if (customInstruction === undefined) throw new Error("custom instruction missing");
+    const instruction = await customInstruction.instruction();
+    if (instruction.data === undefined) throw new Error("instruction data missing");
+
+    expect(Array.from(instruction.data.slice(0, 8))).toEqual([...instructionDiscriminator]);
+    expect(Array.from(prog.accounts.Data!.discriminator ?? [])).toEqual([...accountDiscriminator]);
+    expect(Array.from(prog.eventDiscriminators.Changed ?? [])).toEqual([...eventDiscriminator]);
+  });
+
+  test("rejects invalid explicit IDL discriminator lengths", () => {
+    const idl = {
+      name: "invalid_disc",
+      instructions: [
+        { name: "custom", discriminator: [1, 2, 3] },
+      ],
+    } as AnchorIdl;
+
+    expect(() => fromIdl(idl)).toThrow("Instruction 'custom' discriminator must contain exactly 8 bytes");
   });
 
   test("auto-resolves IDL PDA accounts from const and signer account seeds", async () => {

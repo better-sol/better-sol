@@ -240,8 +240,8 @@ function decodeZeroCopyField(token: TypeToken<unknown, TypeKind>, data: Uint8Arr
   }
 }
 
-export async function encodeInstruction<TArgs extends Record<string, TypeToken<unknown, TypeKind>>>(ixName: string, argTypes: TArgs, args: { [K in keyof TArgs]: InferType<TArgs[K]> }): Promise<Uint8Array> {
-  const disc = await anchorDiscriminator(ixName);
+export async function encodeInstruction<TArgs extends Record<string, TypeToken<unknown, TypeKind>>>(ixName: string, argTypes: TArgs, args: { [K in keyof TArgs]: InferType<TArgs[K]> }, explicitDiscriminator?: Uint8Array): Promise<Uint8Array> {
+  const disc = explicitDiscriminator ?? await anchorDiscriminator(ixName);
   const parts: Uint8Array[] = [disc];
   const values = args as Readonly<Record<string, unknown>>;
   for (const [key, token] of Object.entries(argTypes)) {

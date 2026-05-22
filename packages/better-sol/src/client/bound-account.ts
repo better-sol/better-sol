@@ -47,7 +47,7 @@ export class BoundAccountImpl<TFields extends FieldSchema, TSeeds extends readon
     const account = await fetchEncodedAccount(this.rpc, kitAddress(address), { commitment: this.commitment });
     if (!account.exists || account.data.length === 0) return null;
     if (account.programAddress !== kitAddress(this.programAddress)) return null;
-    const disc = await accountDiscriminator(this.accountName);
+    const disc = this.definition.discriminator ?? await accountDiscriminator(this.accountName);
     if (!account.data.subarray(0, 8).every((b, i) => b === disc[i])) return null;
     const data = new Uint8Array(account.data.subarray(8));
     return this.definition.zeroCopyEnabled

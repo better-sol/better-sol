@@ -253,7 +253,7 @@ function createProgramClient(
   const parseEvents = async (logs: readonly string[]): Promise<readonly ParsedEvent[]> => {
     if (Object.keys(program.events).length === 0) return [];
     if (eventDiscriminatorCache === undefined) {
-      eventDiscriminatorCache = await buildEventDiscriminatorIndex(program.events as Record<string, FieldSchema>);
+      eventDiscriminatorCache = await buildEventDiscriminatorIndex(program.events as Record<string, FieldSchema>, program.eventDiscriminators);
     }
     const eventLogs = extractEventLogs(logs);
     const results: ParsedEvent[] = [];
@@ -419,8 +419,8 @@ async function buildInstructionData(
   params: Record<string, unknown>,
 ): Promise<Uint8Array> {
   validateArgs(ixDef.args, params, snakeName);
-  if (ixDef.args === undefined || Object.keys(ixDef.args).length === 0) return await anchorDiscriminator(snakeName);
-  return await encodeInstruction(snakeName, ixDef.args, params);
+  if (ixDef.args === undefined || Object.keys(ixDef.args).length === 0) return ixDef.discriminator ?? await anchorDiscriminator(snakeName);
+  return await encodeInstruction(snakeName, ixDef.args, params, ixDef.discriminator);
 }
 
 function validateArgs(

@@ -271,6 +271,7 @@ export function fromIdl(idl: AnchorIdl): IdlProgram {
     buildEvents(idl.events, typesByName),
     buildInstructions(idl.instructions, typesByName) as Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>,
     buildAccounts(idl.accounts, typesByName),
+    buildEventDiscriminators(idl.events),
   ) as IdlProgram;
 }
 
@@ -357,6 +358,25 @@ export type TypedIdlProgram<T extends AnchorIdl> = ProgramDefinition<
 
 // ── Build functions ──
 
+function normalizeIdlDiscriminator(owner: string, discriminator: IdlDiscriminator | undefined): Uint8Array | undefined {
+  if (discriminator === undefined) return undefined;
+  if (discriminator.length !== 8) throw new Error(`${owner} discriminator must contain exactly 8 bytes`);
+  return new Uint8Array(discriminator.map((byte) => {
+    if (!Number.isInteger(byte) || byte < 0 || byte > 255) throw new Error(`${owner} discriminator contains invalid byte: ${byte}`);
+    return byte;
+  }));
+}
+
+function buildEventDiscriminators(events: readonly IdlEvent[] | undefined): Record<string, Uint8Array> {
+  if (events === undefined) return {};
+  const result: Record<string, Uint8Array> = {};
+  for (const event of events) {
+    const discriminator = normalizeIdlDiscriminator(`Event '${event.name}'`, event.discriminator);
+    if (discriminator !== undefined) result[event.name] = discriminator;
+  }
+  return result;
+}
+
 function buildErrors(errors: readonly IdlErrorCode[] | undefined): Record<string, string> {
   if (errors === undefined) return {};
   const result: Record<string, string> = {};
@@ -398,6 +418,8 @@ function buildInstructions(
       accounts as AccountInputs,
       Object.keys(args).length > 0 ? (args as ArgsSchema) : undefined,
       () => {},
+      undefined,
+      normalizeIdlDiscriminator(`Instruction '${ix.name}'`, ix.discriminator),
     );
   }
   return result;
@@ -524,7 +546,7 @@ function buildAccounts(
     const fields = getStructFields(typesByName.get(acc.name));
     const schema = fieldsToSchema(fields, typesByName);
     if (Object.keys(schema).length === 0) continue;
-    result[acc.name] = bs.account(schema);
+    result[acc.name] = new AccountDefinition(schema, [], false, [], normalizeIdlDiscriminator(`Account '${acc.name}'`, acc.discriminator));
   }
   return result;
 }

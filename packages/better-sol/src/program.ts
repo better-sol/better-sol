@@ -131,19 +131,20 @@ export class AccountDefinition<TFields extends FieldSchema, TZeroCopy extends bo
     public readonly seedValues: TSeeds,
     public readonly zeroCopyEnabled: TZeroCopy,
     public readonly hasOneFields: readonly string[] = [],
+    public readonly discriminator: Uint8Array | undefined = undefined,
   ) {}
 
   public derive<const TNextSeeds extends readonly PdaSeedInput<TFields>[]>(buildSeeds: (seed: PdaSeedBuilder<TFields>) => TNextSeeds): AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>> {
     const seedValues: readonly string[] = buildSeeds(createPdaSeedBuilder<TFields>()).map(normalizePdaSeed);
-    return new AccountDefinition(this.fields, seedValues, this.zeroCopyEnabled, this.hasOneFields) as AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>>;
+    return new AccountDefinition(this.fields, seedValues, this.zeroCopyEnabled, this.hasOneFields, this.discriminator) as AccountDefinition<TFields, TZeroCopy, NormalizeSeeds<TNextSeeds>>;
   }
 
   public zeroCopy(this: AccountDefinition<ZeroCopyFields<TFields>, TZeroCopy, TSeeds>): AccountDefinition<TFields, true, TSeeds> {
-    return new AccountDefinition(this.fields, this.seedValues, true, this.hasOneFields);
+    return new AccountDefinition(this.fields, this.seedValues, true, this.hasOneFields, this.discriminator);
   }
 
   public hasOne<const TField extends string>(field: TField): AccountDefinition<TFields, TZeroCopy, TSeeds> {
-    return new AccountDefinition(this.fields, this.seedValues, this.zeroCopyEnabled, [...this.hasOneFields, field]);
+    return new AccountDefinition(this.fields, this.seedValues, this.zeroCopyEnabled, [...this.hasOneFields, field], this.discriminator);
   }
 }
 
@@ -270,6 +271,7 @@ export class InstructionDefinition<TAccounts extends AccountInputs, TArgs extend
     public readonly args: TArgs,
     public readonly run: unknown,
     public readonly returns: TypeToken<unknown, TypeKind> | undefined = undefined,
+    public readonly discriminator: Uint8Array | undefined = undefined,
   ) {}
 }
 
@@ -325,6 +327,7 @@ export class ProgramDefinition<TName extends string, TAddress extends Address, T
     public readonly events: TEvents,
     public readonly instructions: TInstructions,
     public readonly accounts: TAccountDefs = {} as TAccountDefs,
+    public readonly eventDiscriminators: Readonly<Record<string, Uint8Array>> = {},
   ) {}
 }
 

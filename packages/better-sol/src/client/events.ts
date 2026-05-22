@@ -48,11 +48,10 @@ export type ParsedEvent<TPayload = Record<string, unknown>> = {
 
 export async function buildEventDiscriminatorIndex(
   events: Readonly<Record<string, FieldSchema>>,
-): Promise<
-  Map<string, { readonly name: string; readonly fields: FieldSchema }>
-> {
+  eventDiscriminators: Readonly<Record<string, Uint8Array>> = {},
+): Promise<Map<string, { readonly name: string; readonly fields: FieldSchema }>> {
   const entries = Object.entries(events);
-  const discriminators = await Promise.all(entries.map(([name]) => anchorDiscriminator(name)));
+  const discriminators = await Promise.all(entries.map(([name]) => eventDiscriminators[name] ?? anchorDiscriminator(name)));
   const index = new Map<
     string,
     { readonly name: string; readonly fields: FieldSchema }
