@@ -104,6 +104,35 @@ describe("Borsh coder", () => {
     expect(() => decodeField(bs.bool(), new Uint8Array([2]), 0)).toThrow("Invalid boolean byte");
   });
 
+  test("encodes and decodes maximum u32 as unsigned", () => {
+    const encoded = encodeField(bs.u32(), 0xffffffff);
+    const decoded = decodeField(bs.u32(), encoded, 0);
+    expect(decoded.value).toBe(0xffffffff);
+  });
+
+  test("rejects integer values outside token ranges", () => {
+    expect(() => encodeField(bs.u8(), 256)).toThrow("u8 out of range");
+    expect(() => encodeField(bs.u8(), -1)).toThrow("u8 out of range");
+    expect(() => encodeField(bs.u8(), 1.5)).toThrow("u8 expects an integer number");
+    expect(() => encodeField(bs.u64(), -1n)).toThrow("u64 out of range");
+  });
+
+  test("rejects non-finite and out-of-range float values", () => {
+    expect(() => encodeField(bs.f64(), Number.POSITIVE_INFINITY)).toThrow("f64 expects a finite number");
+    expect(() => encodeField(bs.f32(), Number.MAX_VALUE)).toThrow("f32 out of range");
+  });
+
+  test("rejects arrays and vectors outside declared bounds", () => {
+    expect(() => encodeField(bs.array(bs.u8(), 2), [1])).toThrow("array length must be 2");
+    expect(() => encodeField(bs.vector(bs.u8(), 2), [1, 2, 3])).toThrow("vec exceeds max entries 2");
+    expect(() => decodeField(bs.vector(bs.u8(), 2), new Uint8Array([3, 0, 0, 0, 1, 2, 3]), 0)).toThrow("vec exceeds max entries 2");
+  });
+
+  test("rejects truncated buffers and invalid option tags", () => {
+    expect(() => decodeField(bs.u64(), new Uint8Array([1, 2, 3]), 0)).toThrow("u64 requires 8 bytes");
+    expect(() => decodeField(bs.optional(bs.u8()), new Uint8Array([2]), 0)).toThrow("Invalid option tag");
+  });
+
   test("decodes nested zero-copy structs inside arrays", () => {
     const owner = "11111111111111111111111111111111";
     const Order = bs.struct({ quantity: bs.u64(), owner: bs.pubkey() });
