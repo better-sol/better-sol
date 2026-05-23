@@ -1,7 +1,7 @@
 import { address as kitAddress, type TransactionSigner, type Signature, type Address as KitAddress, flattenInstructionPlan } from "@solana/kit";
-import { findAssociatedTokenPda, fetchMaybeMint, fetchMaybeToken, getCreateAssociatedTokenIdempotentInstructionAsync, getCreateMintInstructionPlan, getMintToCheckedInstruction, getTransferCheckedInstruction, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
+import { findAssociatedTokenPda, fetchMaybeMint, fetchMaybeToken, getCreateAssociatedTokenIdempotentInstructionAsync, getCreateMintInstructionPlan, getMintToCheckedInstruction, getTransferCheckedInstruction } from "@solana-program/token";
 import type { AddressInput, KitRpc, KitRpcSubscriptions, SignedTransaction, TokenClient } from "./types.ts";
-import { TOKEN_2022_PROGRAM_ADDRESS } from "./types.ts";
+
 import { requireSigner, createGeneratedSigner } from "./signer.ts";
 import { buildAndSignTransaction, sendAndConfirm, type NonceConfig, type TransactionCallback } from "./transaction.ts";
 
@@ -72,6 +72,5 @@ async function fetchMintDecimals(rpc: KitRpc, mint: AddressInput, tokenProgramAd
   const mintAccount = await fetchMaybeMint(rpc, kitAddress(mint));
   if (!mintAccount.exists) throw new Error(`Mint not found: ${mint}`);
   if (mintAccount.programAddress === kitAddress(tokenProgramAddress)) return mintAccount.data.decimals;
-  if (tokenProgramAddress === kitAddress(TOKEN_PROGRAM_ADDRESS) && mintAccount.programAddress === kitAddress(TOKEN_2022_PROGRAM_ADDRESS)) return mintAccount.data.decimals;
   throw new Error(`Mint ${mint} is not owned by token program ${tokenProgramAddress}`);
 }
