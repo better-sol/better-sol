@@ -230,8 +230,8 @@ export type TokenClient = {
   getATA(params: { readonly owner: AddressInput; readonly mint: AddressInput }): Promise<KitAddress>;
   createMint(params: { readonly decimals: number; readonly authority?: AddressInput; readonly freezeAuthority?: AddressInput | null }): Promise<{ readonly mint: KitAddress; readonly mintSigner: TransactionSigner; readonly signature: KitSignature }>;
   mintTo(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly decimals?: number }): Promise<KitSignature>;
-  transfer(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput; readonly decimals?: number }): Promise<KitSignature>;
-  getBalance(params: { readonly owner: AddressInput; readonly mint: AddressInput }): Promise<bigint>;
+  transfer(params: { readonly mint: AddressInput; readonly to: AddressInput; readonly amount: bigint; readonly decimals?: number }): Promise<KitSignature>;
+  getBalance(params: { readonly owner: AddressInput; readonly mint: AddressInput }): Promise<bigint | null>;
 };
 
 export type EventCallback<TEvent extends Record<string, unknown> = Record<string, unknown>> = (event: TEvent, slot: bigint, signature: KitSignature) => void;
@@ -247,7 +247,7 @@ export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, nev
   batch(instructions: readonly (KitInstruction | Promise<KitInstruction>)[]): Promise<KitSignature>;
   steps<const TOutputs extends readonly unknown[]>(steps: StepChain<TOutputs>): Promise<TOutputs>;
   getBalance(address: AddressInput): Promise<bigint>;
-  transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<KitSignature>;
+  transfer(params: { readonly to: AddressInput; readonly amount: bigint }): Promise<KitSignature>;
   onTransaction(callback: (signature: KitSignature, result: KitSlot) => void): () => void;
 } & {
   [K in keyof TPrograms]: TPrograms[K] extends AnyProgram ? ProgramClient<TPrograms[K]> : never;

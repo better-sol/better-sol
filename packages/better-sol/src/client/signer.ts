@@ -1,6 +1,4 @@
 import { createKeyPairSignerFromBytes, generateKeyPairSigner, getAddressEncoder, type Address as KitAddress, type TransactionSigner } from "@solana/kit";
-import { readFile } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
 import { encodeField } from "#codec";
 import { type TypeKind, type TypeToken } from "#program";
 import type { SignerInput } from "./types.ts";
@@ -31,6 +29,8 @@ async function loadKeypairFile(filePath: string): Promise<TransactionSigner> {
   if (typeof globalThis.process === "undefined") {
     throw new Error("File-based keypairs require Node.js. Use secretKey() or a Kit TransactionSigner in browsers.");
   }
+  const { readFile } = await import("node:fs/promises");
+  const { resolve: resolvePath } = await import("node:path");
   const resolved = resolvePath(filePath);
   const parsed: unknown = JSON.parse(await readFile(resolved, "utf8"));
   const bytes = readSecretKeyBytes(parsed);
@@ -38,7 +38,7 @@ async function loadKeypairFile(filePath: string): Promise<TransactionSigner> {
 }
 
 function readSecretKeyBytes(value: unknown): Uint8Array {
-  if (Array.isArray(value) && value.every((item) => typeof item === "number") && value.length === 64) {
+  if (Array.isArray(value) && value.length === 64 && value.every((item): item is number => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 255)) {
     return new Uint8Array(value);
   }
   if (isKeypairFile(value)) return new Uint8Array(value.secretKey);
@@ -55,7 +55,11 @@ function isKeypairFile(value: unknown): value is KeypairFile {
 export function seedToBytes(token: TypeToken<unknown, TypeKind> | undefined, value: unknown, kitAddress: (addr: string) => KitAddress): Uint8Array {
   if (token === undefined) {
     if (typeof value === "string") return new Uint8Array(getAddressEncoder().encode(kitAddress(value)));
-    if (typeof value === "number" || typeof value === "bigint") return encodeU64Seed(BigInt(value));
+    if (typeof value === "number") {
+      if (!Number.isInteger(value)) throw new Error(`Cannot encode non-integer number as PDA seed: ${value}`);
+      return encodeU64Seed(BigInt(value));
+    }
+    if (typeof value === "bigint") return encodeU64Seed(value);
     throw new Error(`Cannot encode seed value: ${String(value)}`);
   }
   const kind = token.kind;

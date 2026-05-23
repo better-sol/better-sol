@@ -52,9 +52,7 @@ export function buildTokenClient(
     transfer: async (params) => {
       const activeSigner = requireSigner(signer);
       const mint = kitAddress(params.mint);
-      const sourceOwner = params.from ?? activeSigner.address;
-      if (sourceOwner !== activeSigner.address) throw new Error("Token transfer source must match the active signer. Use sol.withSigner() for another owner.");
-      const source = kitAddress(await deriveAtaAddr(sourceOwner, params.mint));
+      const source = kitAddress(await deriveAtaAddr(activeSigner.address, params.mint));
       const destination = kitAddress(await deriveAtaAddr(params.to, params.mint));
       const decimals = params.decimals ?? await fetchMintDecimals(rpc, params.mint, tokenProgramAddress);
       const createDestinationIx = await getCreateAssociatedTokenIdempotentInstructionAsync({ payer: activeSigner, owner: kitAddress(params.to), mint, tokenProgram: kitAddress(tokenProgramAddress) });
@@ -65,7 +63,7 @@ export function buildTokenClient(
     getBalance: async (params) => {
       const ata = await deriveAtaAddr(params.owner, params.mint);
       const tokenAccount = await fetchMaybeToken(rpc, kitAddress(ata), { commitment });
-      return tokenAccount.exists ? tokenAccount.data.amount : 0n;
+      return tokenAccount.exists ? tokenAccount.data.amount : null;
     },
   };
 }

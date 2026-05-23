@@ -149,10 +149,8 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
       const { value } = await params.rpc.getBalance(kitAddress(addressValue), { commitment: params.commitment }).send();
       return value;
     },
-    transfer: async (transferParams: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<Signature> => {
+    transfer: async (transferParams: { readonly to: AddressInput; readonly amount: bigint }): Promise<Signature> => {
       const signer = requireSigner(params.signer);
-      const sourceAddress = transferParams.from ?? signer.address;
-      if (kitAddress(sourceAddress) !== signer.address) throw new Error("Source must match the active signer. Use sol.withSigner() for a different signer.");
       const ix = getTransferSolInstruction({ source: signer, destination: kitAddress(transferParams.to), amount: transferParams.amount });
       const signedTx = await buildAndSignTransaction([ix], params.rpc, signer, params.commitment, nonceConfig);
       return await sendAndConfirm(signedTx, params.rpc, params.rpcSubscriptions, notifier.notify, params.commitment);
