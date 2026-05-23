@@ -276,6 +276,7 @@ function createProgramClient(
       if (typeof property !== "string") return undefined;
       if (property === "then") return undefined;
       if (property === "toJSON") return undefined;
+      if (!Object.hasOwn(program.instructions, property)) return undefined;
 
       const ixDef = program.instructions[property];
       if (ixDef === undefined) return undefined;
@@ -292,11 +293,11 @@ function createProgramClient(
     },
     has(_target: ProgramClientImpl, property: string | symbol): boolean {
       if (property === "address" || property === "accounts" || property === "parseErrors" || property === "parseEvents") return true;
-      if (typeof property === "string") return property in program.instructions;
+      if (typeof property === "string") return Object.hasOwn(program.instructions, property);
       return false;
     },
     getOwnPropertyDescriptor(_target: ProgramClientImpl, property: string | symbol): PropertyDescriptor | undefined {
-      if (property === "address" || property === "accounts" || (typeof property === "string" && property in program.instructions)) {
+      if (property === "address" || property === "accounts" || (typeof property === "string" && Object.hasOwn(program.instructions, property))) {
         return { configurable: true, enumerable: true, value: this.get!(_target, property, _target) };
       }
       return undefined;
