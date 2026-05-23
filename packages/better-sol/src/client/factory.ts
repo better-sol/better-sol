@@ -66,7 +66,7 @@ interface ClientCore<TPrograms extends ProgramInputs, THasSigner extends boolean
   batch(instructions: readonly (Instruction | Promise<Instruction>)[]): Promise<Signature>;
   steps<const TOutputs extends readonly unknown[]>(steps: StepChain<TOutputs>): Promise<TOutputs>;
   getBalance(address: AddressInput): Promise<bigint>;
-  transfer(params: { readonly to: AddressInput; readonly amount: bigint; readonly from?: AddressInput }): Promise<Signature>;
+  transfer(params: { readonly to: AddressInput; readonly amount: bigint }): Promise<Signature>;
   onTransaction(callback: (signature: Signature, result: bigint) => void): () => void;
 }
 

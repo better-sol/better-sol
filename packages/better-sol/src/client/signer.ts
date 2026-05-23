@@ -23,7 +23,7 @@ function isTransactionSignerInput(value: SignerInput): value is TransactionSigne
   return "address" in value && ("signTransactions" in value || "modifyAndSignTransactions" in value || "signAndSendTransactions" in value);
 }
 
-type KeypairFile = { readonly publicKey: string; readonly secretKey: readonly number[] };
+type KeypairFile = { readonly publicKey: string; readonly secretKey: readonly [number, ...number[]] };
 
 async function loadKeypairFile(filePath: string): Promise<TransactionSigner> {
   if (typeof globalThis.process === "undefined") {
@@ -49,7 +49,7 @@ function isKeypairFile(value: unknown): value is KeypairFile {
   if (typeof value !== "object" || value === null) return false;
   if (!("publicKey" in value) || !("secretKey" in value)) return false;
   const candidate = value as { readonly publicKey: unknown; readonly secretKey: unknown };
-  return typeof candidate.publicKey === "string" && Array.isArray(candidate.secretKey) && candidate.secretKey.every((item: unknown) => typeof item === "number");
+  return typeof candidate.publicKey === "string" && Array.isArray(candidate.secretKey) && candidate.secretKey.length === 64 && candidate.secretKey.every((item: unknown) => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 255);
 }
 
 export function seedToBytes(token: TypeToken<unknown, TypeKind> | undefined, value: unknown, kitAddress: (addr: string) => KitAddress): Uint8Array {
