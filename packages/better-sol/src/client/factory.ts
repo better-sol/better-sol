@@ -177,22 +177,21 @@ function buildClientShape<const TPrograms extends ProgramInputs, THasSigner exte
       );
       return await sendAndConfirm(signedTx, params.rpc, params.rpcSubscriptions, notifier.notify, params.commitment);
     },
-    steps: async <const TOutputs extends readonly unknown[]>(stepFns: readonly ((...prev: unknown[]) => Promise<unknown>)[]): Promise<TOutputs> => {
+    steps: async <const TOutputs extends readonly unknown[]>(stepFns: StepChain<TOutputs>): Promise<TOutputs> => {
       const results: unknown[] = [];
-      await stepFns.reduce<Promise<void>>(async (previous, fn) => {
-        await previous;
-        results.push(await fn(...results));
-      }, Promise.resolve());
-      return results as unknown as TOutputs;
+      for (const fn of stepFns) {
+        results.push(await (fn as (...args: readonly unknown[]) => Promise<unknown>)(...results));
+      }
+      return stepChainResult(results, stepFns.length);
     },
     onTransaction: (callback: TransactionCallback): (() => void) => {
       return notifier.subscribe(callback);
     },
   };
 
-  const programNamespace = {} as ProgramNamespace<TPrograms>;
+  const programNamespace = {} as Record<string, unknown>;
   for (const [programName, programDef] of Object.entries(params.programs)) {
-    (programNamespace as Record<string, unknown>)[programName] = createProgramClient(programDef as AnyProgram, params.rpc, params.rpcSubscriptions, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
+    programNamespace[programName] = createProgramClient(programDef as AnyProgram, params.rpc, params.rpcSubscriptions, params.signer, params.commitment, nonceConfig, lookupTableIndex, notifier.notify);
   }
 
   return { ...core, ...programNamespace } as BetterSolClientShape<TPrograms, THasSigner>;
@@ -240,25 +239,27 @@ function createProgramClient(
 
   const parseLogsForError = (error: unknown): never => {
     const logs = extractLogsFromError(error);
-    const programError = logs !== undefined ? parseErrors(logs) : undefined;
+    if (logs === undefined) throw error;
+    const programError = parseErrors(logs);
     throw new TransactionFailedError(
       error instanceof Error ? error.message : String(error),
-      logs ?? [],
+      logs,
       programError,
       error,
     );
   };
 
-  let eventDiscriminatorCache: Map<string, { readonly name: string; readonly fields: FieldSchema }> | undefined;
+  let eventDiscriminatorCache: Promise<Map<string, { readonly name: string; readonly fields: FieldSchema }>> | undefined;
   const parseEvents = async (logs: readonly string[]): Promise<readonly ParsedEvent[]> => {
     if (Object.keys(program.events).length === 0) return [];
     if (eventDiscriminatorCache === undefined) {
-      eventDiscriminatorCache = await buildEventDiscriminatorIndex(program.events as Record<string, FieldSchema>, program.eventDiscriminators);
+      eventDiscriminatorCache = buildEventDiscriminatorIndex(program.events as Record<string, FieldSchema>, program.eventDiscriminators);
     }
+    const resolvedCache = await eventDiscriminatorCache;
     const eventLogs = extractEventLogs(logs);
     const results: ParsedEvent[] = [];
     for (const log of eventLogs) {
-      const parsed = parseEventLog(log, eventDiscriminatorCache);
+      const parsed = parseEventLog(log, resolvedCache);
       if (parsed !== undefined) {
         results.push({ name: parsed.name, data: decodeEventData(parsed.fields, parsed.data) });
       }
@@ -437,38 +438,84 @@ function validateArgs(
   }
 }
 
+function validationError(name: string, ixName: string, expected: string, actual: unknown): never {
+  throw new Error(
+    `better-sol: instruction "${ixName}" arg "${name}" expects ${expected}, got ${typeof actual === "bigint" ? `${actual}n` : typeof actual === "string" ? `"${actual}"` : actual}`,
+  );
+}
+
+function expectNumberArg(value: unknown, name: string, ixName: string, kind: string): number {
+  if (typeof value !== "number") validationError(name, ixName, `${kind} (number)`, value);
+  return value;
+}
+
+function expectBigIntArg(value: unknown, name: string, ixName: string, kind: string): bigint {
+  if (typeof value !== "bigint") validationError(name, ixName, `${kind} (bigint)`, value);
+  return value;
+}
+
 function validateToken(
   name: string,
   token: TypeToken<unknown, TypeKind>,
   value: unknown,
   ixName: string,
 ): void {
-  const err = (expected: string): never => {
-    throw new Error(
-      `better-sol: instruction "${ixName}" arg "${name}" expects ${expected}, got ${typeof value === "bigint" ? `${value}n` : typeof value === "string" ? `"${value}"` : value}`,
-    );
-  };
-
   switch (token.kind) {
-    case "u8": case "u16": case "u32":
-    case "i8": case "i16": case "i32":
-    case "f32": case "f64":
-      if (typeof value !== "number") err(`${token.kind} (number)`);
+    case "u8": {
+      const num = expectNumberArg(value, name, ixName, "u8");
+      if (!Number.isInteger(num) || num < 0 || num > 0xff) validationError(name, ixName, "u8 (0..255)", num);
       break;
-    case "u64": case "u128": case "i64": case "i128":
-      if (typeof value !== "bigint") err(`${token.kind} (bigint)`);
+    }
+    case "u16": {
+      const num = expectNumberArg(value, name, ixName, "u16");
+      if (!Number.isInteger(num) || num < 0 || num > 0xffff) validationError(name, ixName, "u16 (0..65535)", num);
+      break;
+    }
+    case "u32": {
+      const num = expectNumberArg(value, name, ixName, "u32");
+      if (!Number.isInteger(num) || num < 0 || num > 0xffffffff) validationError(name, ixName, "u32 (0..4294967295)", num);
+      break;
+    }
+    case "i8": {
+      const num = expectNumberArg(value, name, ixName, "i8");
+      if (!Number.isInteger(num) || num < -0x80 || num > 0x7f) validationError(name, ixName, "i8 (-128..127)", num);
+      break;
+    }
+    case "i16": {
+      const num = expectNumberArg(value, name, ixName, "i16");
+      if (!Number.isInteger(num) || num < -0x8000 || num > 0x7fff) validationError(name, ixName, "i16 (-32768..32767)", num);
+      break;
+    }
+    case "i32": {
+      const num = expectNumberArg(value, name, ixName, "i32");
+      if (!Number.isInteger(num) || num < -0x80000000 || num > 0x7fffffff) validationError(name, ixName, "i32", num);
+      break;
+    }
+    case "f32":
+    case "f64": {
+      const num = expectNumberArg(value, name, ixName, token.kind);
+      if (!Number.isFinite(num)) validationError(name, ixName, `${token.kind} (finite number)`, num);
+      break;
+    }
+    case "u64": case "u128": {
+      const big = expectBigIntArg(value, name, ixName, token.kind);
+      if (big < 0n) validationError(name, ixName, `${token.kind} (non-negative bigint)`, big);
+      break;
+    }
+    case "i64": case "i128":
+      expectBigIntArg(value, name, ixName, token.kind);
       break;
     case "bool":
-      if (typeof value !== "boolean") err("bool");
+      if (typeof value !== "boolean") validationError(name, ixName, "bool", value);
       break;
     case "pubkey":
-      if (typeof value !== "string") err("pubkey (base58 string)");
+      if (typeof value !== "string") validationError(name, ixName, "pubkey (base58 string)", value);
       break;
     case "string":
-      if (typeof value !== "string") err("string");
+      if (typeof value !== "string") validationError(name, ixName, "string", value);
       break;
     case "bytes":
-      if (!(value instanceof Uint8Array)) err("bytes (Uint8Array)");
+      if (!(value instanceof Uint8Array)) validationError(name, ixName, "bytes (Uint8Array)", value);
       break;
     case "option": {
       if (value === null || value === undefined) return;
@@ -476,12 +523,16 @@ function validateToken(
     }
     case "vec": case "array": {
       const inner = innerOfToken(token);
-      if (!Array.isArray(value)) err(`array of ${describeToken(token)}`);
-      for (let i = 0; i < (value as unknown[]).length; i++) {
-        validateToken(`${name}[${i}]`, inner, (value as unknown[])[i], ixName);
+      if (!Array.isArray(value)) validationError(name, ixName, `array of ${describeToken(token)}`, value);
+      for (let i = 0; i < value.length; i++) {
+        validateToken(`${name}[${i}]`, inner, value[i], ixName);
       }
       break;
     }
+    case "struct_zc_ref":
+      break;
+    default:
+      validationError(name, ixName, `unsupported type '${token.kind}'`, value);
   }
 }
 
@@ -498,6 +549,7 @@ function describeToken(token: TypeToken<unknown, TypeKind>): string {
       case "vec": return `${describeToken(token.inner)}[]`;
     }
   }
+  if (token.kind === "struct_zc_ref") return "struct";
   return token.kind;
 }
 
@@ -514,11 +566,16 @@ function tryParseAnchorError(logLine: string, errorIndex: ProgramErrorMap, progr
 
 function extractLogsFromError(error: unknown): readonly string[] | undefined {
   if (typeof error !== "object" || error === null) return undefined;
-  const record = error as Record<string, unknown>;
-  const context = record.context;
-  if (typeof context === "object" && context !== null) {
-    const logs = (context as Record<string, unknown>).logs;
-    if (Array.isArray(logs)) return logs as readonly string[];
-  }
-  return undefined;
+  if (!("context" in error)) return undefined;
+  const context = (error as { readonly context: unknown }).context;
+  if (typeof context !== "object" || context === null) return undefined;
+  if (!("logs" in context)) return undefined;
+  const logs = (context as { readonly logs: unknown }).logs;
+  if (!Array.isArray(logs)) return undefined;
+  return logs as readonly string[];
+}
+
+function stepChainResult<TOutputs extends readonly unknown[]>(results: unknown[], expectedLength: number): TOutputs {
+  if (results.length !== expectedLength) throw new Error(`better-sol: steps chain produced ${results.length} results, expected ${expectedLength}`);
+  return results as unknown as TOutputs;
 }

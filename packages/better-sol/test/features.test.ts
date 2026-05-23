@@ -120,6 +120,69 @@ describe("runtime input validation", () => {
       'better-sol: instruction "batch" arg "ids[1]" expects u64 (bigint), got 42',
     );
   });
+
+  test("rejects u8 value out of range", async () => {
+    const prog = bs.program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      (ix) => ({
+        setByte: ix({
+          accounts: { authority: bs.signer() },
+          args: { value: bs.u8() },
+          run: () => {},
+        }),
+      }),
+    );
+    const { betterSol } = await import("../src/client/factory");
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { prog } });
+    await expect(client.prog.setByte.instruction({ value: 256 })).rejects.toThrow(
+      "u8 (0..255)",
+    );
+    await expect(client.prog.setByte.instruction({ value: -1 })).rejects.toThrow(
+      "u8 (0..255)",
+    );
+    await expect(client.prog.setByte.instruction({ value: 1.5 })).rejects.toThrow(
+      "u8 (0..255)",
+    );
+  });
+
+  test("rejects negative u64 value", async () => {
+    const prog = bs.program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      (ix) => ({
+        setAmount: ix({
+          accounts: { authority: bs.signer() },
+          args: { amount: bs.u64() },
+          run: () => {},
+        }),
+      }),
+    );
+    const { betterSol } = await import("../src/client/factory");
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { prog } });
+    await expect(client.prog.setAmount.instruction({ amount: -1n })).rejects.toThrow(
+      "u64 (non-negative bigint)",
+    );
+  });
+
+  test("rejects non-finite f64 value", async () => {
+    const prog = bs.program(
+      { name: "test", address: "11111111111111111111111111111111" },
+      (ix) => ({
+        setScore: ix({
+          accounts: { authority: bs.signer() },
+          args: { score: bs.f64() },
+          run: () => {},
+        }),
+      }),
+    );
+    const { betterSol } = await import("../src/client/factory");
+    const client = await betterSol({ cluster: "devnet", payer: signer, programs: { prog } });
+    await expect(client.prog.setScore.instruction({ score: Infinity })).rejects.toThrow(
+      "f64 (finite number)",
+    );
+    await expect(client.prog.setScore.instruction({ score: NaN })).rejects.toThrow(
+      "f64 (finite number)",
+    );
+  });
 });
 
 describe("PDA derivation seed validation", () => {

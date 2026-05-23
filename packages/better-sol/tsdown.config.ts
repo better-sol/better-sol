@@ -19,7 +19,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   deps: {
-    neverBundle: ["@solana/web3.js"],
+    neverBundle: ["@solana/web3.js", "node:fs/promises", "node:path"],
   },
   inputOptions: {
     resolve: {

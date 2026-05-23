@@ -268,7 +268,7 @@ function encodeU8(value: number): Uint8Array {
 function encodeU16(value: number): Uint8Array {
   const buf = new Uint8Array(2);
   buf[0] = value & 0xff;
-  buf[1] = (value >> 8) & 0xff;
+  buf[1] = (value >>> 8) & 0xff;
   return buf;
 }
 

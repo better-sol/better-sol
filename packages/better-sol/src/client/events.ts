@@ -109,6 +109,7 @@ export function decodeEventData(
   fields: FieldSchema,
   data: Uint8Array,
 ): Record<string, unknown> {
+  if (data.length < 8) throw new Error(`Event data too short: expected at least 8 bytes (discriminator), got ${data.length}`);
   const result: Record<string, unknown> = {};
   let offset = 8;
   for (const [fieldName, token] of Object.entries(fields)) {

@@ -36,7 +36,7 @@ import type {
   SignedTransaction,
   SimulateResult,
 } from "./types.ts";
-import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_INTERVAL_MS, type ComputeUnitConfig } from "./types.ts";
+import { CLOCK_SYSVAR_ADDRESS, TOKEN_2022_PROGRAM_ADDRESS, CONFIRMATION_INTERVAL_MS, CONFIRMATION_RETRIES, type ComputeUnitConfig } from "./types.ts";
 import { type LookupTableIndex, type ResolvedAccountMeta, resolveWithLookupTables } from "./lookup-tables.ts";
 
 export type NonceConfig = {
@@ -107,27 +107,31 @@ export async function sendAndConfirm(
   commitment: "processed" | "confirmed" | "finalized" = "confirmed",
 ): Promise<Signature> {
   const signature = getSignatureFromTransaction(transaction);
-  await rpc.sendTransaction(getBase64EncodedWireTransaction(transaction), { encoding: "base64" }).send();
+  const encoded = getBase64EncodedWireTransaction(transaction);
 
   if (rpcSubscriptions !== undefined) {
-    return await confirmViaWebSocket(signature, rpcSubscriptions, onConfirmed, commitment);
+    const wsController = new AbortController();
+    const subscription = rpcSubscriptions.signatureNotifications(signature, { commitment, enableReceivedNotification: false });
+    const stream = await subscription.subscribe({ abortSignal: wsController.signal });
+    await rpc.sendTransaction(encoded, { encoding: "base64" }).send();
+    return await confirmViaStream(signature, stream, onConfirmed, commitment, rpc, wsController);
   }
+
+  await rpc.sendTransaction(encoded, { encoding: "base64" }).send();
   return await confirmViaPolling(signature, rpc, onConfirmed, commitment);
 }
 
-async function confirmViaWebSocket(
+async function confirmViaStream(
   signature: Signature,
-  rpcSubscriptions: KitRpcSubscriptions,
+  stream: AsyncIterable<{ readonly value: { readonly err: unknown } | undefined; readonly slot?: bigint }>,
   onConfirmed: TransactionCallback | undefined,
   commitment: "processed" | "confirmed" | "finalized",
+  rpc: KitRpc,
+  wsController: AbortController,
 ): Promise<Signature> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CONFIRMATION_INTERVAL_MS * 30);
+  const timeout = setTimeout(() => wsController.abort(), CONFIRMATION_INTERVAL_MS * 30);
 
   try {
-    const subscription = rpcSubscriptions.signatureNotifications(signature, { commitment, enableReceivedNotification: false });
-    const stream = await subscription.subscribe({ abortSignal: controller.signal });
-
     for await (const notification of stream) {
       if (notification.value !== undefined && "err" in notification.value && notification.value.err !== undefined && notification.value.err !== null) {
         throw new Error(`Transaction ${String(signature)} failed: ${JSON.stringify(notification.value.err)}`);
@@ -140,9 +144,10 @@ async function confirmViaWebSocket(
     }
   } finally {
     clearTimeout(timeout);
+    try { wsController.abort(); } catch { /* already aborted or stream closed */ }
   }
 
-  throw new Error(`Transaction ${String(signature)} confirmation subscription closed without result`);
+  return await confirmViaPolling(signature, rpc, onConfirmed, commitment);
 }
 
 async function confirmViaPolling(
@@ -151,7 +156,6 @@ async function confirmViaPolling(
   onConfirmed: TransactionCallback | undefined,
   commitment: "processed" | "confirmed" | "finalized",
 ): Promise<Signature> {
-  const CONFIRMATION_RETRIES = 30;
   for (let attempt = 0; attempt < CONFIRMATION_RETRIES; attempt++) {
     // oxlint-disable-next-line no-await-in-loop — intentional polling for confirmation
     const { value: statuses } = await rpc.getSignatureStatuses([signature], { searchTransactionHistory: true }).send();
