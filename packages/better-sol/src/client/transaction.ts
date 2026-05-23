@@ -130,10 +130,12 @@ async function confirmViaStream(
   wsController: AbortController,
 ): Promise<Signature> {
   const timeout = setTimeout(() => wsController.abort(), CONFIRMATION_INTERVAL_MS * 30);
+  let transactionFailed = false;
 
   try {
     for await (const notification of stream) {
       if (notification.value !== undefined && "err" in notification.value && notification.value.err !== undefined && notification.value.err !== null) {
+        transactionFailed = true;
         throw new Error(`Transaction ${String(signature)} failed: ${JSON.stringify(notification.value.err)}`);
       }
       if (notification.value !== undefined && notification.value.err === null) {
@@ -142,6 +144,8 @@ async function confirmViaStream(
         return signature;
       }
     }
+  } catch (error) {
+    if (transactionFailed) throw error;
   } finally {
     clearTimeout(timeout);
     try { wsController.abort(); } catch { /* already aborted or stream closed */ }
