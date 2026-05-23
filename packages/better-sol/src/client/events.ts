@@ -32,13 +32,12 @@ export class TransactionFailedError extends Error {
 }
 
 export function buildErrorIndex(
-  errors: Readonly<Record<string, string>>,
+  errors: Readonly<Record<string, string | { readonly message: string; readonly code: number }>>,
 ): ProgramErrorMap {
-  return Object.entries(errors).map(([name, message], index) => ({
-    name,
-    message,
-    index,
-  }));
+  return Object.entries(errors).map(([name, entry], index) => {
+    if (typeof entry === "string") return { name, message: entry, index };
+    return { name, message: entry.message, index: entry.code };
+  });
 }
 
 export type ParsedEvent<TPayload = Record<string, unknown>> = {

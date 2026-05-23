@@ -247,7 +247,7 @@ function fieldsToSchema(fields: readonly IdlField[] | undefined, typesByName: Re
 export type IdlProgram = ProgramDefinition<
   string,
   Address,
-  Record<string, string>,
+  Record<string, { readonly message: string; readonly code: number }>,
   Record<string, FieldSchema>,
   Record<string, InstructionDefinition<AccountInputs, ArgsSchema | undefined>>,
   Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>>
@@ -350,7 +350,7 @@ type TypedIdlAccountsMap<T extends AnchorIdl> =
 export type TypedIdlProgram<T extends AnchorIdl> = ProgramDefinition<
   string,
   Address,
-  T["errors"] extends readonly { readonly name: string; readonly msg?: string }[] ? { [E in T["errors"][number] as E["name"]]: E["msg"] extends string ? E["msg"] : E["name"] } : Record<string, string>,
+  T["errors"] extends readonly { readonly name: string; readonly msg?: string; readonly code: number }[] ? { [E in T["errors"][number] as E["name"]]: { readonly message: E["msg"] extends string ? E["msg"] : E["name"]; readonly code: E["code"] } } : Record<string, { readonly message: string; readonly code: number }>,
   Record<string, FieldSchema>,
   TypedIdlInstructionsMap<T>,
   TypedIdlAccountsMap<T>
@@ -377,11 +377,11 @@ function buildEventDiscriminators(events: readonly IdlEvent[] | undefined): Reco
   return result;
 }
 
-function buildErrors(errors: readonly IdlErrorCode[] | undefined): Record<string, string> {
+function buildErrors(errors: readonly IdlErrorCode[] | undefined): Record<string, { readonly message: string; readonly code: number }> {
   if (errors === undefined) return {};
-  const result: Record<string, string> = {};
+  const result: Record<string, { readonly message: string; readonly code: number }> = {};
   for (const error of errors) {
-    result[error.name] = error.msg ?? error.name;
+    result[error.name] = { message: error.msg ?? error.name, code: error.code };
   }
   return result;
 }

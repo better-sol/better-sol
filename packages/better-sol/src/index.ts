@@ -13,6 +13,7 @@ export type {
   TypeToken,
   AccountData,
   AccountDefs,
+  ErrorMessageEntry,
   ErrorMessages,
   EventSchema,
   AccountInputs,

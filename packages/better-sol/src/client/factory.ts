@@ -214,7 +214,7 @@ function createProgramClient(
 ): ProgramClientImpl {
   const programAddress = kitAddress(program.address);
   const programName = program.name;
-  const errorIndex = buildErrorIndex(program.errors as Record<string, string>);
+  const errorIndex = buildErrorIndex(program.errors as Record<string, string | { readonly message: string; readonly code: number }>);
 
   const accounts: Record<string, unknown> = {};
   for (const [accountName, accountDef] of Object.entries(program.accounts)) {

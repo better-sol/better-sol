@@ -125,7 +125,7 @@ describe("fromIdl", () => {
       ],
     };
     const prog = fromIdl(idl);
-    expect(prog.errors).toEqual({ Unauthorized: "Only authority", Underflow: "Arithmetic underflow" });
+    expect(prog.errors).toEqual({ Unauthorized: { message: "Only authority", code: 6000 }, Underflow: { message: "Arithmetic underflow", code: 6001 } });
   });
 
   test("handles missing errors gracefully", () => {
@@ -254,7 +254,7 @@ describe("fromIdl", () => {
     expect(swap.args).toBeDefined();
     if (swap.args) expect(Object.keys(swap.args)).toEqual(["amountIn", "minOut"]);
 
-    expect(prog.errors).toEqual({ SlippageExceeded: "Output below minimum" });
+    expect(prog.errors).toEqual({ SlippageExceeded: { message: "Output below minimum", code: 6000 } });
   });
 
   test("accepts coption type", () => {

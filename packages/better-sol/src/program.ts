@@ -151,7 +151,8 @@ export class AccountDefinition<TFields extends FieldSchema, TZeroCopy extends bo
 export type AccountData<TAccount> = TAccount extends AccountDefinition<infer TFields, boolean, readonly string[]> ? InferFields<TFields> : never;
 
 export type AccountDefs = Readonly<Record<string, AccountDefinition<FieldSchema, boolean, readonly string[]>>>;
-export type ErrorMessages = Readonly<Record<string, string>>;
+export type ErrorMessageEntry = string | { readonly message: string; readonly code: number };
+export type ErrorMessages = Readonly<Record<string, ErrorMessageEntry>>;
 export type EventSchema = Readonly<Record<string, FieldSchema>>;
 
 type AccountConstraintKind = "init" | "initIfNeeded" | "mut" | "close" | "realloc" | "signer" | "mint" | "tokenAccount" | "tokenProgram" | "token2022Program" | "systemProgram" | "clock" | "remaining";

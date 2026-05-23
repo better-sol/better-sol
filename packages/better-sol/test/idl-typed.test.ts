@@ -99,8 +99,8 @@ describe("typed fromIdl", () => {
   test("program definition has typed error names", () => {
     const prog = fromIdl(stakingIdl)
     expect(prog.errors).toEqual({
-      ZeroAmount: "Amount must be greater than zero",
-      Unauthorized: "Unauthorized",
+      ZeroAmount: { message: "Amount must be greater than zero", code: 6000 },
+      Unauthorized: { message: "Unauthorized", code: 6001 },
     })
   })
 
