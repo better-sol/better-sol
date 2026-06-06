@@ -31,6 +31,7 @@ import {
 } from "#program";
 
 export type { Signature, Instruction } from "@solana/kit";
+export type { WatchHandle } from "#client/watch-handle";
 
 export type Cluster = "devnet" | "testnet" | "mainnet" | "localnet";
 
@@ -235,6 +236,20 @@ export type TokenClient = {
 };
 
 export type EventCallback<TEvent extends Record<string, unknown> = Record<string, unknown>> = (event: TEvent, slot: bigint, signature: KitSignature) => void;
+
+export type EventContext = {
+  readonly slot: bigint;
+  readonly signature: KitSignature;
+};
+
+export type TypedEvent<TEvents extends EventSchema> = {
+  [K in keyof TEvents & string]: {
+    readonly name: K;
+    readonly data: InferFields<TEvents[K]>;
+    readonly slot: bigint;
+    readonly signature: KitSignature;
+  };
+}[keyof TEvents & string];
 
 export type BetterSolClient<TPrograms extends ProgramInputs = Record<string, never>, THasSigner extends boolean = boolean> = {
   readonly payer: THasSigner extends true ? KitAddress : KitAddress | null;
