@@ -125,6 +125,61 @@ await sol.steps([
 
 Use `sol.batch([...])` when order within a single transaction must be guaranteed.
 
+## Account watching
+
+Watch an account for real-time changes. Returns a `WatchHandle` that holds the current value and notifies on updates.
+
+```ts
+const handle = sol.counter.accounts.Counter.watch(addr)
+
+handle.current     // { count: 42n, authority: "...", isActive: true } | null | undefined
+handle.error       // unknown — populated on RPC or subscription errors
+
+// Callback — fires on each change
+const unsub = handle.onChange((data) => {
+  console.log(data?.count)
+})
+
+// React — useSyncExternalStore compatible
+import { useSyncExternalStore } from "react"
+const data = useSyncExternalStore(handle.subscribe, () => handle.current)
+
+// Cleanup
+unsub()          // stop one subscription
+handle.unsubscribe()  // stop all and abort
+```
+
+`current` is `undefined` until the first RPC response arrives, `null` if the account does not exist, or typed data otherwise. The initial fetch and ongoing WebSocket subscription are combined internally with slot-based deduplication.
+
+Derive and watch in one call:
+
+```ts
+const handle = sol.counter.accounts.Counter.watch({ authority: sol.payer })
+```
+
+Requires `rpcSubscriptions` or `rpcSubscriptionsUrl` in your `betterSol()` config.
+
+## Event types
+
+Two types are available for working with program events:
+
+`TypedEvent<TEvents>` is a discriminated union of all events defined in your program:
+
+```ts
+import type { TypedEvent } from "better-sol"
+
+type CounterEvent = TypedEvent<typeof counter.events>
+// { name: "Incremented", data: { newCount: bigint, authority: string }, slot: bigint, signature: Signature }
+
+function handleEvent(event: CounterEvent) {
+  if (event.name === "Incremented") {
+    console.log(event.data.newCount)  // fully typed as bigint
+  }
+}
+```
+
+`EventContext` provides `slot` and `signature` metadata for event callbacks.
+
 ## Import external programs
 
 ### Generate a typed program from an IDL (recommended)
@@ -199,7 +254,7 @@ Zero-copy accounts get `bs.struct()`, `.zeroCopy()`, and `.hasOne("fieldName")`.
 
 | Import path | Selected exports |
 |---|---|
-| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `bs`, `cpi`, `ProgramError`, types |
+| `better-sol` | `betterSol`, `keypairFile`, `secretKey`, `fromIdl`, `bs`, `cpi`, `ProgramError`, `WatchHandle`, `TypedEvent`, `EventContext`, types |
 | `better-sol/program` | `bs`, `cpi`, all type tokens, constraint helpers, `InferType`, `InferFields`, types |
 | `better-sol/codec` | `encodeField`, `decodeField`, `encodeAccount`, `decodeAccount`, `decodeZeroCopyAccount`, `encodeInstruction`, `anchorDiscriminator`, `accountDiscriminator` |
 

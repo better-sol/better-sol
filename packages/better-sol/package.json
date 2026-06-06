@@ -3,7 +3,7 @@
   "imports": {
     "#*": "./src/*"
   },
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Write Solana programs in TypeScript. Define programs, send transactions, query accounts.",
   "license": "MIT",
   "type": "module",

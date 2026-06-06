@@ -78,7 +78,7 @@ No local validator. No CLI. Pure TypeScript tests that run in milliseconds.
 
 | Package | What it does | Install |
 |---|---|---|
-| [better-sol](packages/better-sol) | Program definition DSL, typed client, token helpers, `fromIdl()` | `npm install better-sol@alpha` |
+| [better-sol](packages/better-sol) | Program definition DSL, typed client, token helpers, real-time subscriptions, `fromIdl()` | `npm install better-sol@alpha` |
 | [@better-sol/test](packages/test) | Local test runner backed by LiteSVM | `npm install @better-sol/test@alpha` |
 | [@better-sol/cli](packages/cli) | Create, deploy, generate schemas, import external programs | runs via `npx`, no install needed |
 
@@ -90,7 +90,7 @@ The runtime SDK contains no compiler or code generation logic. Nothing from the 
 bun install
 bun run check        # type-check all packages
 bun run build        # build all packages
-bun run test         # run all tests (134 total: 111 SDK + 23 test)
+bun run test         # run all tests (197 total: 174 SDK + 23 test)
 bun run lint         # lint with oxlint
 ```
 
@@ -101,10 +101,10 @@ packages/
   better-sol/        # Runtime SDK
     src/
       program.ts     # bs, cpi, account definitions, constraints
-      client/        # betterSol(), typed client, transactions, tokens
+      client/        # betterSol(), typed client, transactions, tokens, subscriptions
       idl.ts         # fromIdl(), AnchorIdl type
       codec.ts       # Borsh encoder/decoder and discriminators
-    test/            # 111 tests (7 files)
+    test/            # 174 tests (8 files)
 
   test/              # Testing SDK
     src/
